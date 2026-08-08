@@ -68,6 +68,54 @@ async def test_agent_authenticates_registers_and_heartbeats_with_connection_gene
 
 
 @pytest.mark.asyncio
+async def test_draining_instance_remains_visible_but_rejects_new_requests(tmp_path: Path) -> None:
+    port = unused_port()
+    server = uvicorn.Server(
+        uvicorn.Config(
+            create_transport_app(tmp_path, token=TOKEN),
+            host="127.0.0.1",
+            port=port,
+            log_level="error",
+        )
+    )
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    while not server.started:
+        await asyncio.sleep(0.01)
+    client = socketio.AsyncClient(reconnection=False)
+    registration: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
+    heartbeat = asyncio.Event()
+    client.on("registered", lambda data: registration.set_result(data))
+    client.on("heartbeat_recorded", lambda _: heartbeat.set())
+    try:
+        await client.connect(f"http://127.0.0.1:{port}", auth={"token": TOKEN})
+        await client.emit("register", {"instance_id": INSTANCE_ID, "protocol_versions": [1]})
+        registered = await asyncio.wait_for(registration, 2)
+        await client.emit("heartbeat", {**registered, "status": "draining"})
+        await asyncio.wait_for(heartbeat.wait(), 2)
+        async with ClientSession() as session:
+            headers = {"Authorization": f"Bearer {TOKEN}"}
+            instances = await session.get(f"http://127.0.0.1:{port}/v1/instances", headers=headers)
+            assert (await instances.json())[0]["status"] == "draining"
+            rejected = await session.post(
+                f"http://127.0.0.1:{port}/v1/requests",
+                headers=headers,
+                json={
+                    "request_id": REQUEST_ID,
+                    "instance_id": INSTANCE_ID,
+                    "command": {"name": "diagnostic.ping", "input": {"message": "ping"}},
+                },
+            )
+            assert rejected.status == 409
+            assert (await rejected.json())["detail"] == "instance_draining"
+    finally:
+        if client.connected:
+            await client.disconnect()
+        server.should_exit = True
+        thread.join(timeout=5)
+
+
+@pytest.mark.asyncio
 async def test_agent_with_wrong_token_is_rejected(tmp_path: Path) -> None:
     port = unused_port()
     server = uvicorn.Server(
@@ -256,6 +304,183 @@ async def test_requests_dispatch_one_at_a_time_in_fifo_order(tmp_path: Path) -> 
             )
             second = await asyncio.wait_for(dispatched.get(), 2)
             assert second["request_id"] == request_ids[1]
+    finally:
+        if client.connected:
+            await client.disconnect()
+        server.should_exit = True
+        thread.join(timeout=5)
+
+
+@pytest.mark.asyncio
+async def test_thirty_third_request_is_rejected_without_persistence(tmp_path: Path) -> None:
+    port = unused_port()
+    server = uvicorn.Server(
+        uvicorn.Config(
+            create_transport_app(tmp_path, token=TOKEN),
+            host="127.0.0.1",
+            port=port,
+            log_level="error",
+        )
+    )
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    while not server.started:
+        await asyncio.sleep(0.01)
+    client = socketio.AsyncClient(reconnection=False)
+    registered = asyncio.Event()
+    client.on("registered", lambda _: registered.set())
+    try:
+        await client.connect(f"http://127.0.0.1:{port}", auth={"token": TOKEN})
+        await client.emit("register", {"instance_id": INSTANCE_ID, "protocol_versions": [1]})
+        await asyncio.wait_for(registered.wait(), 2)
+        async with ClientSession() as session:
+            headers = {"Authorization": f"Bearer {TOKEN}"}
+            for index in range(32):
+                request_id = f"018f47ec-7f3b-7a34-8f31-{index:012d}"
+                response = await session.post(
+                    f"http://127.0.0.1:{port}/v1/requests",
+                    headers=headers,
+                    json={
+                        "request_id": request_id,
+                        "instance_id": INSTANCE_ID,
+                        "command": {"name": "diagnostic.ping", "input": {"message": str(index)}},
+                    },
+                )
+                assert response.status == 201
+            rejected_id = "018f47ec-7f3b-7a34-8f31-999999999999"
+            rejected = await session.post(
+                f"http://127.0.0.1:{port}/v1/requests",
+                headers=headers,
+                json={
+                    "request_id": rejected_id,
+                    "instance_id": INSTANCE_ID,
+                    "command": {"name": "diagnostic.ping", "input": {"message": "overflow"}},
+                },
+            )
+            assert rejected.status == 409
+            assert (await rejected.json())["detail"] == "instance_busy"
+            query = await session.get(
+                f"http://127.0.0.1:{port}/v1/requests/{rejected_id}", headers=headers
+            )
+            assert query.status == 404
+    finally:
+        if client.connected:
+            await client.disconnect()
+        server.should_exit = True
+        thread.join(timeout=5)
+
+
+@pytest.mark.asyncio
+async def test_disconnect_marks_in_flight_unknown_and_reconnect_resumes_queue(
+    tmp_path: Path,
+) -> None:
+    port = unused_port()
+    server = uvicorn.Server(
+        uvicorn.Config(
+            create_transport_app(tmp_path, token=TOKEN),
+            host="127.0.0.1",
+            port=port,
+            log_level="error",
+        )
+    )
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    while not server.started:
+        await asyncio.sleep(0.01)
+    first_client = socketio.AsyncClient(reconnection=False)
+    first_registered = asyncio.Event()
+    first_dispatched: asyncio.Queue[dict[str, object]] = asyncio.Queue()
+    first_client.on("registered", lambda _: first_registered.set())
+    first_client.on("request_dispatch", lambda data: first_dispatched.put_nowait(data))
+    headers = {"Authorization": f"Bearer {TOKEN}"}
+    request_ids = [REQUEST_ID, "018f47ec-7f3b-7a34-8f31-2ad70b6f6e2c"]
+    second_client = socketio.AsyncClient(reconnection=False)
+    second_registered = asyncio.Event()
+    second_dispatched: asyncio.Queue[dict[str, object]] = asyncio.Queue()
+    second_client.on("registered", lambda _: second_registered.set())
+    second_client.on("request_dispatch", lambda data: second_dispatched.put_nowait(data))
+    try:
+        await first_client.connect(f"http://127.0.0.1:{port}", auth={"token": TOKEN})
+        await first_client.emit("register", {"instance_id": INSTANCE_ID, "protocol_versions": [1]})
+        await asyncio.wait_for(first_registered.wait(), 2)
+        async with ClientSession() as session:
+            for request_id in request_ids:
+                response = await session.post(
+                    f"http://127.0.0.1:{port}/v1/requests",
+                    headers=headers,
+                    json={
+                        "request_id": request_id,
+                        "instance_id": INSTANCE_ID,
+                        "command": {"name": "diagnostic.ping", "input": {"message": request_id}},
+                    },
+                )
+                assert response.status == 201
+            assert (await asyncio.wait_for(first_dispatched.get(), 2))["request_id"] == request_ids[
+                0
+            ]
+            await first_client.disconnect()
+            for _ in range(50):
+                query = await session.get(
+                    f"http://127.0.0.1:{port}/v1/requests/{request_ids[0]}", headers=headers
+                )
+                if (await query.json())["status"] == "unknown":
+                    break
+                await asyncio.sleep(0.02)
+            assert (await query.json())["status"] == "unknown"
+
+            await second_client.connect(f"http://127.0.0.1:{port}", auth={"token": TOKEN})
+            await second_client.emit(
+                "register", {"instance_id": INSTANCE_ID, "protocol_versions": [1]}
+            )
+            await asyncio.wait_for(second_registered.wait(), 2)
+            assert (await asyncio.wait_for(second_dispatched.get(), 2))[
+                "request_id"
+            ] == request_ids[1]
+    finally:
+        if first_client.connected:
+            await first_client.disconnect()
+        if second_client.connected:
+            await second_client.disconnect()
+        server.should_exit = True
+        thread.join(timeout=5)
+
+
+@pytest.mark.asyncio
+async def test_missing_application_heartbeat_makes_instance_offline(tmp_path: Path) -> None:
+    port = unused_port()
+    server = uvicorn.Server(
+        uvicorn.Config(
+            create_transport_app(tmp_path, token=TOKEN, heartbeat_timeout=0.1, offline_retention=1),
+            host="127.0.0.1",
+            port=port,
+            log_level="error",
+        )
+    )
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    while not server.started:
+        await asyncio.sleep(0.01)
+    client = socketio.AsyncClient(reconnection=False)
+    registered = asyncio.Event()
+    client.on("registered", lambda _: registered.set())
+    try:
+        await client.connect(f"http://127.0.0.1:{port}", auth={"token": TOKEN})
+        await client.emit("register", {"instance_id": INSTANCE_ID, "protocol_versions": [1]})
+        await asyncio.wait_for(registered.wait(), 2)
+        async with ClientSession() as session:
+            headers = {"Authorization": f"Bearer {TOKEN}"}
+            online = await session.get(f"http://127.0.0.1:{port}/v1/instances", headers=headers)
+            assert (await online.json())[0]["status"] == "online"
+            instances = []
+            for _ in range(50):
+                observed = await session.get(
+                    f"http://127.0.0.1:{port}/v1/instances", headers=headers
+                )
+                instances = await observed.json()
+                if instances and instances[0]["status"] == "offline":
+                    break
+                await asyncio.sleep(0.02)
+            assert instances[0]["status"] == "offline"
     finally:
         if client.connected:
             await client.disconnect()

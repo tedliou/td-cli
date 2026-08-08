@@ -11,6 +11,8 @@ def test_protocol_rejects_unknown_and_coerced_command_input_fields() -> None:
         DiagnosticInput.model_validate({"message": 12})
     with pytest.raises(ValidationError):
         DiagnosticInput.model_validate({"message": "ping", "extra": True})
+    with pytest.raises(ValidationError):
+        Command.model_validate({"name": "diagnostic.ping", "input": {"message": 12}})
 
 
 def test_command_has_stable_canonical_json_independent_of_key_order() -> None:

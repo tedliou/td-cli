@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -15,13 +16,21 @@ class RequestStore:
         self.connection.execute("PRAGMA foreign_keys=ON")
         self.connection.execute("PRAGMA synchronous=FULL")
         self.connection.execute("PRAGMA busy_timeout=5000")
+        integrity = self.connection.execute("PRAGMA quick_check").fetchone()[0]
+        if integrity != "ok":
+            raise RuntimeError("daemon database is corrupt; preserve it for manual recovery")
+        schema_version = self.connection.execute("PRAGMA user_version").fetchone()[0]
+        if schema_version > 1:
+            raise RuntimeError("daemon database schema is newer than this Daemon supports")
         self.connection.execute(
             """CREATE TABLE IF NOT EXISTS requests (
                 request_id TEXT PRIMARY KEY, snapshot TEXT NOT NULL,
                 status TEXT NOT NULL, completed_at TEXT
             )"""
         )
+        self.connection.execute("PRAGMA user_version=1")
         self.recover()
+        self.cleanup()
 
     def recover(self) -> None:
         rows = self.connection.execute(
@@ -87,4 +96,21 @@ class RequestStore:
         return snapshot
 
     def close(self) -> None:
+        self.recover()
         self.connection.close()
+
+    def cleanup(self, *, limit: int = 1000) -> int:
+        cutoff = (
+            (datetime.now(UTC) - timedelta(days=7))
+            .isoformat(timespec="milliseconds")
+            .replace("+00:00", "Z")
+        )
+        with self.connection:
+            cursor = self.connection.execute(
+                """DELETE FROM requests WHERE request_id IN (
+                    SELECT request_id FROM requests
+                    WHERE completed_at IS NOT NULL AND completed_at < ? LIMIT ?
+                )""",
+                (cutoff, limit),
+            )
+        return cursor.rowcount

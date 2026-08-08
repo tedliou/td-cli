@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import secrets
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -30,6 +31,8 @@ def create_app(
     token: str,
     preflight: Callable[[SubmitRequest], Awaitable[None]] | None = None,
     dispatch: Callable[[dict[str, object]], Awaitable[None]] | None = None,
+    instances: Callable[[], list[dict[str, object]]] | None = None,
+    shutdown: Callable[[], None] | None = None,
 ) -> FastAPI:
     state = root / "state"
     store: RequestStore | None = None
@@ -39,8 +42,12 @@ def create_app(
         nonlocal store
         store = RequestStore(state / "daemon.db")
         app.state.request_store = store
-        yield
-        store.close()
+        cleanup_task = asyncio.create_task(_hourly_cleanup(store))
+        try:
+            yield
+        finally:
+            cleanup_task.cancel()
+            store.close()
 
     app = FastAPI(lifespan=lifespan)
 
@@ -57,6 +64,16 @@ def create_app(
             "protocol_versions": [1],
             "schema_version": 1,
         }
+
+    @app.get("/v1/instances", dependencies=[Depends(authenticate)])
+    def list_instances() -> list[dict[str, object]]:
+        return instances() if instances is not None else []
+
+    @app.post("/v1/shutdown", status_code=202, dependencies=[Depends(authenticate)])
+    def request_shutdown() -> dict[str, bool]:
+        if shutdown is not None:
+            shutdown()
+        return {"draining": True}
 
     @app.post("/v1/requests", status_code=201, dependencies=[Depends(authenticate)])
     async def submit(payload: SubmitRequest, response: Response) -> dict[str, object]:
@@ -90,3 +107,10 @@ def create_app(
         return snapshot
 
     return app
+
+
+async def _hourly_cleanup(store: RequestStore) -> None:
+    while True:
+        await asyncio.sleep(3600)
+        while store.cleanup() == 1000:
+            await asyncio.sleep(0)

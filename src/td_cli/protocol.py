@@ -22,7 +22,7 @@ class DiagnosticInput(StrictModel):
 
 class Command(StrictModel):
     name: Literal["diagnostic.ping"]
-    input: dict[str, Any]
+    input: DiagnosticInput
 
     def canonical_json(self) -> str:
         return json.dumps(
