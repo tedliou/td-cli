@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 
@@ -49,6 +50,7 @@ def test_artifact_inspection_ties_tox_to_current_source_revision(tmp_path: Path)
         "source_revision": source_revision(Path("agent"), manifest["required_files"]),
         "touchdesigner_version": "2025.32050",
         "operators": manifest["required_operators"],
+        "artifact_sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
     }
     artifact.with_suffix(".tox.manifest.json").write_text(json.dumps(evidence), encoding="utf-8")
 
@@ -61,6 +63,13 @@ def test_artifact_inspection_ties_tox_to_current_source_revision(tmp_path: Path)
     stale = CliRunner().invoke(app, ["inspect-artifact", str(artifact), "--source", "agent"])
     assert stale.exit_code == 1
     assert "stale" in stale.stderr
+
+    evidence["source_revision"] = source_revision(Path("agent"), manifest["required_files"])
+    artifact.with_suffix(".tox.manifest.json").write_text(json.dumps(evidence), encoding="utf-8")
+    artifact.write_bytes(b"replaced")
+    damaged = CliRunner().invoke(app, ["inspect-artifact", str(artifact), "--source", "agent"])
+    assert damaged.exit_code == 1
+    assert "digest" in damaged.stderr
 
 
 def test_build_instructions_pin_current_revision_and_output(tmp_path: Path) -> None:

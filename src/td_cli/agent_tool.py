@@ -60,6 +60,8 @@ def inspect_artifact(
         problems.append("artifact was built with an unlocked TouchDesigner version")
     if sorted(evidence.get("operators", [])) != sorted(manifest["required_operators"]):
         problems.append("artifact operator structure does not match manifest")
+    if evidence.get("artifact_sha256") != hashlib.sha256(artifact.read_bytes()).hexdigest():
+        problems.append("artifact digest does not match structural inspection evidence")
     if problems:
         typer.echo("; ".join(problems), err=True)
         raise typer.Exit(1)

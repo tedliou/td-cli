@@ -1,9 +1,13 @@
 """Canonical Agent Component extension source loaded by TouchDesigner."""
 
+import builtins
 import json
 import os
 import uuid
 from pathlib import Path
+
+if not hasattr(builtins, "_td_cli_runtime_session_id"):
+    builtins._td_cli_runtime_session_id = str(uuid.uuid4())
 
 
 class AgentExt:
@@ -11,10 +15,16 @@ class AgentExt:
 
     def __init__(self, owner_comp):
         self.owner_comp = owner_comp
-        self.instance_id = str(uuid.uuid4())
+        runtime_session_id = builtins._td_cli_runtime_session_id
+        if owner_comp.fetch("runtime_session_id", None) != runtime_session_id:
+            owner_comp.store("runtime_session_id", runtime_session_id)
+            owner_comp.store("instance_id", str(uuid.uuid4()))
+            owner_comp.store("pending_results", {})
+            owner_comp.store("seen_commands", {})
+        self.instance_id = owner_comp.fetch("instance_id")
+        self.pending_results = owner_comp.fetch("pending_results")
+        self.seen_commands = owner_comp.fetch("seen_commands")
         self.connection_id = None
-        self.pending_results = {}
-        self.seen_commands = {}
         self.draining = False
         self.last_heartbeat_at = 0.0
 

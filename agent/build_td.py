@@ -1,5 +1,6 @@
 """Build `td-agent.tox` inside TouchDesigner 2025.32050 from canonical text."""
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -48,10 +49,12 @@ def build(source_dir, output_path, source_revision):
         agent.par.ext0name = "Agent"
         agent.par.promoteextension0 = True
     agent.save(str(output))
+    operators = sorted(child.name for child in agent.children)
     evidence = {
         "source_revision": source_revision,
         "touchdesigner_version": "2025.32050",
-        "operators": json.loads(manifest_dat.text)["required_operators"],
+        "operators": operators,
+        "artifact_sha256": hashlib.sha256(output.read_bytes()).hexdigest(),
     }
     output.with_suffix(output.suffix + ".manifest.json").write_text(
         json.dumps(evidence, separators=(",", ":"), sort_keys=True), encoding="utf-8"

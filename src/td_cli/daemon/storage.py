@@ -33,6 +33,7 @@ class RequestStore:
         self.cleanup()
 
     def recover(self) -> None:
+        completed_at = datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
         rows = self.connection.execute(
             "SELECT request_id, snapshot, status FROM requests WHERE status IN ('queued','dispatched','running')"
         ).fetchall()
@@ -51,11 +52,13 @@ class RequestStore:
                     "details": {},
                     "retryable": False,
                 }
+                snapshot["completed_at"] = completed_at
                 self.connection.execute(
-                    "UPDATE requests SET snapshot=?, status=? WHERE request_id=?",
+                    "UPDATE requests SET snapshot=?, status=?, completed_at=? WHERE request_id=?",
                     (
                         json.dumps(snapshot, separators=(",", ":")),
                         snapshot["status"],
+                        completed_at,
                         row["request_id"],
                     ),
                 )

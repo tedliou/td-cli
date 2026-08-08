@@ -16,6 +16,10 @@ Component vertical slice**. Real TouchDesigner loading remains the child ticket
   seven-day terminal retention, bounded redacted JSON logging, and
   source/artifact inspection.
 
+Artifact evidence records the actual TouchDesigner-built child topology and the
+SHA-256 of the resulting `.tox`; inspection recomputes the digest and rejects a
+replaced, damaged, stale, wrong-version, or wrong-topology artifact.
+
 ```powershell
 uv run --python 3.11 pytest -q
 uv run --python 3.11 ruff check .

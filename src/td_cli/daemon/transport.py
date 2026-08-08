@@ -119,7 +119,10 @@ def create_transport_app(
                         "daemon_draining", {"deadline_seconds": drain_timeout}, to=registration.sid
                     )
         deadline = time.monotonic() + drain_timeout
-        while in_flight and time.monotonic() < deadline:
+        while (
+            in_flight
+            or any(registration.sid is not None for registration in registrations.values())
+        ) and time.monotonic() < deadline:
             await asyncio.sleep(0.05)
         for instance_id, queue in queues.items():
             while queue:
@@ -176,7 +179,11 @@ def create_transport_app(
             instance_id=instance_id,
             connection_id=connection_id,
             sid=sid,
-            status=InstanceStatus.ONLINE,
+            status=(
+                InstanceStatus.DRAINING
+                if shutting_down or data.get("status") == "draining"
+                else InstanceStatus.ONLINE
+            ),
             agent_version=str(data.get("agent_version", "unknown")),
             capabilities=[str(value) for value in data.get("capabilities", [])],
             last_heartbeat_monotonic=time.monotonic(),
@@ -226,17 +233,7 @@ def create_transport_app(
             )
             current = in_flight.pop(instance_id, None)
             if current is not None:
-                management.state.request_store.update(
-                    str(current["request_id"]),
-                    status="unknown",
-                    error={
-                        "code": "request_outcome_unknown",
-                        "message": "request_outcome_unknown",
-                        "details": {},
-                        "retryable": False,
-                    },
-                    completed_at=_now(),
-                )
+                terminal_request(current, "unknown", "request_outcome_unknown")
             sio.start_background_task(expire_offline, instance_id, registration.connection_id)
             break
 
@@ -248,17 +245,8 @@ def create_transport_app(
         if registration.status == InstanceStatus.OFFLINE:
             registrations.pop(instance_id, None)
             while queues[instance_id]:
-                queued = queues[instance_id].popleft()
-                management.state.request_store.update(
-                    str(queued["request_id"]),
-                    status="instance_offline",
-                    error={
-                        "code": "instance_offline",
-                        "message": "instance_offline",
-                        "details": {},
-                        "retryable": False,
-                    },
-                    completed_at=_now(),
+                terminal_request(
+                    queues[instance_id].popleft(), "instance_offline", "instance_offline"
                 )
 
     async def monitor_heartbeat(instance_id: str, connection_id: str) -> None:
@@ -284,6 +272,13 @@ def create_transport_app(
             return
         await dispatch_next(str(data["instance_id"]))
 
+    @sio.event
+    async def unregister(sid: str, data: object) -> None:
+        if not isinstance(data, dict) or current_registration(sid, data) is None:
+            return
+        registrations.pop(str(data["instance_id"]), None)
+        await sio.disconnect(sid)
+
     def terminal_request(snapshot: dict[str, object], status: str, code: str) -> None:
         management.state.request_store.update(
             str(snapshot["request_id"]),
@@ -291,6 +286,10 @@ def create_transport_app(
             error={"code": code, "message": code, "details": {}, "retryable": False},
             completed_at=_now(),
         )
+
+    async def advance(instance_id: str) -> None:
+        in_flight.pop(instance_id, None)
+        await dispatch_next(instance_id)
 
     def current_registration(sid: str, data: dict[str, object]) -> Registration | None:
         registration = registrations.get(str(data.get("instance_id", "")))
@@ -333,8 +332,7 @@ def create_transport_app(
         )
         if snapshot is not None:
             await sio.emit("result_recorded", {"request_id": request_id}, to=sid)
-            in_flight.pop(str(data["instance_id"]), None)
-            await dispatch_next(str(data["instance_id"]))
+            await advance(str(data["instance_id"]))
 
     @sio.event
     async def request_rejected(sid: str, data: object) -> None:
@@ -358,8 +356,7 @@ def create_transport_app(
             completed_at=_now(),
         )
         if snapshot is not None:
-            in_flight.pop(instance_id, None)
-            await dispatch_next(instance_id)
+            await advance(instance_id)
 
     return socketio.ASGIApp(sio, other_asgi_app=management)
 

@@ -49,6 +49,7 @@ def test_restart_recovers_queued_request_as_daemon_shutdown(tmp_path: Path) -> N
         recovered = restarted.get(f"/v1/requests/{REQUEST_ID}", headers=headers()).json()
         assert recovered["status"] == "daemon_shutdown"
         assert recovered["error"]["code"] == "daemon_shutdown"
+        assert recovered["completed_at"].endswith("Z")
 
 
 def test_request_id_deduplicates_same_command_and_rejects_different_command(tmp_path: Path) -> None:

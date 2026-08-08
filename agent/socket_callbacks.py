@@ -28,9 +28,30 @@ def onReceiveEvent(dat, rowIndex, message, event):
         dat.emit(result_event, result)
     elif event == "result_recorded":
         agent.acknowledge_result(message["request_id"])
+        if agent.draining and not agent.pending_results:
+            finishDraining(dat)
+    elif event == "daemon_draining":
+        agent.begin_draining()
+        dat.emit("heartbeat", agent.heartbeat_payload())
+        if not agent.pending_results:
+            finishDraining(dat)
+        else:
+            run(
+                "op('socket_callbacks').module.finishDraining(args[0])",
+                dat,
+                delayMilliSeconds=int(float(message["deadline_seconds"]) * 1000),
+                fromOP=me,
+            )
 
 
 def onClose(dat, failure):
     del failure
     parent().Agent.connection_id = None
     parent().Agent.refresh_auth(op("auth_table"))
+
+
+def finishDraining(dat):
+    agent = parent().Agent
+    if agent.connection_id:
+        dat.emit("unregister", agent.heartbeat_payload())
+        dat.par.active = False
