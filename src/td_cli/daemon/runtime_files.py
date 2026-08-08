@@ -92,15 +92,31 @@ def _validate_acl(root: Path, *, allow_inherited: bool = False) -> None:
 
 def load_or_create_token(root: Path) -> str:
     token_path = root / "state" / "auth.token"
-    if token_path.exists():
-        token = token_path.read_text(encoding="ascii").strip()
-        if len(token) != 64 or any(char not in "0123456789abcdef" for char in token):
-            raise RuntimeError("auth.token is malformed")
-        return token
+    existing = load_token(root)
+    if existing is not None:
+        return existing
     token = secrets.token_hex(32)
-    temporary = token_path.with_suffix(".tmp")
+    temporary = token_path.with_name(f".{token_path.name}.{secrets.token_hex(8)}.tmp")
     temporary.write_text(token, encoding="ascii")
-    temporary.replace(token_path)
+    try:
+        os.link(temporary, token_path)
+        return token
+    except FileExistsError:
+        existing = load_token(root)
+        if existing is None:
+            raise RuntimeError("auth.token disappeared during creation") from None
+        return existing
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def load_token(root: Path) -> str | None:
+    token_path = root / "state" / "auth.token"
+    if not token_path.exists():
+        return None
+    token = token_path.read_text(encoding="ascii").strip()
+    if len(token) != 64 or any(char not in "0123456789abcdef" for char in token):
+        raise RuntimeError("auth.token is malformed")
     return token
 
 

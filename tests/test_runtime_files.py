@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from td_cli.daemon.runtime_files import configure_logging, load_or_create_token
+from td_cli.daemon.runtime_files import configure_logging, load_or_create_token, load_token
 
 
 def test_local_token_is_persistent_and_malformed_token_blocks_startup(tmp_path: Path) -> None:
@@ -16,6 +16,12 @@ def test_local_token_is_persistent_and_malformed_token_blocks_startup(tmp_path: 
     (tmp_path / "state" / "auth.token").write_text("broken", encoding="ascii")
     with pytest.raises(RuntimeError, match="malformed"):
         load_or_create_token(tmp_path)
+
+
+def test_observing_a_missing_token_does_not_create_it(tmp_path: Path) -> None:
+    (tmp_path / "state").mkdir()
+    assert load_token(tmp_path) is None
+    assert not (tmp_path / "state" / "auth.token").exists()
 
 
 def test_daemon_log_is_bounded_single_line_json_and_redacts_tokens(tmp_path: Path) -> None:

@@ -19,6 +19,7 @@ from td_cli.daemon.runtime_files import (
     configure_logging,
     data_root,
     load_or_create_token,
+    load_token,
     secure_layout,
 )
 from td_cli.daemon.transport import create_transport_app
@@ -50,7 +51,9 @@ class DaemonMutex:
 
 def _probe(root: Path) -> dict[str, object] | None:
     try:
-        token = load_or_create_token(root)
+        token = load_token(root)
+        if token is None:
+            return None
         response = httpx.get(
             f"{ENDPOINT}/v1/health",
             headers={"Authorization": f"Bearer {token}"},
@@ -67,7 +70,11 @@ def _status_payload(root: Path) -> dict[str, object]:
     run_path = root / "run" / "daemon.json"
     run = json.loads(run_path.read_text(encoding="utf-8")) if run_path.exists() else {}
     return {
-        "status": "running" if health else ("starting/unhealthy" if run else "stopped"),
+        "status": (
+            "running"
+            if health and health.get("ready") is True
+            else ("starting/unhealthy" if run or health else "stopped")
+        ),
         "pid": run.get("pid"),
         "endpoint": run.get("endpoint"),
         "release_version": health.get("release_version") if health else run.get("release_version"),
@@ -120,9 +127,12 @@ def serve() -> None:
         temporary.write_text(json.dumps(snapshot, separators=(",", ":")), encoding="utf-8")
         temporary.replace(run_path)
         logger.info("daemon_started")
+        control_handler = _install_windows_shutdown_handler(server, token)
         try:
             server.run()
         finally:
+            if control_handler is not None:
+                ctypes.windll.kernel32.SetConsoleCtrlHandler(control_handler, False)
             logger.info("daemon_stopped")
             run_path.unlink(missing_ok=True)
 
@@ -131,9 +141,13 @@ def serve() -> None:
 def start() -> None:
     root = data_root()
     secure_layout(root)
-    if _probe(root):
+    health = _probe(root)
+    if health and health.get("ready") is True:
         typer.echo("Daemon is running")
         return
+    if health is not None:
+        typer.echo("Daemon is starting/unhealthy", err=True)
+        raise typer.Exit(3)
     flags = 0
     startupinfo = None
     if os.name == "nt":
@@ -148,7 +162,8 @@ def start() -> None:
     )
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
-        if _probe(root):
+        health = _probe(root)
+        if health and health.get("ready") is True:
             typer.echo("Daemon is running")
             return
         time.sleep(0.05)
@@ -162,14 +177,17 @@ def stop() -> None:
     if health is None:
         typer.echo("Daemon is stopped")
         return
-    token = load_or_create_token(root)
+    token = load_token(root)
+    if token is None:
+        typer.echo("Daemon is stopped")
+        return
     try:
         httpx.post(
             f"{ENDPOINT}/v1/shutdown", headers={"Authorization": f"Bearer {token}"}, timeout=6
         )
     except httpx.HTTPError:
         raise typer.Exit(3) from None
-    deadline = time.monotonic() + 6
+    deadline = time.monotonic() + 1
     while time.monotonic() < deadline:
         if _probe(root) is None:
             typer.echo("Daemon is stopped")
@@ -182,6 +200,30 @@ def stop() -> None:
         err=True,
     )
     raise typer.Exit(3)
+
+
+def _install_windows_shutdown_handler(server: uvicorn.Server, token: str) -> object | None:
+    if os.name != "nt":
+        return None
+    callback_type = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_uint)
+
+    @callback_type
+    def handler(control_type: int) -> bool:
+        if control_type not in {2, 5, 6}:  # close, logoff, system shutdown
+            return False
+        try:
+            httpx.post(
+                f"{ENDPOINT}/v1/shutdown",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=6,
+            )
+        except httpx.HTTPError:
+            server.should_exit = True
+        return True
+
+    if not ctypes.windll.kernel32.SetConsoleCtrlHandler(handler, True):
+        raise RuntimeError("cannot install Windows shutdown handler")
+    return handler
 
 
 @app.command()
