@@ -35,3 +35,16 @@ def test_daemon_log_is_bounded_single_line_json_and_redacts_tokens(tmp_path: Pat
     assert isinstance(rotating, logging.handlers.RotatingFileHandler)
     assert rotating.maxBytes == 5 * 1024 * 1024
     assert rotating.backupCount == 4
+
+
+def test_log_handler_records_runtime_failure_for_health_reporting(tmp_path: Path) -> None:
+    (tmp_path / "logs").mkdir()
+    logger = configure_logging(tmp_path)
+    handler = logger.handlers[0]
+    previous = logging.raiseExceptions
+    logging.raiseExceptions = False
+    try:
+        handler.handleError(logging.LogRecord("test", logging.ERROR, "", 0, "failed", (), None))
+    finally:
+        logging.raiseExceptions = previous
+    assert handler.healthy is False

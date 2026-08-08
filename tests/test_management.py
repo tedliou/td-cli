@@ -20,6 +20,14 @@ def test_health_discloses_nothing_without_authentication(tmp_path: Path) -> None
         assert response.json() == {"detail": "Not Found"}
 
 
+def test_authenticated_health_reports_runtime_logging_failure(tmp_path: Path) -> None:
+    with TestClient(create_app(tmp_path, token=TOKEN, runtime_health=lambda: False)) as client:
+        response = client.get("/v1/health", headers=headers())
+        assert response.status_code == 200
+        assert response.json()["ready"] is False
+        assert response.json()["logging_healthy"] is False
+
+
 def test_request_is_accepted_durably_and_queryable(tmp_path: Path) -> None:
     with TestClient(create_app(tmp_path, token=TOKEN)) as client:
         response = client.post(

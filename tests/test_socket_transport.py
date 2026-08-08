@@ -540,6 +540,9 @@ async def test_daemon_shutdown_drains_then_recovers_in_flight_and_queued_request
     client.on("daemon_draining", lambda _: draining.set())
     request_ids = [REQUEST_ID, "018f47ec-7f3b-7a34-8f31-2ad70b6f6e2d"]
     headers = {"Authorization": f"Bearer {TOKEN}"}
+    late_client = socketio.AsyncClient(reconnection=False)
+    late_draining = asyncio.Event()
+    late_client.on("daemon_draining", lambda _: late_draining.set())
     try:
         await client.connect(f"http://127.0.0.1:{port}", auth={"token": TOKEN})
         await client.emit("register", registration_payload())
@@ -568,9 +571,19 @@ async def test_daemon_shutdown_drains_then_recovers_in_flight_and_queued_request
                 )
                 states.append((await response.json())["status"])
             assert states == ["unknown", "daemon_shutdown"]
+            await late_client.connect(f"http://127.0.0.1:{port}", auth={"token": TOKEN})
+            late_registered = asyncio.Event()
+            late_client.on("registered", lambda _: late_registered.set())
+            await late_client.emit("register", registration_payload())
+            await asyncio.wait_for(late_registered.wait(), 2)
+            await asyncio.wait_for(late_draining.wait(), 2)
+            instances = await session.get(f"http://127.0.0.1:{port}/v1/instances", headers=headers)
+            assert (await instances.json())[0]["status"] == "draining"
     finally:
         if client.connected:
             await client.disconnect()
+        if late_client.connected:
+            await late_client.disconnect()
         server.should_exit = True
         thread.join(timeout=5)
 

@@ -93,7 +93,14 @@ def serve() -> None:
 
         server = uvicorn.Server(
             uvicorn.Config(
-                create_transport_app(root, token=token, shutdown=begin_shutdown),
+                create_transport_app(
+                    root,
+                    token=token,
+                    shutdown=begin_shutdown,
+                    runtime_health=lambda: all(
+                        getattr(handler, "healthy", True) for handler in logger.handlers
+                    ),
+                ),
                 host="127.0.0.1",
                 port=9982,
                 log_config=None,

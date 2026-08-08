@@ -44,6 +44,7 @@ def create_transport_app(
     offline_retention: float = 30,
     shutdown: Callable[[], None] | None = None,
     drain_timeout: float = 5,
+    runtime_health: Callable[[], bool] | None = None,
 ) -> socketio.ASGIApp:
     """Create the combined authenticated HTTP and Socket.IO Protocol v1 interface."""
     sio = socketio.AsyncServer(
@@ -140,6 +141,7 @@ def create_transport_app(
         dispatch=dispatch,
         instances=instance_snapshots,
         shutdown=orderly_shutdown,
+        runtime_health=runtime_health,
     )
 
     @sio.event
@@ -195,6 +197,8 @@ def create_transport_app(
             {"instance_id": instance_id, "connection_id": connection_id, "protocol_version": 1},
             to=sid,
         )
+        if shutting_down:
+            await sio.emit("daemon_draining", {"deadline_seconds": drain_timeout}, to=sid)
         if previous is not None and previous.sid is not None and previous.sid != sid:
             await sio.disconnect(previous.sid)
         sio.start_background_task(monitor_heartbeat, instance_id, connection_id)

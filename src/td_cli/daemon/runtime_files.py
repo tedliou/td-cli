@@ -53,12 +53,38 @@ def secure_layout(root: Path) -> None:
 
 
 def _validate_acl(root: Path, *, allow_inherited: bool = False) -> None:
-    completed = subprocess.run(["icacls", str(root)], capture_output=True, text=True, check=False)
-    if completed.returncode:
+    script = (
+        "& { param([string]$p) "
+        "$current=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; "
+        "if ([IO.Directory]::Exists($p)) { "
+        "$acl=(New-Object IO.DirectoryInfo($p)).GetAccessControl() "
+        "} else { $acl=(New-Object IO.FileInfo($p)).GetAccessControl() }; "
+        "$rules=@($acl.Access | ForEach-Object { "
+        "$sid=$_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value; "
+        "[pscustomobject]@{sid=$sid;type=$_.AccessControlType.ToString();"
+        "rights=$_.FileSystemRights.ToString();inherited=$_.IsInherited} }); "
+        "[pscustomobject]@{current=$current;rules=$rules} | ConvertTo-Json -Depth 4 -Compress }"
+    )
+    completed = subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-Command", script, str(root)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode or completed.stderr.strip():
         raise RuntimeError("cannot validate state ACL")
-    acl = completed.stdout.casefold()
-    forbidden = ("everyone", "authenticated users", "builtin\\users", " users:")
-    if (not allow_inherited and "(i)" in acl) or any(value in acl for value in forbidden):
+    snapshot = json.loads(completed.stdout)
+    rules = snapshot["rules"]
+    if isinstance(rules, dict):
+        rules = [rules]
+    allowed_sids = {snapshot["current"], "S-1-5-18"}
+    actual_sids = {rule["sid"] for rule in rules}
+    invalid = (
+        actual_sids != allowed_sids
+        or any(rule["type"] != "Allow" or "FullControl" not in rule["rights"] for rule in rules)
+        or (not allow_inherited and any(rule["inherited"] for rule in rules))
+    )
+    if invalid:
         raise RuntimeError(
             f'state ACL is overly broad; repair with: icacls "{root}" /inheritance:r'
         )
@@ -91,11 +117,19 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, separators=(",", ":"))
 
 
+class HealthTrackingRotatingHandler(RotatingFileHandler):
+    healthy = True
+
+    def handleError(self, record: logging.LogRecord) -> None:
+        self.healthy = False
+        super().handleError(record)
+
+
 def configure_logging(root: Path) -> logging.Logger:
     logger = logging.getLogger("td_cli.daemon")
     logger.setLevel(logging.INFO)
     logger.handlers.clear()
-    handler = RotatingFileHandler(
+    handler = HealthTrackingRotatingHandler(
         root / "logs" / "daemon.log", maxBytes=5 * 1024 * 1024, backupCount=4, encoding="utf-8"
     )
     handler.setFormatter(JsonFormatter())

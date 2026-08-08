@@ -49,6 +49,7 @@ def create_app(
     dispatch: Callable[[dict[str, object]], Awaitable[None]] | None = None,
     instances: Callable[[], list[dict[str, object]]] | None = None,
     shutdown: Callable[[], Awaitable[None] | None] | None = None,
+    runtime_health: Callable[[], bool] | None = None,
 ) -> FastAPI:
     state = root / "state"
     store: RequestStore | None = None
@@ -74,8 +75,10 @@ def create_app(
 
     @app.get("/v1/health", dependencies=[Depends(authenticate)])
     def health() -> dict[str, object]:
+        logging_healthy = runtime_health() if runtime_health is not None else True
         return {
-            "ready": True,
+            "ready": logging_healthy,
+            "logging_healthy": logging_healthy,
             "release_version": __version__,
             "protocol_versions": [1],
             "schema_version": 1,
