@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import secrets
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Response
 
 from td_cli import __version__
 from td_cli.daemon.storage import RequestStore
@@ -23,7 +24,13 @@ def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
-def create_app(root: Path, *, token: str) -> FastAPI:
+def create_app(
+    root: Path,
+    *,
+    token: str,
+    preflight: Callable[[SubmitRequest], Awaitable[None]] | None = None,
+    dispatch: Callable[[dict[str, object]], Awaitable[None]] | None = None,
+) -> FastAPI:
     state = root / "state"
     store: RequestStore | None = None
 
@@ -31,6 +38,7 @@ def create_app(root: Path, *, token: str) -> FastAPI:
     async def lifespan(_: FastAPI):
         nonlocal store
         store = RequestStore(state / "daemon.db")
+        app.state.request_store = store
         yield
         store.close()
 
@@ -51,8 +59,17 @@ def create_app(root: Path, *, token: str) -> FastAPI:
         }
 
     @app.post("/v1/requests", status_code=201, dependencies=[Depends(authenticate)])
-    def submit(payload: SubmitRequest) -> dict[str, object]:
+    async def submit(payload: SubmitRequest, response: Response) -> dict[str, object]:
         assert store is not None
+        existing = store.get(payload.request_id)
+        if existing is not None:
+            existing_command = Command.model_validate(existing["command"])
+            if existing_command.canonical_json() != payload.command.canonical_json():
+                raise HTTPException(status_code=409, detail="request_id_conflict")
+            response.status_code = 200
+            return existing
+        if preflight is not None:
+            await preflight(payload)
         snapshot = RequestSnapshot.pending(
             request_id=payload.request_id,
             instance_id=payload.instance_id,
@@ -60,6 +77,8 @@ def create_app(root: Path, *, token: str) -> FastAPI:
             submitted_at=_now(),
         ).model_dump(mode="json")
         store.insert(snapshot)
+        if dispatch is not None:
+            await dispatch(snapshot)
         return snapshot
 
     @app.get("/v1/requests/{request_id}", dependencies=[Depends(authenticate)])

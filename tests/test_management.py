@@ -49,3 +49,21 @@ def test_restart_recovers_queued_request_as_daemon_shutdown(tmp_path: Path) -> N
         recovered = restarted.get(f"/v1/requests/{REQUEST_ID}", headers=headers()).json()
         assert recovered["status"] == "daemon_shutdown"
         assert recovered["error"]["code"] == "daemon_shutdown"
+
+
+def test_request_id_deduplicates_same_command_and_rejects_different_command(tmp_path: Path) -> None:
+    payload = {
+        "request_id": REQUEST_ID,
+        "instance_id": INSTANCE_ID,
+        "command": {"name": "diagnostic.ping", "input": {"message": "ping"}},
+    }
+    with TestClient(create_app(tmp_path, token=TOKEN)) as client:
+        first = client.post("/v1/requests", headers=headers(), json=payload)
+        duplicate = client.post("/v1/requests", headers=headers(), json=payload)
+        assert duplicate.status_code == 200
+        assert duplicate.json() == first.json()
+
+        changed = {**payload, "command": {"name": "diagnostic.ping", "input": {"message": "other"}}}
+        conflict = client.post("/v1/requests", headers=headers(), json=changed)
+        assert conflict.status_code == 409
+        assert conflict.json()["detail"] == "request_id_conflict"

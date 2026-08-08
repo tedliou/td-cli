@@ -69,5 +69,22 @@ class RequestStore:
         ).fetchone()
         return json.loads(row["snapshot"]) if row else None
 
+    def update(self, request_id: str, **changes: Any) -> dict[str, Any] | None:
+        snapshot = self.get(request_id)
+        if snapshot is None:
+            return None
+        snapshot.update(changes)
+        with self.connection:
+            self.connection.execute(
+                "UPDATE requests SET snapshot=?, status=?, completed_at=? WHERE request_id=?",
+                (
+                    json.dumps(snapshot, separators=(",", ":")),
+                    snapshot["status"],
+                    snapshot["completed_at"],
+                    request_id,
+                ),
+            )
+        return snapshot
+
     def close(self) -> None:
         self.connection.close()
