@@ -5,8 +5,10 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 from datetime import UTC, datetime
+from enum import IntEnum
 from pathlib import Path
 from typing import Annotated, Self
 
@@ -26,6 +28,15 @@ from td_cli.daemon.transport import create_transport_app
 
 app = typer.Typer(no_args_is_help=True)
 ENDPOINT = "http://127.0.0.1:9982"
+
+
+class WindowsControlEvent(IntEnum):
+    CLOSE = 2
+    LOGOFF = 5
+    SHUTDOWN = 6
+
+
+WINDOWS_SHUTDOWN_EVENTS = frozenset(event.value for event in WindowsControlEvent)
 
 
 class DaemonMutex:
@@ -209,21 +220,30 @@ def _install_windows_shutdown_handler(server: uvicorn.Server, token: str) -> obj
 
     @callback_type
     def handler(control_type: int) -> bool:
-        if control_type not in {2, 5, 6}:  # close, logoff, system shutdown
+        if control_type not in WINDOWS_SHUTDOWN_EVENTS:
             return False
-        try:
-            httpx.post(
-                f"{ENDPOINT}/v1/shutdown",
-                headers={"Authorization": f"Bearer {token}"},
-                timeout=6,
-            )
-        except httpx.HTTPError:
-            server.should_exit = True
+        threading.Thread(
+            target=_request_orderly_shutdown,
+            args=(server, token),
+            daemon=True,
+            name="td-cli-windows-shutdown",
+        ).start()
         return True
 
     if not ctypes.windll.kernel32.SetConsoleCtrlHandler(handler, True):
         raise RuntimeError("cannot install Windows shutdown handler")
     return handler
+
+
+def _request_orderly_shutdown(server: uvicorn.Server, token: str) -> None:
+    try:
+        httpx.post(
+            f"{ENDPOINT}/v1/shutdown",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=6,
+        )
+    except httpx.HTTPError:
+        server.should_exit = True
 
 
 @app.command()
