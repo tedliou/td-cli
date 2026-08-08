@@ -7,7 +7,8 @@ import uuid
 from collections import defaultdict, deque
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 from pathlib import Path
 
 import socketio
@@ -21,11 +22,18 @@ class Registration:
     instance_id: str
     connection_id: str
     sid: str | None
-    status: str
+    status: InstanceStatus
     agent_version: str
     capabilities: list[str]
-    last_heartbeat_at: float
-    offline_expires_at: float | None = None
+    last_heartbeat_monotonic: float
+    last_heartbeat_at: str
+    offline_expires_at: str | None = None
+
+
+class InstanceStatus(StrEnum):
+    ONLINE = "online"
+    OFFLINE = "offline"
+    DRAINING = "draining"
 
 
 def create_transport_app(
@@ -35,14 +43,17 @@ def create_transport_app(
     heartbeat_timeout: float = 6,
     offline_retention: float = 30,
     shutdown: Callable[[], None] | None = None,
+    drain_timeout: float = 5,
 ) -> socketio.ASGIApp:
     """Create the combined authenticated HTTP and Socket.IO Protocol v1 interface."""
     sio = socketio.AsyncServer(
         async_mode="asgi", cors_allowed_origins=[], max_http_buffer_size=256 * 1024
     )
     registrations: dict[str, Registration] = {}
+    connected: set[str] = set()
     queues: dict[str, deque[dict[str, object]]] = defaultdict(deque)
     in_flight: dict[str, dict[str, object]] = {}
+    shutting_down = False
     management = None
 
     async def dispatch(snapshot: dict[str, object]) -> None:
@@ -51,12 +62,16 @@ def create_transport_app(
         await dispatch_next(instance_id)
 
     async def preflight(payload: SubmitRequest) -> None:
+        if shutting_down:
+            raise HTTPException(status_code=503, detail="daemon_shutdown")
         instance_id = payload.instance_id
         registration = registrations.get(instance_id)
-        if registration is not None and registration.status == "draining":
+        if registration is not None and registration.status == InstanceStatus.DRAINING:
             raise HTTPException(status_code=409, detail="instance_draining")
-        if registration is None or registration.status != "online":
+        if registration is None or registration.status != InstanceStatus.ONLINE:
             raise HTTPException(status_code=409, detail="instance_offline")
+        if payload.command.name not in registration.capabilities:
+            raise HTTPException(status_code=409, detail="command_unsupported")
         if len(queues[instance_id]) + int(instance_id in in_flight) >= 32:
             raise HTTPException(status_code=409, detail="instance_busy")
 
@@ -64,7 +79,7 @@ def create_transport_app(
         registration = registrations.get(instance_id)
         if (
             registration is None
-            or registration.status != "online"
+            or registration.status != InstanceStatus.ONLINE
             or instance_id in in_flight
             or not queues[instance_id]
         ):
@@ -87,9 +102,33 @@ def create_transport_app(
                 "agent_version": item.agent_version,
                 "protocol_version": 1,
                 "capabilities": sorted(item.capabilities),
+                "last_heartbeat_at": item.last_heartbeat_at,
+                "offline_expires_at": item.offline_expires_at,
             }
             for item in (registrations[instance_id] for instance_id in ids)
         ]
+
+    async def orderly_shutdown() -> None:
+        nonlocal shutting_down
+        shutting_down = True
+        for registration in registrations.values():
+            if registration.status == InstanceStatus.ONLINE:
+                registration.status = InstanceStatus.DRAINING
+                if registration.sid is not None:
+                    await sio.emit(
+                        "daemon_draining", {"deadline_seconds": drain_timeout}, to=registration.sid
+                    )
+        deadline = time.monotonic() + drain_timeout
+        while in_flight and time.monotonic() < deadline:
+            await asyncio.sleep(0.05)
+        for instance_id, queue in queues.items():
+            while queue:
+                terminal_request(queue.popleft(), "daemon_shutdown", "daemon_shutdown")
+        for instance_id, snapshot in list(in_flight.items()):
+            terminal_request(snapshot, "unknown", "request_outcome_unknown")
+            in_flight.pop(instance_id, None)
+        if shutdown is not None:
+            shutdown()
 
     management = create_app(
         root,
@@ -97,14 +136,18 @@ def create_transport_app(
         preflight=preflight,
         dispatch=dispatch,
         instances=instance_snapshots,
-        shutdown=shutdown,
+        shutdown=orderly_shutdown,
     )
 
     @sio.event
     async def connect(sid: str, environ: dict[str, object], auth: object) -> bool:
         del environ
         supplied = auth.get("token", "") if isinstance(auth, dict) else ""
-        return secrets.compare_digest(str(supplied), token)
+        authenticated = secrets.compare_digest(str(supplied), token)
+        if authenticated:
+            connected.add(sid)
+            sio.start_background_task(enforce_registration_deadline, sid)
+        return authenticated
 
     @sio.event
     async def register(sid: str, data: object) -> None:
@@ -113,21 +156,33 @@ def create_transport_app(
             return
         versions = data.get("protocol_versions")
         instance_id = data.get("instance_id")
-        if not isinstance(instance_id, str) or not isinstance(versions, list) or 1 not in versions:
+        try:
+            normalized_instance_id = str(uuid.UUID(str(instance_id)))
+        except ValueError:
+            normalized_instance_id = ""
+        valid_versions = (
+            isinstance(versions, list)
+            and all(type(version) is int for version in versions)
+            and 1 in versions
+        )
+        if not normalized_instance_id or not valid_versions:
             await sio.emit("registration_error", {"code": "protocol_incompatible"}, to=sid)
             await sio.disconnect(sid)
             return
+        instance_id = normalized_instance_id
         connection_id = str(uuid.uuid4())
         previous = registrations.get(instance_id)
         registrations[instance_id] = Registration(
             instance_id=instance_id,
             connection_id=connection_id,
             sid=sid,
-            status="online",
+            status=InstanceStatus.ONLINE,
             agent_version=str(data.get("agent_version", "unknown")),
             capabilities=[str(value) for value in data.get("capabilities", [])],
-            last_heartbeat_at=time.monotonic(),
+            last_heartbeat_monotonic=time.monotonic(),
+            last_heartbeat_at=_now(),
         )
+        connected.discard(sid)
         await sio.emit(
             "registered",
             {"instance_id": instance_id, "connection_id": connection_id, "protocol_version": 1},
@@ -135,7 +190,6 @@ def create_transport_app(
         )
         if previous is not None and previous.sid is not None and previous.sid != sid:
             await sio.disconnect(previous.sid)
-        await dispatch_next(instance_id)
         sio.start_background_task(monitor_heartbeat, instance_id, connection_id)
 
     @sio.event
@@ -148,9 +202,10 @@ def create_transport_app(
             and registration.sid == sid
             and registration.connection_id == data.get("connection_id")
         ):
-            registration.last_heartbeat_at = time.monotonic()
+            registration.last_heartbeat_monotonic = time.monotonic()
+            registration.last_heartbeat_at = _now()
             if data.get("status") == "draining":
-                registration.status = "draining"
+                registration.status = InstanceStatus.DRAINING
             await sio.emit(
                 "heartbeat_recorded", {"connection_id": registration.connection_id}, to=sid
             )
@@ -158,12 +213,17 @@ def create_transport_app(
     @sio.event
     async def disconnect(sid: str, reason: object = None) -> None:
         del reason
+        connected.discard(sid)
         for instance_id, registration in list(registrations.items()):
             if registration.sid != sid:
                 continue
             registration.sid = None
-            registration.status = "offline"
-            registration.offline_expires_at = time.monotonic() + offline_retention
+            registration.status = InstanceStatus.OFFLINE
+            registration.offline_expires_at = (
+                (datetime.now(UTC) + timedelta(seconds=offline_retention))
+                .isoformat(timespec="milliseconds")
+                .replace("+00:00", "Z")
+            )
             current = in_flight.pop(instance_id, None)
             if current is not None:
                 management.state.request_store.update(
@@ -185,7 +245,7 @@ def create_transport_app(
         registration = registrations.get(instance_id)
         if registration is None or registration.connection_id != connection_id:
             return
-        if registration.status == "offline":
+        if registration.status == InstanceStatus.OFFLINE:
             registrations.pop(instance_id, None)
             while queues[instance_id]:
                 queued = queues[instance_id].popleft()
@@ -207,11 +267,30 @@ def create_transport_app(
             registration = registrations.get(instance_id)
             if registration is None or registration.connection_id != connection_id:
                 return
-            if registration.status != "online" or registration.sid is None:
+            if registration.status != InstanceStatus.ONLINE or registration.sid is None:
                 return
-            if time.monotonic() - registration.last_heartbeat_at >= heartbeat_timeout:
+            if time.monotonic() - registration.last_heartbeat_monotonic >= heartbeat_timeout:
                 await sio.disconnect(registration.sid)
                 return
+
+    async def enforce_registration_deadline(sid: str) -> None:
+        await asyncio.sleep(5)
+        if sid in connected:
+            await sio.disconnect(sid)
+
+    @sio.event
+    async def results_replayed(sid: str, data: object) -> None:
+        if not isinstance(data, dict) or current_registration(sid, data) is None:
+            return
+        await dispatch_next(str(data["instance_id"]))
+
+    def terminal_request(snapshot: dict[str, object], status: str, code: str) -> None:
+        management.state.request_store.update(
+            str(snapshot["request_id"]),
+            status=status,
+            error={"code": code, "message": code, "details": {}, "retryable": False},
+            completed_at=_now(),
+        )
 
     def current_registration(sid: str, data: dict[str, object]) -> Registration | None:
         registration = registrations.get(str(data.get("instance_id", "")))
@@ -225,6 +304,10 @@ def create_transport_app(
     async def request_accepted(sid: str, data: object) -> None:
         if not isinstance(data, dict) or current_registration(sid, data) is None:
             return
+        instance_id = str(data["instance_id"])
+        current = in_flight.get(instance_id)
+        if current is None or current["request_id"] != data.get("request_id"):
+            return
         store = management.state.request_store
         store.update(str(data.get("request_id")), status="running", started_at=_now())
 
@@ -234,6 +317,13 @@ def create_transport_app(
             return
         request_id = str(data.get("request_id", ""))
         store = management.state.request_store
+        existing = store.get(request_id)
+        if (
+            existing is None
+            or existing["instance_id"] != data["instance_id"]
+            or existing["status"] not in {"dispatched", "running", "unknown"}
+        ):
+            return
         snapshot = store.update(
             request_id,
             status="succeeded",
@@ -252,6 +342,9 @@ def create_transport_app(
             return
         request_id = str(data.get("request_id", ""))
         instance_id = str(data["instance_id"])
+        current = in_flight.get(instance_id)
+        if current is None or current["request_id"] != request_id:
+            return
         snapshot = management.state.request_store.update(
             request_id,
             status="failed",

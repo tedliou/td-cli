@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import secrets
+import uuid
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -9,6 +11,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Response
+from pydantic import field_validator
 
 from td_cli import __version__
 from td_cli.daemon.storage import RequestStore
@@ -19,6 +22,19 @@ class SubmitRequest(StrictModel):
     request_id: str
     instance_id: str
     command: Command
+
+    @field_validator("request_id")
+    @classmethod
+    def request_id_is_uuid7(cls, value: str) -> str:
+        parsed = uuid.UUID(value)
+        if parsed.version != 7:
+            raise ValueError("request_id must be UUIDv7")
+        return str(parsed)
+
+    @field_validator("instance_id")
+    @classmethod
+    def instance_id_is_uuid(cls, value: str) -> str:
+        return str(uuid.UUID(value))
 
 
 def _now() -> str:
@@ -32,7 +48,7 @@ def create_app(
     preflight: Callable[[SubmitRequest], Awaitable[None]] | None = None,
     dispatch: Callable[[dict[str, object]], Awaitable[None]] | None = None,
     instances: Callable[[], list[dict[str, object]]] | None = None,
-    shutdown: Callable[[], None] | None = None,
+    shutdown: Callable[[], Awaitable[None] | None] | None = None,
 ) -> FastAPI:
     state = root / "state"
     store: RequestStore | None = None
@@ -70,9 +86,11 @@ def create_app(
         return instances() if instances is not None else []
 
     @app.post("/v1/shutdown", status_code=202, dependencies=[Depends(authenticate)])
-    def request_shutdown() -> dict[str, bool]:
+    async def request_shutdown() -> dict[str, bool]:
         if shutdown is not None:
-            shutdown()
+            result = shutdown()
+            if inspect.isawaitable(result):
+                await result
         return {"draining": True}
 
     @app.post("/v1/requests", status_code=201, dependencies=[Depends(authenticate)])
@@ -111,6 +129,6 @@ def create_app(
 
 async def _hourly_cleanup(store: RequestStore) -> None:
     while True:
-        await asyncio.sleep(3600)
         while store.cleanup() == 1000:
             await asyncio.sleep(0)
+        await asyncio.sleep(3600)

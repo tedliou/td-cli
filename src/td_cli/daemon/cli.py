@@ -158,7 +158,7 @@ def stop() -> None:
     token = load_or_create_token(root)
     try:
         httpx.post(
-            f"{ENDPOINT}/v1/shutdown", headers={"Authorization": f"Bearer {token}"}, timeout=1
+            f"{ENDPOINT}/v1/shutdown", headers={"Authorization": f"Bearer {token}"}, timeout=6
         )
     except httpx.HTTPError:
         raise typer.Exit(3) from None

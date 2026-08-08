@@ -14,7 +14,12 @@ def test_canonical_agent_sources_pass_structural_inspection() -> None:
         "agent_version": "0.1.0.dev0",
         "locked_touchdesigner_version": "2025.32050",
         "protocol_versions": [1],
-        "required_files": ["extension.py", "socket_callbacks.py", "build_td.py"],
+        "required_files": [
+            "extension.py",
+            "socket_callbacks.py",
+            "heartbeat_execute.py",
+            "build_td.py",
+        ],
         "valid": True,
     }
 
@@ -56,3 +61,16 @@ def test_artifact_inspection_ties_tox_to_current_source_revision(tmp_path: Path)
     stale = CliRunner().invoke(app, ["inspect-artifact", str(artifact), "--source", "agent"])
     assert stale.exit_code == 1
     assert "stale" in stale.stderr
+
+
+def test_build_instructions_pin_current_revision_and_output(tmp_path: Path) -> None:
+    output = tmp_path / "td-agent.tox"
+    result = CliRunner().invoke(
+        app, ["build-instructions", "--output", str(output), "--source", "agent"]
+    )
+    manifest = json.loads(Path("agent/manifest.json").read_text(encoding="utf-8"))
+    revision = source_revision(Path("agent"), manifest["required_files"])
+    assert result.exit_code == 0, result.output
+    assert "2025.32050" in result.stdout
+    assert revision in result.stdout
+    assert str(output.resolve()) in result.stdout

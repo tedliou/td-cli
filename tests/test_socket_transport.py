@@ -21,6 +21,15 @@ def unused_port() -> int:
         return int(sock.getsockname()[1])
 
 
+def registration_payload() -> dict[str, object]:
+    return {
+        "instance_id": INSTANCE_ID,
+        "protocol_versions": [1],
+        "agent_version": "0.1.0",
+        "capabilities": ["diagnostic.ping"],
+    }
+
+
 @pytest.mark.asyncio
 async def test_agent_authenticates_registers_and_heartbeats_with_connection_generation(
     tmp_path: Path,
@@ -50,7 +59,7 @@ async def test_agent_authenticates_registers_and_heartbeats_with_connection_gene
         await client.connect(f"http://127.0.0.1:{port}", auth={"token": TOKEN})
         await client.emit(
             "register",
-            {"instance_id": INSTANCE_ID, "protocol_versions": [1], "agent_version": "0.1.0"},
+            registration_payload(),
         )
         registration = await asyncio.wait_for(registered, 2)
         assert registration["protocol_version"] == 1
@@ -60,6 +69,14 @@ async def test_agent_authenticates_registers_and_heartbeats_with_connection_gene
         assert (await asyncio.wait_for(heartbeat, 2))["connection_id"] == registration[
             "connection_id"
         ]
+        async with ClientSession() as session:
+            response = await session.get(
+                f"http://127.0.0.1:{port}/v1/instances",
+                headers={"Authorization": f"Bearer {TOKEN}"},
+            )
+            instance = (await response.json())[0]
+            assert instance["last_heartbeat_at"].endswith("Z")
+            assert instance["offline_expires_at"] is None
     finally:
         if client.connected:
             await client.disconnect()
@@ -89,7 +106,7 @@ async def test_draining_instance_remains_visible_but_rejects_new_requests(tmp_pa
     client.on("heartbeat_recorded", lambda _: heartbeat.set())
     try:
         await client.connect(f"http://127.0.0.1:{port}", auth={"token": TOKEN})
-        await client.emit("register", {"instance_id": INSTANCE_ID, "protocol_versions": [1]})
+        await client.emit("register", registration_payload())
         registered = await asyncio.wait_for(registration, 2)
         await client.emit("heartbeat", {**registered, "status": "draining"})
         await asyncio.wait_for(heartbeat.wait(), 2)
@@ -216,7 +233,7 @@ async def test_durable_request_dispatches_and_result_is_acknowledged(tmp_path: P
         await client.connect(f"http://127.0.0.1:{port}", auth={"token": TOKEN})
         await client.emit(
             "register",
-            {"instance_id": INSTANCE_ID, "protocol_versions": [1], "agent_version": "0.1.0"},
+            registration_payload(),
         )
         await asyncio.wait_for(registered.wait(), 2)
         async with ClientSession() as session:
@@ -274,7 +291,7 @@ async def test_requests_dispatch_one_at_a_time_in_fifo_order(tmp_path: Path) -> 
     client.on("request_dispatch", lambda data: dispatched.put_nowait(data))
     try:
         await client.connect(f"http://127.0.0.1:{port}", auth={"token": TOKEN})
-        await client.emit("register", {"instance_id": INSTANCE_ID, "protocol_versions": [1]})
+        await client.emit("register", registration_payload())
         await asyncio.wait_for(registered.wait(), 2)
         async with ClientSession() as session:
             request_ids = [REQUEST_ID, "018f47ec-7f3b-7a34-8f31-2ad70b6f6e2b"]
@@ -331,7 +348,7 @@ async def test_thirty_third_request_is_rejected_without_persistence(tmp_path: Pa
     client.on("registered", lambda _: registered.set())
     try:
         await client.connect(f"http://127.0.0.1:{port}", auth={"token": TOKEN})
-        await client.emit("register", {"instance_id": INSTANCE_ID, "protocol_versions": [1]})
+        await client.emit("register", registration_payload())
         await asyncio.wait_for(registered.wait(), 2)
         async with ClientSession() as session:
             headers = {"Authorization": f"Bearer {TOKEN}"}
@@ -395,13 +412,15 @@ async def test_disconnect_marks_in_flight_unknown_and_reconnect_resumes_queue(
     headers = {"Authorization": f"Bearer {TOKEN}"}
     request_ids = [REQUEST_ID, "018f47ec-7f3b-7a34-8f31-2ad70b6f6e2c"]
     second_client = socketio.AsyncClient(reconnection=False)
-    second_registered = asyncio.Event()
+    second_registered: asyncio.Future[dict[str, object]] = (
+        asyncio.get_running_loop().create_future()
+    )
     second_dispatched: asyncio.Queue[dict[str, object]] = asyncio.Queue()
-    second_client.on("registered", lambda _: second_registered.set())
+    second_client.on("registered", lambda data: second_registered.set_result(data))
     second_client.on("request_dispatch", lambda data: second_dispatched.put_nowait(data))
     try:
         await first_client.connect(f"http://127.0.0.1:{port}", auth={"token": TOKEN})
-        await first_client.emit("register", {"instance_id": INSTANCE_ID, "protocol_versions": [1]})
+        await first_client.emit("register", registration_payload())
         await asyncio.wait_for(first_registered.wait(), 2)
         async with ClientSession() as session:
             for request_id in request_ids:
@@ -429,10 +448,14 @@ async def test_disconnect_marks_in_flight_unknown_and_reconnect_resumes_queue(
             assert (await query.json())["status"] == "unknown"
 
             await second_client.connect(f"http://127.0.0.1:{port}", auth={"token": TOKEN})
+            await second_client.emit("register", registration_payload())
+            second_registration = await asyncio.wait_for(second_registered, 2)
+            with pytest.raises(TimeoutError):
+                await asyncio.wait_for(second_dispatched.get(), 0.1)
             await second_client.emit(
-                "register", {"instance_id": INSTANCE_ID, "protocol_versions": [1]}
+                "results_replayed",
+                second_registration,
             )
-            await asyncio.wait_for(second_registered.wait(), 2)
             assert (await asyncio.wait_for(second_dispatched.get(), 2))[
                 "request_id"
             ] == request_ids[1]
@@ -441,6 +464,113 @@ async def test_disconnect_marks_in_flight_unknown_and_reconnect_resumes_queue(
             await first_client.disconnect()
         if second_client.connected:
             await second_client.disconnect()
+        server.should_exit = True
+        thread.join(timeout=5)
+
+
+@pytest.mark.asyncio
+async def test_unadvertised_diagnostic_capability_is_rejected_before_fifo(tmp_path: Path) -> None:
+    port = unused_port()
+    server = uvicorn.Server(
+        uvicorn.Config(
+            create_transport_app(tmp_path, token=TOKEN),
+            host="127.0.0.1",
+            port=port,
+            log_level="error",
+        )
+    )
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    while not server.started:
+        await asyncio.sleep(0.01)
+    client = socketio.AsyncClient(reconnection=False)
+    registered = asyncio.Event()
+    client.on("registered", lambda _: registered.set())
+    try:
+        await client.connect(f"http://127.0.0.1:{port}", auth={"token": TOKEN})
+        payload = registration_payload()
+        payload["capabilities"] = []
+        await client.emit("register", payload)
+        await asyncio.wait_for(registered.wait(), 2)
+        async with ClientSession() as session:
+            response = await session.post(
+                f"http://127.0.0.1:{port}/v1/requests",
+                headers={"Authorization": f"Bearer {TOKEN}"},
+                json={
+                    "request_id": REQUEST_ID,
+                    "instance_id": INSTANCE_ID,
+                    "command": {"name": "diagnostic.ping", "input": {"message": "ping"}},
+                },
+            )
+            assert response.status == 409
+            assert (await response.json())["detail"] == "command_unsupported"
+    finally:
+        if client.connected:
+            await client.disconnect()
+        server.should_exit = True
+        thread.join(timeout=5)
+
+
+@pytest.mark.asyncio
+async def test_daemon_shutdown_drains_then_recovers_in_flight_and_queued_requests(
+    tmp_path: Path,
+) -> None:
+    port = unused_port()
+    shutdown_called = asyncio.Event()
+    server = uvicorn.Server(
+        uvicorn.Config(
+            create_transport_app(
+                tmp_path, token=TOKEN, drain_timeout=0.1, shutdown=shutdown_called.set
+            ),
+            host="127.0.0.1",
+            port=port,
+            log_level="error",
+        )
+    )
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    while not server.started:
+        await asyncio.sleep(0.01)
+    client = socketio.AsyncClient(reconnection=False)
+    registered = asyncio.Event()
+    dispatched = asyncio.Event()
+    draining = asyncio.Event()
+    client.on("registered", lambda _: registered.set())
+    client.on("request_dispatch", lambda _: dispatched.set())
+    client.on("daemon_draining", lambda _: draining.set())
+    request_ids = [REQUEST_ID, "018f47ec-7f3b-7a34-8f31-2ad70b6f6e2d"]
+    headers = {"Authorization": f"Bearer {TOKEN}"}
+    try:
+        await client.connect(f"http://127.0.0.1:{port}", auth={"token": TOKEN})
+        await client.emit("register", registration_payload())
+        await asyncio.wait_for(registered.wait(), 2)
+        async with ClientSession() as session:
+            for request_id in request_ids:
+                accepted = await session.post(
+                    f"http://127.0.0.1:{port}/v1/requests",
+                    headers=headers,
+                    json={
+                        "request_id": request_id,
+                        "instance_id": INSTANCE_ID,
+                        "command": {"name": "diagnostic.ping", "input": {"message": request_id}},
+                    },
+                )
+                assert accepted.status == 201
+            await asyncio.wait_for(dispatched.wait(), 2)
+            stopped = await session.post(f"http://127.0.0.1:{port}/v1/shutdown", headers=headers)
+            assert stopped.status == 202
+            await asyncio.wait_for(draining.wait(), 2)
+            await asyncio.wait_for(shutdown_called.wait(), 2)
+            states = []
+            for request_id in request_ids:
+                response = await session.get(
+                    f"http://127.0.0.1:{port}/v1/requests/{request_id}", headers=headers
+                )
+                states.append((await response.json())["status"])
+            assert states == ["unknown", "daemon_shutdown"]
+    finally:
+        if client.connected:
+            await client.disconnect()
         server.should_exit = True
         thread.join(timeout=5)
 
@@ -465,7 +595,7 @@ async def test_missing_application_heartbeat_makes_instance_offline(tmp_path: Pa
     client.on("registered", lambda _: registered.set())
     try:
         await client.connect(f"http://127.0.0.1:{port}", auth={"token": TOKEN})
-        await client.emit("register", {"instance_id": INSTANCE_ID, "protocol_versions": [1]})
+        await client.emit("register", registration_payload())
         await asyncio.wait_for(registered.wait(), 2)
         async with ClientSession() as session:
             headers = {"Authorization": f"Bearer {TOKEN}"}

@@ -41,6 +41,7 @@ artifact and is ignored by Git.
 
 ```powershell
 uv run td-agent-tool inspect-source agent
+uv run td-agent-tool build-instructions --output path\to\td-agent.tox --source agent
 uv run td-agent-tool inspect-artifact path\to\td-agent.tox --source agent
 ```
 

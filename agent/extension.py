@@ -1,7 +1,9 @@
 """Canonical Agent Component extension source loaded by TouchDesigner."""
 
 import json
+import os
 import uuid
+from pathlib import Path
 
 
 class AgentExt:
@@ -14,6 +16,7 @@ class AgentExt:
         self.pending_results = {}
         self.seen_commands = {}
         self.draining = False
+        self.last_heartbeat_at = 0.0
 
     def registration_payload(self):
         return {
@@ -58,3 +61,11 @@ class AgentExt:
 
     def begin_draining(self):
         self.draining = True
+
+    def refresh_auth(self, table):
+        token_path = Path(os.environ["LOCALAPPDATA"]) / "touchdesigner-cli" / "state" / "auth.token"
+        token = token_path.read_text(encoding="ascii").strip()
+        if len(token) != 64:
+            raise RuntimeError("auth.token is malformed")
+        table.clear()
+        table.appendRow(["token", token])

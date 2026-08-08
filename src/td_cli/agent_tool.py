@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import subprocess
 from pathlib import Path
 from typing import Annotated
 
@@ -67,20 +66,20 @@ def inspect_artifact(
     typer.echo(json.dumps({**evidence, "valid": True}, separators=(",", ":"), sort_keys=True))
 
 
-@app.command()
-def build(
-    touchdesigner: Annotated[Path, typer.Option(exists=True, dir_okay=False)],
+@app.command("build-instructions")
+def build_instructions(
     output: Annotated[Path, typer.Option()],
     source: Annotated[Path, typer.Option(exists=True, file_okay=False)] = Path("agent"),
 ) -> None:
-    """Delegate .tox creation to the locked TouchDesigner runtime."""
+    """Print the exact locked-runtime Textport build command."""
     manifest = json.loads((source / "manifest.json").read_text(encoding="utf-8"))
-    locked = manifest["locked_touchdesigner_version"]
-    if locked not in str(touchdesigner):
-        typer.echo(f"TouchDesigner path must identify locked version {locked}", err=True)
-        raise typer.Exit(1)
-    completed = subprocess.run(
-        [str(touchdesigner), str(source / "build_td.py"), str(source), str(output)], check=False
+    revision = source_revision(source, manifest["required_files"])
+    script = (source / "build_td.py").resolve()
+    command = (
+        "op('/project1').create(textDAT, 'td_agent_builder').par.file = "
+        f"r'{script}'; op('/project1/td_agent_builder').par.syncfile = True; "
+        f"op('/project1/td_agent_builder').run(r'{source.resolve()}', r'{output.resolve()}', "
+        f"'{revision}')"
     )
-    if completed.returncode:
-        raise typer.Exit(completed.returncode)
+    typer.echo(f"TouchDesigner {manifest['locked_touchdesigner_version']} Textport command:")
+    typer.echo(command)

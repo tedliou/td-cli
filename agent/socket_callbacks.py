@@ -1,34 +1,36 @@
-"""Canonical SocketIO DAT callbacks; ordinary JSON events, never acknowledgements."""
+"""Canonical SocketIO DAT callbacks using ordinary JSON events."""
 
 
-def onConnect(dat):
-    dat.send("register", parent().Agent.registration_payload())
+def onOpen(dat):
+    dat.emit("register", parent().Agent.registration_payload())
 
 
-def onReceiveEvent(dat, event, data):
+def onReceiveEvent(dat, rowIndex, message, event):
+    del rowIndex
     agent = parent().Agent
     if event == "registered":
-        agent.connection_id = data["connection_id"]
+        agent.connection_id = message["connection_id"]
         for result in agent.pending_results.values():
             result["connection_id"] = agent.connection_id
-            dat.send("request_result", result)
+            dat.emit("request_result", result)
+        dat.emit("results_replayed", agent.heartbeat_payload())
     elif event == "request_dispatch":
         envelope = {
-            "request_id": data["request_id"],
+            "request_id": message["request_id"],
             "instance_id": agent.instance_id,
             "connection_id": agent.connection_id,
         }
-        dat.send("request_accepted", envelope)
-        result_event, result = agent.accept(data)
-        dat.send(result_event, result)
+        result_event, result = agent.accept(message)
+        if result_event == "request_result":
+            dat.emit("request_accepted", envelope)
+        else:
+            result = {**envelope, **result}
+        dat.emit(result_event, result)
     elif event == "result_recorded":
-        agent.acknowledge_result(data["request_id"])
+        agent.acknowledge_result(message["request_id"])
 
 
-def onDisconnect(dat):
+def onClose(dat, failure):
+    del failure
     parent().Agent.connection_id = None
-
-
-def onHeartbeat(dat):
-    if parent().Agent.connection_id:
-        dat.send("heartbeat", parent().Agent.heartbeat_payload())
+    parent().Agent.refresh_auth(op("auth_table"))

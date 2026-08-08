@@ -67,3 +67,17 @@ def test_request_id_deduplicates_same_command_and_rejects_different_command(tmp_
         conflict = client.post("/v1/requests", headers=headers(), json=changed)
         assert conflict.status_code == 409
         assert conflict.json()["detail"] == "request_id_conflict"
+
+
+def test_submission_requires_uuid7_request_id(tmp_path: Path) -> None:
+    with TestClient(create_app(tmp_path, token=TOKEN)) as client:
+        response = client.post(
+            "/v1/requests",
+            headers=headers(),
+            json={
+                "request_id": "8cf81688-b9a4-4c39-9f92-31c77319c761",
+                "instance_id": INSTANCE_ID,
+                "command": {"name": "diagnostic.ping", "input": {"message": "ping"}},
+            },
+        )
+        assert response.status_code == 422
