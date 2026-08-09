@@ -10,11 +10,26 @@ if not hasattr(builtins, "_td_cli_runtime_session_id"):
     builtins._td_cli_runtime_session_id = str(uuid.uuid4())
 
 
+class AgentCommandError(Exception):
+    def __init__(self, code):
+        super().__init__(code)
+        self.code = code
+
+
 class AgentExt:
     MAX_UNCONFIRMED_RESULTS = 256
 
-    def __init__(self, owner_comp):
+    CAPABILITIES = (
+        "ops.children",
+        "ops.get",
+        "parameters.get",
+        "parameters.pulse",
+        "parameters.set",
+    )
+
+    def __init__(self, owner_comp, operator_lookup=None):
         self.owner_comp = owner_comp
+        self.operator_lookup = operator_lookup or (lambda path: op(path))
         runtime_session_id = builtins._td_cli_runtime_session_id
         state = getattr(builtins, "_td_cli_agent_state", None)
         if state is None or state["runtime_session_id"] != runtime_session_id:
@@ -37,7 +52,7 @@ class AgentExt:
             "instance_id": self.instance_id,
             "agent_version": "0.1.0.dev0",
             "protocol_versions": [1],
-            "capabilities": ["diagnostic.ping"],
+            "capabilities": list(self.CAPABILITIES),
             "status": "draining" if self.draining else "online",
         }
 
@@ -61,14 +76,110 @@ class AgentExt:
         if len(self.pending_results) >= self.MAX_UNCONFIRMED_RESULTS:
             return "request_rejected", {"request_id": request_id, "code": "result_buffer_full"}
         self.seen_commands[request_id] = canonical
+        try:
+            command = request["command"]
+            command_result = self.execute_command(command)
+        except AgentCommandError as error:
+            return "request_rejected", {"request_id": request_id, "code": error.code}
+        except Exception:  # noqa: BLE001 - convert TD runtime failures to a wire error
+            return "request_rejected", {"request_id": request_id, "code": "internal_error"}
         result = {
             "request_id": request_id,
             "instance_id": self.instance_id,
             "connection_id": self.connection_id,
-            "result": {"message": request["command"]["input"]["message"]},
+            "result": command_result,
         }
         self.pending_results[request_id] = result
         return "request_result", result
+
+    def execute_command(self, command):
+        name = command["name"]
+        payload = command["input"]
+        operator = self.operator_lookup(payload["operator_path"])
+        if operator is None:
+            raise AgentCommandError("operator_not_found")
+        if name == "ops.get":
+            return self._operator_result(operator)
+        if name == "ops.children":
+            children = [self._operator_result(child) for child in operator.children]
+            op_type = payload.get("op_type")
+            if op_type is not None:
+                children = [child for child in children if child["op_type"] == op_type]
+            return sorted(children, key=lambda child: child["path"])
+        parameter = self._parameter(operator, payload["parameter"])
+        if name == "parameters.get":
+            return self._parameter_result(operator, payload["parameter"], parameter)
+        if name == "parameters.set":
+            if getattr(parameter, "readOnly", False):
+                raise AgentCommandError("parameter_read_only")
+            try:
+                if payload["mode"] == "expression":
+                    parameter.expr = payload["value"]
+                else:
+                    parameter.val = payload["value"]
+            except Exception:  # noqa: BLE001 - TouchDesigner raises tdError subclasses
+                code = (
+                    "expression_invalid"
+                    if payload["mode"] == "expression"
+                    else "parameter_write_rejected"
+                )
+                raise AgentCommandError(code)
+            result = self._parameter_result(operator, payload["parameter"], parameter)
+            if result["mode"] != payload["mode"] or result["value"] != payload["value"]:
+                raise AgentCommandError("parameter_write_rejected")
+            return result
+        if name == "parameters.pulse":
+            if not getattr(parameter, "isPulse", False):
+                raise AgentCommandError("parameter_not_pulseable")
+            parameter.pulse()
+            return {
+                "operator_path": str(operator.path),
+                "parameter": payload["parameter"],
+                "pulsed": True,
+            }
+        raise AgentCommandError("command_unsupported")
+
+    @staticmethod
+    def _operator_result(operator):
+        return {
+            "path": str(operator.path),
+            "name": str(operator.name),
+            "op_type": str(operator.OPType),
+            "family": str(operator.family),
+        }
+
+    @staticmethod
+    def _parameter(operator, name):
+        try:
+            parameter = getattr(operator.par, name)
+        except Exception:  # noqa: BLE001 - missing TD parameters raise tdAttributeError
+            parameter = None
+        if parameter is None:
+            raise AgentCommandError("parameter_not_found")
+        return parameter
+
+    @staticmethod
+    def _parameter_result(operator, name, parameter):
+        mode_text = str(parameter.mode).lower()
+        mode = "expression" if "expression" in mode_text else "constant"
+        value = parameter.expr if mode == "expression" else parameter.eval()
+        if type(value) is bool:
+            value_type = "boolean"
+        elif type(value) is int:
+            value_type = "integer"
+        elif type(value) is float:
+            value_type = "number"
+        elif type(value) is str:
+            value_type = "string"
+        else:
+            raise AgentCommandError("parameter_type_unsupported")
+        return {
+            "operator_path": str(operator.path),
+            "parameter": name,
+            "mode": mode,
+            "value": value,
+            "value_type": value_type,
+        }
 
     def acknowledge_result(self, request_id):
         self.pending_results.pop(request_id, None)
