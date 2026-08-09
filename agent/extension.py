@@ -18,11 +18,10 @@ class AgentCommandError(Exception):
         self.code = code
 
 
-class AgentExt:
-    MAX_UNCONFIRMED_RESULTS = 256
-    MAX_RESULT_BYTES = 256 * 1024
+class OperatorControl:
+    """Execute typed Commands against one TouchDesigner Operator graph."""
 
-    CAPABILITIES = (
+    COMMANDS = (
         "ops.children",
         "ops.connect",
         "ops.create",
@@ -30,6 +29,212 @@ class AgentExt:
         "parameters.get",
         "parameters.pulse",
         "parameters.set",
+    )
+
+    def __init__(self, operator_lookup):
+        self.operator_lookup = operator_lookup
+
+    def execute(self, command):
+        name = command["name"]
+        payload = command["input"]
+        if name == "ops.create":
+            return self._create_operator(payload)
+        if name == "ops.connect":
+            return self._connect_operators(payload)
+        operator = self.operator_lookup(payload["operator_path"])
+        if operator is None:
+            raise AgentCommandError("operator_not_found")
+        if name == "ops.get":
+            return self._operator_result(operator)
+        if name == "ops.children":
+            children = [self._operator_result(child) for child in operator.children]
+            op_type = payload.get("op_type")
+            if op_type is not None:
+                children = [child for child in children if child["op_type"] == op_type]
+            return sorted(children, key=lambda child: child["path"])
+        parameter = self._parameter(operator, payload["parameter"])
+        self._preflight_parameter(name, operator, payload, parameter)
+        if name == "parameters.get":
+            return self._parameter_result(operator, payload["parameter"], parameter)
+        if name == "parameters.set":
+            return self._set_parameter(operator, payload, parameter)
+        if name == "parameters.pulse":
+            parameter.pulse()
+            return {
+                "operator_path": str(operator.path),
+                "parameter": payload["parameter"],
+                "pulsed": True,
+            }
+        raise AgentCommandError("command_unsupported")
+
+    def preflight(self, command):
+        name = command["name"]
+        payload = command["input"]
+        operator = self.operator_lookup(payload["operator_path"])
+        if operator is None:
+            raise AgentCommandError("operator_not_found")
+        if name.startswith("parameters."):
+            parameter = self._parameter(operator, payload["parameter"])
+            self._preflight_parameter(name, operator, payload, parameter)
+
+    def _create_operator(self, payload):
+        parent = self.operator_lookup(payload["parent_path"])
+        if parent is None:
+            raise AgentCommandError("operator_not_found")
+        if str(parent.family) != "COMP":
+            raise AgentCommandError("operator_parent_invalid")
+        expected_path = str(parent.path).rstrip("/") + "/" + payload["name"]
+        if self.operator_lookup(expected_path) is not None:
+            raise AgentCommandError("operator_already_exists")
+        created = None
+        try:
+            created = parent.create(payload["op_type"], payload["name"])
+            if str(created.path) != expected_path or str(created.name) != payload["name"]:
+                raise AgentCommandError("operator_create_failed")
+            created.nodeX = payload["node_x"]
+            created.nodeY = payload["node_y"]
+        except AgentCommandError:
+            self._destroy_operator(created)
+            raise
+        except Exception:  # noqa: BLE001 - TouchDesigner raises tdError subclasses
+            self._destroy_operator(created)
+            raise AgentCommandError("operator_create_failed")
+        return self._operator_result(created)
+
+    @staticmethod
+    def _destroy_operator(operator):
+        if operator is None:
+            return
+        try:
+            operator.destroy()
+        except Exception:  # noqa: BLE001, S110 - rollback is best effort
+            pass
+
+    def _connect_operators(self, payload):
+        source = self.operator_lookup(payload["source_path"])
+        target = self.operator_lookup(payload["target_path"])
+        if source is None or target is None:
+            raise AgentCommandError("operator_not_found")
+        if str(source.family) != str(target.family):
+            raise AgentCommandError("operator_family_mismatch")
+        output_index = payload["output_index"]
+        input_index = payload["input_index"]
+        if output_index >= len(source.outputConnectors) or input_index >= len(
+            target.inputConnectors
+        ):
+            raise AgentCommandError("connector_not_found")
+        source_connector = source.outputConnectors[output_index]
+        target_connector = target.inputConnectors[input_index]
+        if target_connector.connections:
+            raise AgentCommandError("connector_occupied")
+        try:
+            source_connector.connect(target_connector)
+        except Exception:  # noqa: BLE001 - TouchDesigner raises tdError subclasses
+            self._disconnect_connector(target_connector)
+            raise AgentCommandError("connector_connect_failed")
+        if not any(
+            str(connection.owner.path) == str(source.path)
+            and int(connection.index) == output_index
+            and bool(connection.isOutput)
+            for connection in target_connector.connections
+        ):
+            self._disconnect_connector(target_connector)
+            raise AgentCommandError("connector_connect_failed")
+        return {
+            "source_path": str(source.path),
+            "target_path": str(target.path),
+            "output_index": output_index,
+            "input_index": input_index,
+            "connected": True,
+        }
+
+    @staticmethod
+    def _disconnect_connector(connector):
+        try:
+            connector.disconnect()
+        except Exception:  # noqa: BLE001, S110 - rollback is best effort
+            pass
+
+    def _preflight_parameter(self, name, operator, payload, parameter):
+        if name in {"parameters.get", "parameters.set"}:
+            self._parameter_result(operator, payload["parameter"], parameter)
+        if name == "parameters.set":
+            if getattr(parameter, "readOnly", False):
+                raise AgentCommandError("parameter_read_only")
+            if payload["mode"] == "expression":
+                try:
+                    compile(payload["value"], "<parameter-expression>", "eval")
+                except SyntaxError:
+                    raise AgentCommandError("expression_invalid")
+        if name == "parameters.pulse" and not getattr(parameter, "isPulse", False):
+            raise AgentCommandError("parameter_not_pulseable")
+
+    def _set_parameter(self, operator, payload, parameter):
+        try:
+            if payload["mode"] == "expression":
+                parameter.expr = payload["value"]
+            else:
+                parameter.val = payload["value"]
+        except Exception:  # noqa: BLE001 - TouchDesigner raises tdError subclasses
+            code = (
+                "expression_invalid"
+                if payload["mode"] == "expression"
+                else "parameter_write_rejected"
+            )
+            raise AgentCommandError(code)
+        result = self._parameter_result(operator, payload["parameter"], parameter)
+        if result["mode"] != payload["mode"] or result["value"] != payload["value"]:
+            raise AgentCommandError("parameter_write_rejected")
+        return result
+
+    @staticmethod
+    def _operator_result(operator):
+        return {
+            "path": str(operator.path),
+            "name": str(operator.name),
+            "op_type": str(operator.OPType),
+            "family": str(operator.family),
+        }
+
+    @staticmethod
+    def _parameter(operator, name):
+        try:
+            parameter = getattr(operator.par, name)
+        except Exception:  # noqa: BLE001 - missing TD parameters raise tdAttributeError
+            parameter = None
+        if parameter is None:
+            raise AgentCommandError("parameter_not_found")
+        return parameter
+
+    @staticmethod
+    def _parameter_result(operator, name, parameter):
+        mode_text = str(parameter.mode).lower()
+        mode = "expression" if "expression" in mode_text else "constant"
+        value = parameter.expr if mode == "expression" else parameter.eval()
+        if type(value) is bool:
+            value_type = "boolean"
+        elif type(value) is int:
+            value_type = "integer"
+        elif type(value) is float:
+            value_type = "number"
+        elif type(value) is str:
+            value_type = "string"
+        else:
+            raise AgentCommandError("parameter_type_unsupported")
+        return {
+            "operator_path": str(operator.path),
+            "parameter": name,
+            "mode": mode,
+            "value": value,
+            "value_type": value_type,
+        }
+
+
+class AgentExt:
+    MAX_UNCONFIRMED_RESULTS = 256
+    MAX_RESULT_BYTES = 256 * 1024
+
+    CAPABILITIES = OperatorControl.COMMANDS + (
         "batch.execute",
         "binary.export",
         "events.read",
@@ -40,6 +245,7 @@ class AgentExt:
     def __init__(self, owner_comp, operator_lookup=None, project_info=None, app_info=None):
         self.owner_comp = owner_comp
         self.operator_lookup = operator_lookup or (lambda path: op(path))
+        self.operator_control = OperatorControl(self.operator_lookup)
         self.project_info = project_info or getattr(builtins, "project", None)
         self.app_info = app_info or getattr(builtins, "app", None)
         if self.app_info is None or not hasattr(self.app_info, "build"):
@@ -130,10 +336,8 @@ class AgentExt:
             for item in commands:
                 self._preflight(item)
             return {"results": [self.execute_command(item) for item in commands]}
-        if name == "ops.create":
-            return self._create_operator(payload)
-        if name == "ops.connect":
-            return self._connect_operators(payload)
+        if name in OperatorControl.COMMANDS:
+            return self.operator_control.execute(command)
         operator = self.operator_lookup(payload["operator_path"])
         if operator is None:
             raise AgentCommandError("operator_not_found")
@@ -141,145 +345,10 @@ class AgentExt:
             return self._snapshot(operator, payload)
         if name == "binary.export":
             return self._binary_export(operator, payload)
-        if name == "ops.get":
-            return self._operator_result(operator)
-        if name == "ops.children":
-            children = [self._operator_result(child) for child in operator.children]
-            op_type = payload.get("op_type")
-            if op_type is not None:
-                children = [child for child in children if child["op_type"] == op_type]
-            return sorted(children, key=lambda child: child["path"])
-        parameter = self._parameter(operator, payload["parameter"])
-        self._preflight_parameter(name, operator, payload, parameter)
-        if name == "parameters.get":
-            return self._parameter_result(operator, payload["parameter"], parameter)
-        if name == "parameters.set":
-            try:
-                if payload["mode"] == "expression":
-                    parameter.expr = payload["value"]
-                else:
-                    parameter.val = payload["value"]
-            except Exception:  # noqa: BLE001 - TouchDesigner raises tdError subclasses
-                code = (
-                    "expression_invalid"
-                    if payload["mode"] == "expression"
-                    else "parameter_write_rejected"
-                )
-                raise AgentCommandError(code)
-            result = self._parameter_result(operator, payload["parameter"], parameter)
-            if result["mode"] != payload["mode"] or result["value"] != payload["value"]:
-                raise AgentCommandError("parameter_write_rejected")
-            return result
-        if name == "parameters.pulse":
-            parameter.pulse()
-            return {
-                "operator_path": str(operator.path),
-                "parameter": payload["parameter"],
-                "pulsed": True,
-            }
         raise AgentCommandError("command_unsupported")
 
-    def _create_operator(self, payload):
-        parent = self.operator_lookup(payload["parent_path"])
-        if parent is None:
-            raise AgentCommandError("operator_not_found")
-        if str(parent.family) != "COMP":
-            raise AgentCommandError("operator_parent_invalid")
-        expected_path = str(parent.path).rstrip("/") + "/" + payload["name"]
-        if self.operator_lookup(expected_path) is not None:
-            raise AgentCommandError("operator_already_exists")
-        created = None
-        try:
-            created = parent.create(payload["op_type"], payload["name"])
-            if str(created.path) != expected_path or str(created.name) != payload["name"]:
-                raise AgentCommandError("operator_create_failed")
-            created.nodeX = payload["node_x"]
-            created.nodeY = payload["node_y"]
-        except AgentCommandError:
-            self._destroy_operator(created)
-            raise
-        except Exception:  # noqa: BLE001 - TouchDesigner raises tdError subclasses
-            self._destroy_operator(created)
-            raise AgentCommandError("operator_create_failed")
-        return self._operator_result(created)
-
-    @staticmethod
-    def _destroy_operator(operator):
-        if operator is None:
-            return
-        try:
-            operator.destroy()
-        except Exception:  # noqa: BLE001, S110 - rollback is best effort
-            pass
-
-    def _connect_operators(self, payload):
-        source = self.operator_lookup(payload["source_path"])
-        target = self.operator_lookup(payload["target_path"])
-        if source is None or target is None:
-            raise AgentCommandError("operator_not_found")
-        if str(source.family) != str(target.family):
-            raise AgentCommandError("operator_family_mismatch")
-        output_index = payload["output_index"]
-        input_index = payload["input_index"]
-        if output_index >= len(source.outputConnectors) or input_index >= len(
-            target.inputConnectors
-        ):
-            raise AgentCommandError("connector_not_found")
-        source_connector = source.outputConnectors[output_index]
-        target_connector = target.inputConnectors[input_index]
-        if target_connector.connections:
-            raise AgentCommandError("connector_occupied")
-        try:
-            source_connector.connect(target_connector)
-        except Exception:  # noqa: BLE001 - TouchDesigner raises tdError subclasses
-            self._disconnect_connector(target_connector)
-            raise AgentCommandError("connector_connect_failed")
-        if not any(
-            str(connection.owner.path) == str(source.path)
-            and int(connection.index) == output_index
-            and bool(connection.isOutput)
-            for connection in target_connector.connections
-        ):
-            self._disconnect_connector(target_connector)
-            raise AgentCommandError("connector_connect_failed")
-        return {
-            "source_path": str(source.path),
-            "target_path": str(target.path),
-            "output_index": output_index,
-            "input_index": input_index,
-            "connected": True,
-        }
-
-    @staticmethod
-    def _disconnect_connector(connector):
-        try:
-            connector.disconnect()
-        except Exception:  # noqa: BLE001, S110 - rollback is best effort
-            pass
-
     def _preflight(self, command):
-        name = command["name"]
-        payload = command["input"]
-        operator = self.operator_lookup(payload["operator_path"])
-        if operator is None:
-            raise AgentCommandError("operator_not_found")
-        if name.startswith("parameters."):
-            parameter = self._parameter(operator, payload["parameter"])
-            self._preflight_parameter(name, operator, payload, parameter)
-
-    def _preflight_parameter(self, name, operator, payload, parameter):
-        if name in {"parameters.get", "parameters.set"}:
-            self._parameter_result(operator, payload["parameter"], parameter)
-        if name == "parameters.set":
-            if getattr(parameter, "readOnly", False):
-                raise AgentCommandError("parameter_read_only")
-            if payload["mode"] == "expression":
-                try:
-                    compile(payload["value"], "<parameter-expression>", "eval")
-                except SyntaxError:
-                    raise AgentCommandError("expression_invalid")
-        if name == "parameters.pulse" and not getattr(parameter, "isPulse", False):
-            raise AgentCommandError("parameter_not_pulseable")
+        self.operator_control.preflight(command)
 
     def _snapshot(self, root, payload):
         maximum = payload["max_operators"]
@@ -365,39 +434,6 @@ class AgentExt:
             "name": str(operator.name),
             "op_type": str(operator.OPType),
             "family": str(operator.family),
-        }
-
-    @staticmethod
-    def _parameter(operator, name):
-        try:
-            parameter = getattr(operator.par, name)
-        except Exception:  # noqa: BLE001 - missing TD parameters raise tdAttributeError
-            parameter = None
-        if parameter is None:
-            raise AgentCommandError("parameter_not_found")
-        return parameter
-
-    @staticmethod
-    def _parameter_result(operator, name, parameter):
-        mode_text = str(parameter.mode).lower()
-        mode = "expression" if "expression" in mode_text else "constant"
-        value = parameter.expr if mode == "expression" else parameter.eval()
-        if type(value) is bool:
-            value_type = "boolean"
-        elif type(value) is int:
-            value_type = "integer"
-        elif type(value) is float:
-            value_type = "number"
-        elif type(value) is str:
-            value_type = "string"
-        else:
-            raise AgentCommandError("parameter_type_unsupported")
-        return {
-            "operator_path": str(operator.path),
-            "parameter": name,
-            "mode": mode,
-            "value": value,
-            "value_type": value_type,
         }
 
     def acknowledge_result(self, request_id):
