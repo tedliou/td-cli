@@ -4,12 +4,21 @@ import hashlib
 import json
 from pathlib import Path
 
+LOCKED_TOUCHDESIGNER_VERSION = "2025.32050"
+
+
+def locked_touchdesigner_version(application):
+    touchdesigner_version = str(application.build)
+    if touchdesigner_version != LOCKED_TOUCHDESIGNER_VERSION:
+        raise RuntimeError(
+            f"locked TouchDesigner {LOCKED_TOUCHDESIGNER_VERSION} required; "
+            f"got {touchdesigner_version}"
+        )
+    return touchdesigner_version
+
 
 def build(source_dir, output_path, source_revision):
-    if str(app.version) != "2025" or str(app.build) != "32050":  # type: ignore[name-defined]
-        raise RuntimeError(
-            f"locked TouchDesigner 2025.32050 required; got {app.version}.{app.build}"  # type: ignore[name-defined]
-        )
+    touchdesigner_version = locked_touchdesigner_version(app)  # type: ignore[name-defined]
     source = Path(source_dir)
     output = Path(output_path)
     project = op("/project1")  # type: ignore[name-defined]
@@ -56,7 +65,7 @@ def build(source_dir, output_path, source_revision):
     operators = sorted(child.name for child in agent.children)
     evidence = {
         "source_revision": source_revision,
-        "touchdesigner_version": f"{app.version}.{app.build}",  # type: ignore[name-defined]
+        "touchdesigner_version": touchdesigner_version,
         "operators": operators,
         "artifact_sha256": hashlib.sha256(output.read_bytes()).hexdigest(),
     }
