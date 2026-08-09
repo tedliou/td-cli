@@ -46,6 +46,21 @@ def secure_layout(root: Path) -> None:
         if completed.returncode:
             raise RuntimeError(f"cannot secure state ACL: {completed.stderr.strip()}")
         (root / ".acl-applied").write_text("restricted\n", encoding="ascii")
+    completed = subprocess.run(
+        [
+            "icacls",
+            str(root),
+            "/remove:g",
+            "*S-1-5-32-544",
+            "/T",
+            "/C",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode:
+        raise RuntimeError(f"cannot remove broad state ACL: {completed.stderr.strip()}")
     _validate_acl(root)
     for sensitive in (root / "state", root / "state" / "auth.token", root / "state" / "daemon.db"):
         if sensitive.exists():

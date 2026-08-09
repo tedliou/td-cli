@@ -1,9 +1,11 @@
 import json
 import logging
 from pathlib import Path
+from subprocess import CompletedProcess
 
 import pytest
 
+from td_cli.daemon import runtime_files
 from td_cli.daemon.runtime_files import configure_logging, load_or_create_token, load_token
 
 
@@ -54,3 +56,45 @@ def test_log_handler_records_runtime_failure_for_health_reporting(tmp_path: Path
     finally:
         logging.raiseExceptions = previous
     assert handler.healthy is False
+
+
+@pytest.mark.parametrize("existing_marker", [False, True])
+def test_secure_layout_removes_explicit_administrators_acl(
+    monkeypatch, tmp_path: Path, existing_marker: bool
+) -> None:
+    calls: list[list[str]] = []
+
+    def run(command: list[str], **_: object) -> CompletedProcess[str]:
+        calls.append(command)
+        if command[0] == "powershell":
+            return CompletedProcess(
+                command,
+                0,
+                '{"current":"S-1-5-21-1","rules":['
+                '{"sid":"S-1-5-21-1","type":"Allow","rights":"FullControl","inherited":false},'
+                '{"sid":"S-1-5-18","type":"Allow","rights":"FullControl","inherited":false}]}',
+                "",
+            )
+        return CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(runtime_files.os, "name", "nt")
+    monkeypatch.setenv("USERNAME", "operator")
+    monkeypatch.setattr(runtime_files.subprocess, "run", run)
+
+    root = tmp_path / "touchdesigner-cli"
+    if existing_marker:
+        root.mkdir()
+        (root / ".acl-applied").write_text("restricted\n", encoding="ascii")
+
+    runtime_files.secure_layout(root)
+
+    remove_call = calls[0 if existing_marker else 1]
+    assert remove_call == [
+        "icacls",
+        str(root),
+        "/remove:g",
+        "*S-1-5-32-544",
+        "/T",
+        "/C",
+    ]
+    assert (root / ".acl-applied").read_text(encoding="ascii") == "restricted\n"
