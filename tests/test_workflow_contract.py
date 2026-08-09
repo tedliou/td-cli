@@ -15,6 +15,18 @@ def test_release_workflow_gates_publication_on_main_and_remote_digests() -> None
     assert "RELEASE_APP_" not in workflow
 
 
+def test_release_workflow_bootstraps_tag_identity_and_handles_missing_draft() -> None:
+    workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
+    assert "function Get-ReleaseByTag" in workflow
+    assert "HTTP 404" in workflow
+    assert "git config user.name 'github-actions[bot]'" in workflow
+    assert (
+        "git config user.email '41898282+github-actions[bot]@users.noreply.github.com'" in workflow
+    )
+    assert "gh auth setup-git" in workflow
+    assert workflow.index("git config user.name") < workflow.index("git tag -a")
+
+
 def test_workflows_pin_actions_to_commit_shas() -> None:
     for path in Path(".github/workflows").glob("*.yml"):
         text = path.read_text(encoding="utf-8")
