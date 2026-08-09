@@ -94,23 +94,46 @@ validation are performed locally in the locked TouchDesigner environment.
 ## Basic network control
 
 List the Instances, select an Online Instance, and use an explicit Selector
-whenever more than one is available. Protocol v1 can create a bounded set of
-built-in TOPs, configure
-their Parameters, connect unoccupied same-family connectors, and inspect the
-result:
+whenever more than one is available. Protocol v1 can create cataloged built-in
+Operators, inspect and configure their Parameters, and edit same-family wiring:
 
 ```powershell
 td --json instances list
 td --json --instance <selector> ops create /project1 constantTOP source --node-x -200
 td --json --instance <selector> ops create /project1 nullTOP output
 td --json --instance <selector> parameters set /project1/source colorr --number 0.25
+td --json --instance <selector> parameters list /project1/source
 td --json --instance <selector> ops connect /project1/source /project1/output
+td --json --instance <selector> ops rename /project1/output renamed_output
+td --json --instance <selector> ops connect /project1/source /project1/renamed_output --replace
+td --json --instance <selector> ops disconnect /project1/source /project1/renamed_output
 td --json --instance <selector> ops children /project1 --op-type constantTOP
 td --json --instance <selector> parameters get /project1/source colorr
 ```
 
-`ops.create` accepts only `constantTOP`, `noiseTOP`, `levelTOP`, and `nullTOP`.
-It rejects name collisions instead of accepting TouchDesigner's automatic
-renaming. `ops.connect` rejects family mismatch, missing connector indices, and
-occupied inputs instead of silently rewiring an existing network. Neither
-Command is allowed inside `batch.execute`.
+The locked TouchDesigner 2025.32050 catalog covers 680 built-in types across all
+seven Operator families: 478 are supported by default, 165 side-effect or
+environment-dependent types require `ops create --allow-conditional`, 37 are
+unsupported, and none remain unknown. The machine-readable details and failure
+evidence are in
+[`agent/touchdesigner-2025.32050-operators.json`](agent/touchdesigner-2025.32050-operators.json).
+
+Unsupported types are: `audioenvelopeCHOP`, `audiomixCHOP`,
+`audiopitchshiftCHOP`, `bandeqCHOP`, `clipblender67CHOP`,
+`clipblenderosCHOP`, `engineoutCHOP`, `engineoutDAT`, `engineoutPOP`,
+`engineoutTOP`, `etherdreamCHOP`, `fontSOP`, `graphCOMP`, `heliosdacCHOP`,
+`indicesDAT`, `legacyoscillatorCHOP`, `networkCOMP`, `parametriceqCHOP`,
+`passfilterCHOP`, `phonemeCHOP`, `pitchCHOP`, `pointMAT`, `realsenseCHOP`,
+`scanCHOP`, `shaderSOP`, `sharedmeminMAT`, `sharedmemoutMAT`, `spectrumCHOP`,
+`svgTOP`, `touchinMAT`, `touchoutMAT`, `udtinDAT`, `udtoutDAT`, `webDAT`,
+`xblendCHOP`, `xclipblenderCHOP`, and `xdeformSOP`. They remain rejected until
+their non-default creation requirements can be proven and implemented with a
+typed adapter. Each future locked TouchDesigner build will be re-probed so new
+or changed types enter the same supported/conditional/unsupported/unknown
+review path.
+
+Create and rename reject collisions instead of accepting TouchDesigner's
+automatic naming. Connect rejects occupied inputs unless `--replace` is
+explicit; disconnect always names the exact source/output and target/input.
+Network mutations are not allowed inside `batch.execute`, while read-only
+`parameters.list` is batchable.
