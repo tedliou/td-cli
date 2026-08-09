@@ -87,6 +87,7 @@ def create_transport_app(
             return
         snapshot = queues[instance_id].popleft()
         in_flight[instance_id] = snapshot
+        assert management is not None
         management.state.request_store.update(
             str(snapshot["request_id"]), status="dispatched", dispatched_at=_now()
         )

@@ -17,6 +17,7 @@ import typer
 import uvicorn
 
 from td_cli import __version__
+from td_cli.cli_support import print_version
 from td_cli.daemon.runtime_files import (
     configure_logging,
     data_root,
@@ -37,6 +38,16 @@ class WindowsControlEvent(IntEnum):
 
 
 WINDOWS_SHUTDOWN_EVENTS = frozenset(event.value for event in WindowsControlEvent)
+
+
+@app.callback()
+def main(
+    version: Annotated[
+        bool | None,
+        typer.Option("--version", callback=print_version, is_eager=True),
+    ] = None,
+) -> None:
+    """Manage the per-user td-cli Daemon."""
 
 
 class DaemonMutex:
