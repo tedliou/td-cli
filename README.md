@@ -29,8 +29,8 @@ td-daemon start
 
 Drag
 `%LOCALAPPDATA%\Programs\touchdesigner-cli\current\td-agent.tox` into the
-TouchDesigner project. Once the Agent Component is connected, list the Online
-Instances and create a supported Operator:
+TouchDesigner project. Once the Agent Component is connected, list the
+Instances, select an Online Instance, and create a supported Operator:
 
 ```powershell
 td --json instances list
@@ -93,8 +93,9 @@ validation are performed locally in the locked TouchDesigner environment.
 
 ## Basic network control
 
-List Online Instances and use an explicit Selector whenever more than one is
-available. Protocol v1 can create a bounded set of built-in TOPs, configure
+List the Instances, select an Online Instance, and use an explicit Selector
+whenever more than one is available. Protocol v1 can create a bounded set of
+built-in TOPs, configure
 their Parameters, connect unoccupied same-family connectors, and inspect the
 result:
 
