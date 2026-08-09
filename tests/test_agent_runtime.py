@@ -1,15 +1,28 @@
 import builtins
 import importlib.util
+import json
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+
+from td_cli.command_catalog import COMMAND_CATALOG
 
 spec = importlib.util.spec_from_file_location("td_agent_extension", Path("agent/extension.py"))
 assert spec is not None and spec.loader is not None
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 AgentExt = module.AgentExt
+OperatorControl = module.OperatorControl
+OperatorCatalog = module.OperatorCatalog
+RUNTIME_OPERATOR_CATALOG = OperatorCatalog(
+    json.loads(Path("agent/touchdesigner-2025.32050-operators.json").read_text(encoding="utf-8"))
+)
+
+
+def make_control(operator_lookup):
+    return OperatorControl(operator_lookup, RUNTIME_OPERATOR_CATALOG)
 
 
 @pytest.fixture(autouse=True)
@@ -47,6 +60,17 @@ class FakeOwner:
     def store(self, key: str, value: object) -> None:
         self.values[key] = value
 
+    def op(self, name: str):
+        if name == "operator_catalog":
+            return SimpleNamespace(
+                text=Path("agent/touchdesigner-2025.32050-operators.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+        if name == "agent_manifest":
+            return SimpleNamespace(text=Path("agent/manifest.json").read_text(encoding="utf-8"))
+        return None
+
 
 class FakeParameter:
     def __init__(self, value=None, *, mode="constant", read_only=False, pulseable=False) -> None:
@@ -73,6 +97,10 @@ class FakeConnector:
         self.connections = []
 
     def connect(self, target) -> None:
+        if self.isInput:
+            self.connections.clear()
+            self.connections.append(FakeConnector(target.owner, target.index, is_input=False))
+            return
         self.connections.append(target)
         target.connections.append(FakeConnector(self.owner, self.index, is_input=False))
 
@@ -114,7 +142,18 @@ class FakeOperator:
         return ["sample error"]
 
 
-from types import SimpleNamespace
+def test_operator_control_is_the_touchdesigner_graph_interface() -> None:
+    root = FakeOperator("/project1")
+    control = make_control({root.path: root}.get)
+
+    assert control.execute({"name": "ops.get", "input": {"operator_path": root.path}}) == {
+        "path": "/project1",
+        "name": "project1",
+        "op_type": "base",
+        "family": "COMP",
+    }
+    with pytest.raises(module.AgentCommandError, match="operator_not_found"):
+        control.execute({"name": "ops.get", "input": {"operator_path": "/missing"}})
 
 
 def test_extension_reload_preserves_instance_identity_and_unconfirmed_results() -> None:
@@ -182,20 +221,7 @@ def test_agent_advertises_and_executes_all_typed_commands() -> None:
     agent = AgentExt(FakeOwner(), operator_lookup=operators.get)
 
     assert agent.registration_payload()["td_build"] == "2025.32050"
-    assert agent.registration_payload()["capabilities"] == [
-        "ops.children",
-        "ops.connect",
-        "ops.create",
-        "ops.get",
-        "parameters.get",
-        "parameters.pulse",
-        "parameters.set",
-        "batch.execute",
-        "binary.export",
-        "events.read",
-        "project.metadata",
-        "project.snapshot",
-    ]
+    assert set(agent.registration_payload()["capabilities"]) == set(COMMAND_CATALOG.names)
     assert agent.execute_command({"name": "ops.get", "input": {"operator_path": "/project1"}}) == {
         "path": "/project1",
         "name": "project1",
@@ -291,6 +317,7 @@ def test_agent_creates_and_connects_a_bounded_basic_network() -> None:
         "name": "source",
         "op_type": "constantTOP",
         "family": "TOP",
+        "catalog_status": "supported",
     }
     assert operators["/project1/source"].nodeX == -100
     assert operators["/project1/source"].nodeY == 25
@@ -300,6 +327,8 @@ def test_agent_creates_and_connects_a_bounded_basic_network() -> None:
         "output_index": 0,
         "input_index": 0,
         "connected": True,
+        "replaced": False,
+        "previous_connection": None,
     }
     connection = operators["/project1/output"].inputConnectors[0].connections[0]
     assert (connection.owner.path, connection.index, connection.isOutput) == (
@@ -334,6 +363,223 @@ def test_agent_creates_and_connects_a_bounded_basic_network() -> None:
                 },
             }
         )
+
+
+def test_agent_create_enforces_embedded_operator_catalog() -> None:
+    parent = FakeOperator("/project1")
+
+    def lookup(path: str):
+        return next(
+            (item for item in [parent, *parent.children] if item.path == path),
+            None,
+        )
+
+    agent = AgentExt(FakeOwner(), operator_lookup=lookup)
+    conditional = {
+        "parent_path": parent.path,
+        "op_type": "videodeviceinTOP",
+        "name": "camera",
+        "node_x": 0,
+        "node_y": 0,
+        "allow_conditional": False,
+    }
+    with pytest.raises(module.AgentCommandError, match="operator_type_conditional"):
+        agent.execute_command({"name": "ops.create", "input": conditional})
+
+    created = agent.execute_command(
+        {"name": "ops.create", "input": {**conditional, "allow_conditional": True}}
+    )
+    assert created["catalog_status"] == "conditional"
+
+    with pytest.raises(module.AgentCommandError, match="operator_type_unsupported"):
+        agent.execute_command(
+            {
+                "name": "ops.create",
+                "input": {
+                    **conditional,
+                    "op_type": "futureTOP",
+                    "name": "future",
+                    "allow_conditional": True,
+                },
+            }
+        )
+
+
+def test_operator_control_renames_exactly_and_rejects_collision() -> None:
+    class RenameOperator(FakeOperator):
+        def __init__(self, path: str) -> None:
+            self._name = path.rsplit("/", 1)[-1]
+            super().__init__(path)
+
+        @property
+        def name(self):
+            return self._name
+
+        @name.setter
+        def name(self, value):
+            self._name = value
+            self.path = self.path.rsplit("/", 1)[0] + "/" + value
+
+    operator = RenameOperator("/project1/source")
+    occupied = RenameOperator("/project1/occupied")
+
+    def lookup(path: str):
+        return next((item for item in (operator, occupied) if item.path == path), None)
+
+    control = make_control(lookup)
+    assert control.execute(
+        {"name": "ops.rename", "input": {"operator_path": operator.path, "new_name": "renamed"}}
+    ) == {
+        "old_path": "/project1/source",
+        "path": "/project1/renamed",
+        "old_name": "source",
+        "name": "renamed",
+        "renamed": True,
+    }
+
+    with pytest.raises(module.AgentCommandError, match="operator_already_exists"):
+        control.execute(
+            {
+                "name": "ops.rename",
+                "input": {"operator_path": operator.path, "new_name": "occupied"},
+            }
+        )
+
+
+def test_rename_failure_rolls_back_or_reports_uncertain_state() -> None:
+    class CorrectingOperator:
+        family = "TOP"
+        OPType = "nullTOP"
+
+        def __init__(self, *, rollback_fails: bool) -> None:
+            self.path = "/project1/source"
+            self._name = "source"
+            self.rollback_fails = rollback_fails
+
+        @property
+        def name(self):
+            return self._name
+
+        @name.setter
+        def name(self, value):
+            if value == "source" and self.rollback_fails:
+                raise RuntimeError("rollback rejected")
+            actual = value if value == "source" else value + "1"
+            self._name = actual
+            self.path = "/project1/" + actual
+
+    restored = CorrectingOperator(rollback_fails=False)
+    with pytest.raises(module.AgentCommandError, match="operator_rename_failed"):
+        make_control(lambda _: restored).execute(
+            {
+                "name": "ops.rename",
+                "input": {"operator_path": restored.path, "new_name": "renamed"},
+            }
+        )
+    assert (restored.path, restored.name) == ("/project1/source", "source")
+
+    uncertain = CorrectingOperator(rollback_fails=True)
+    with pytest.raises(module.AgentCommandError, match="operator_rename_rollback_failed"):
+        make_control(lambda _: uncertain).execute(
+            {
+                "name": "ops.rename",
+                "input": {"operator_path": uncertain.path, "new_name": "renamed"},
+            }
+        )
+
+
+def test_operator_control_disconnects_exactly_and_replaces_input_connection() -> None:
+    first = FakeOperator("/project1/first", family="TOP", outputs=1)
+    second = FakeOperator("/project1/second", family="TOP", outputs=1)
+    target = FakeOperator("/project1/target", family="TOP", inputs=1)
+    operators = {item.path: item for item in (first, second, target)}
+    control = make_control(operators.get)
+    first.outputConnectors[0].connect(target.inputConnectors[0])
+
+    with pytest.raises(module.AgentCommandError, match="connection_not_found"):
+        control.execute(
+            {
+                "name": "ops.disconnect",
+                "input": {
+                    "source_path": second.path,
+                    "target_path": target.path,
+                    "output_index": 0,
+                    "input_index": 0,
+                },
+            }
+        )
+
+    assert (
+        control.execute(
+            {
+                "name": "ops.disconnect",
+                "input": {
+                    "source_path": first.path,
+                    "target_path": target.path,
+                    "output_index": 0,
+                    "input_index": 0,
+                },
+            }
+        )["disconnected"]
+        is True
+    )
+    assert target.inputConnectors[0].connections == []
+
+    first.outputConnectors[0].connect(target.inputConnectors[0])
+    replaced = control.execute(
+        {
+            "name": "ops.connect",
+            "input": {
+                "source_path": second.path,
+                "target_path": target.path,
+                "output_index": 0,
+                "input_index": 0,
+                "replace": True,
+            },
+        }
+    )
+    assert replaced["replaced"] is True
+    assert replaced["previous_connection"] == {
+        "source_path": first.path,
+        "output_index": 0,
+    }
+    connection = target.inputConnectors[0].connections[0]
+    assert (connection.owner.path, connection.index) == (second.path, 0)
+
+
+def test_replace_failure_restores_previous_connection_or_reports_uncertain_state() -> None:
+    first = FakeOperator("/project1/first", family="TOP", outputs=1)
+    second = FakeOperator("/project1/second", family="TOP", outputs=1)
+    target = FakeOperator("/project1/target", family="TOP", inputs=1)
+    operators = {item.path: item for item in (first, second, target)}
+    control = make_control(operators.get)
+    connector = target.inputConnectors[0]
+    first.outputConnectors[0].connect(connector)
+    input_connect = connector.connect
+
+    def reject_second(source_connector) -> None:
+        if source_connector.owner is second:
+            connector.connections.clear()
+            raise RuntimeError("replace rejected")
+        input_connect(source_connector)
+
+    connector.connect = reject_second
+    payload = {
+        "source_path": second.path,
+        "target_path": target.path,
+        "output_index": 0,
+        "input_index": 0,
+        "replace": True,
+    }
+    with pytest.raises(module.AgentCommandError, match="connector_replace_failed"):
+        control.execute({"name": "ops.connect", "input": payload})
+    assert connector.connections[0].owner is first
+
+    first.outputConnectors[0].connect(connector)
+    connector.connect = lambda _: (_ for _ in ()).throw(RuntimeError("all connects rejected"))
+    with pytest.raises(module.AgentCommandError, match="connector_replace_rollback_failed"):
+        control.execute({"name": "ops.connect", "input": payload})
+    assert connector.connections == []
 
 
 def test_network_mutation_failures_roll_back_partial_changes() -> None:
@@ -403,7 +649,27 @@ def test_network_mutation_failures_roll_back_partial_changes() -> None:
     assert target.inputConnectors[0].connections == []
 
 
-def test_agent_rejects_invalid_expression_and_oversized_result_with_typed_errors() -> None:
+def test_accept_omits_optional_nulls_from_locked_socketio_payload() -> None:
+    agent = AgentExt(FakeOwner())
+    agent.connection_id = "connection-1"
+    agent.execute_command = lambda _: {
+        "required": True,
+        "optional": None,
+        "nested": {"value": None, "items": [1, None, 2]},
+    }
+
+    event, payload = agent.accept(
+        {"request_id": "wire-safe", "command": {"name": "ops.get", "input": {}}}
+    )
+
+    assert event == "request_result"
+    assert payload["result"] == {
+        "required": True,
+        "nested": {"items": [1, {"__td_cli_null__": True}, 2]},
+    }
+
+
+def test_agent_rejects_invalid_expression_with_typed_error() -> None:
     root = FakeOperator("/project1")
     root.par.display = FakeParameter(True)
     agent = AgentExt(FakeOwner(), operator_lookup=lambda _: root)
@@ -426,15 +692,94 @@ def test_agent_rejects_invalid_expression_and_oversized_result_with_typed_errors
     assert invalid_event == "request_rejected"
     assert invalid["code"] == "expression_invalid"
 
-    agent.MAX_RESULT_BYTES = 1
-    oversized_event, oversized = agent.accept(
+
+def test_parameter_list_reports_runtime_names_types_and_expression_capabilities() -> None:
+    root = FakeOperator("/project1")
+
+    def parameter(name: str, style: str, **values):
+        item = FakeParameter(values.pop("value", None), mode=values.pop("mode", "constant"))
+        defaults = {
+            "name": name,
+            "label": name.title(),
+            "style": style,
+            "page": SimpleNamespace(name="Test"),
+            "hidden": False,
+            "isPulse": False,
+            "isMenu": False,
+            "isNumber": False,
+            "isFloat": False,
+            "isInt": False,
+            "isOP": False,
+            "isPython": False,
+            "isSequence": False,
+            "isString": False,
+            "isToggle": False,
+            "menuNames": [],
+            "menuLabels": [],
+        }
+        for key, value in {**defaults, **values}.items():
+            setattr(item, key, value)
+        return item
+
+    gain = parameter("gain", "Float", value=0.5, isNumber=True, isFloat=True)
+    gain.expr = "me.time.seconds"
+    menu = parameter(
+        "operation",
+        "Menu",
+        isMenu=True,
+        menuNames=["add", "multiply"],
+        menuLabels=["Add", "Multiply"],
+    )
+    empty_menu = parameter("empty", "Menu", isMenu=True, menuNames=None, menuLabels=None)
+    python_value = parameter("payload", "Python", isPython=True)
+    multi_operator = parameter("targets", "OP", value=[root], isOP=True)
+    pulse = parameter("reset", "Pulse", isPulse=True)
+    hidden = parameter("legacy", "Int", isInt=True, hidden=True)
+    custom = parameter("Customvalue", "Str", isString=True, mode="expression")
+    custom.expr = "'hello'"
+    root.builtinPars = [gain, menu, empty_menu, python_value, multi_operator, pulse, hidden]
+    root.customPars = [custom]
+
+    result = make_control(lambda _: root).execute(
+        {"name": "parameters.list", "input": {"operator_path": root.path}}
+    )
+    items = {item["name"]: item for item in result["parameters"]}
+    assert result["operator_path"] == root.path
+    assert items["gain"]["value_kind"] == "number"
+    assert items["gain"]["expression"] == {
+        "supported": True,
+        "source": "me.time.seconds",
+    }
+    assert items["operation"]["menu_names"] == ["add", "multiply"]
+    assert items["operation"]["menu_labels"] == ["Add", "Multiply"]
+    assert items["operation"]["expression"]["source"] is None
+    assert items["empty"]["menu_names"] == []
+    assert items["empty"]["menu_labels"] == []
+    assert items["payload"]["constant_supported"] is False
+    assert items["payload"]["expression_supported"] is False
+    assert items["targets"]["value_kind"] == "unknown"
+    assert items["targets"]["constant_supported"] is False
+    assert items["reset"]["pulse_supported"] is True
+    assert items["legacy"]["hidden"] is True
+    assert items["Customvalue"]["custom"] is True
+    assert items["Customvalue"]["mode"] == "expression"
+
+    batch = make_control(lambda _: root)
+    batch.preflight({"name": "parameters.list", "input": {"operator_path": root.path}})
+
+
+@pytest.mark.parametrize("mode", ["export", "bind"])
+def test_parameter_get_reports_non_constant_runtime_modes(mode: str) -> None:
+    root = FakeOperator("/project1")
+    root.par.driven = FakeParameter(2.5, mode=mode)
+    result = make_control(lambda _: root).execute(
         {
-            "request_id": "oversized-result",
-            "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
+            "name": "parameters.get",
+            "input": {"operator_path": root.path, "parameter": "driven"},
         }
     )
-    assert oversized_event == "request_rejected"
-    assert oversized["code"] == "result_too_large"
+    assert result["mode"] == mode
+    assert result["value"] == 2.5
 
 
 def test_phase_3_observation_binary_metadata_and_events_are_bounded() -> None:
@@ -612,9 +957,15 @@ def test_event_ring_retains_1000_and_reads_at_most_requested_200() -> None:
 
 def test_accept_records_internal_and_oversized_outcomes() -> None:
     root = FakeOperator("/project1")
-    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: root)
+    lookup_fails = {"value": True}
+
+    def lookup(_):
+        if lookup_fails["value"]:
+            raise RuntimeError("boom")
+        return root
+
+    agent = AgentExt(FakeOwner(), operator_lookup=lookup)
     agent.connection_id = "connection-1"
-    agent.operator_lookup = lambda _: (_ for _ in ()).throw(RuntimeError("boom"))
     event, result = agent.accept(
         {
             "request_id": "internal",
@@ -623,7 +974,7 @@ def test_accept_records_internal_and_oversized_outcomes() -> None:
     )
     assert (event, result["code"]) == ("request_rejected", "internal_error")
 
-    agent.operator_lookup = lambda _: root
+    lookup_fails["value"] = False
     agent.MAX_RESULT_BYTES = 1
     event, result = agent.accept(
         {

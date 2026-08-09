@@ -44,6 +44,10 @@ def build(source_dir, output_path, source_revision):
 
     manifest_dat = agent.create(textDAT, "agent_manifest")  # type: ignore[name-defined]
     manifest_dat.text = (source / "manifest.json").read_text(encoding="utf-8")
+    catalog_dat = agent.create(textDAT, "operator_catalog")  # type: ignore[name-defined]
+    catalog_dat.text = (source / "touchdesigner-2025.32050-operators.json").read_text(
+        encoding="utf-8"
+    )
     extension_dat = agent.create(textDAT, "agent_extension")  # type: ignore[name-defined]
     extension_dat.text = (source / "extension.py").read_text(encoding="utf-8")
     callbacks_dat = agent.create(textDAT, "socket_callbacks")  # type: ignore[name-defined]

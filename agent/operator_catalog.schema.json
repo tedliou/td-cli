@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tedliou/td-cli/agent/operator_catalog.schema.json",
+  "title": "td-cli locked TouchDesigner Operator catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "probe_revision",
+    "touchdesigner_build",
+    "experimental_build",
+    "families",
+    "operators"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "probe_revision": {"type": "integer", "minimum": 1},
+    "touchdesigner_build": {"const": "2025.32050"},
+    "experimental_build": {"const": false},
+    "families": {
+      "const": ["COMP", "TOP", "CHOP", "POP", "DAT", "MAT", "SOP"]
+    },
+    "operators": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/operator"}
+    }
+  },
+  "$defs": {
+    "operator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "op_type",
+        "family",
+        "status",
+        "supported_on_os",
+        "inputs",
+        "outputs",
+        "builtin_parameters",
+        "custom_parameters",
+        "side_effect_class",
+        "experimental",
+        "create_verified",
+        "notes"
+      ],
+      "properties": {
+        "op_type": {"type": "string", "minLength": 1},
+        "family": {"enum": ["COMP", "TOP", "CHOP", "POP", "DAT", "MAT", "SOP"]},
+        "status": {"enum": ["supported", "conditional", "unsupported", "unknown"]},
+        "supported_on_os": {"type": ["boolean", "null"]},
+        "inputs": {"type": ["integer", "null"], "minimum": 0},
+        "outputs": {"type": ["integer", "null"], "minimum": 0},
+        "builtin_parameters": {"type": ["integer", "null"], "minimum": 0},
+        "custom_parameters": {"type": ["integer", "null"], "minimum": 0},
+        "side_effect_class": {
+          "enum": ["pure", "device", "file", "network", "process", "loader", "script"]
+        },
+        "experimental": {"const": false},
+        "create_verified": {"type": "boolean"},
+        "notes": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

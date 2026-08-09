@@ -1,7 +1,7 @@
 {
-  "agent_version": "0.1.0",
+  "agent_version": "0.1.1",
   "locked_touchdesigner_version": "2025.32050",
   "protocol_versions": [1],
-  "required_files": ["extension.py", "socket_callbacks.py", "heartbeat_execute.py", "build_td.py"],
-  "required_operators": ["agent_manifest", "agent_extension", "socket_callbacks", "heartbeat_execute", "events_table", "auth_table", "socketio1"]
+  "required_files": ["extension.py", "socket_callbacks.py", "heartbeat_execute.py", "build_td.py", "touchdesigner-2025.32050-operators.json"],
+  "required_operators": ["agent_manifest", "operator_catalog", "agent_extension", "socket_callbacks", "heartbeat_execute", "events_table", "auth_table", "socketio1"]
 }

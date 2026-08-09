@@ -150,10 +150,19 @@ class DaemonClient:
             "operator_parent_invalid",
             "operator_already_exists",
             "operator_create_failed",
+            "operator_type_unsupported",
+            "operator_type_conditional",
+            "operator_rename_forbidden",
+            "operator_rename_failed",
+            "operator_rename_rollback_failed",
             "operator_family_mismatch",
             "connector_not_found",
             "connector_occupied",
             "connector_connect_failed",
+            "connection_not_found",
+            "connector_disconnect_failed",
+            "connector_replace_failed",
+            "connector_replace_rollback_failed",
             "result_too_large",
             "parameter_not_found",
             "parameter_read_only",
@@ -170,7 +179,17 @@ class DaemonClient:
         result = snapshot.get("result")
         if (
             isinstance(command, dict)
-            and command.get("name") in {"parameters.get", "parameters.set"}
+            and command.get("name") == "parameters.get"
+            and isinstance(result, dict)
+            and (
+                result.get("mode") not in {"constant", "expression", "export", "bind"}
+                or result.get("value_type") not in {"boolean", "integer", "number", "string"}
+            )
+        ):
+            raise ClientError("protocol_incompatible")
+        if (
+            isinstance(command, dict)
+            and command.get("name") == "parameters.set"
             and isinstance(result, dict)
             and (
                 result.get("mode") not in {"constant", "expression"}
@@ -178,6 +197,31 @@ class DaemonClient:
             )
         ):
             raise ClientError("protocol_incompatible")
+        if (
+            isinstance(command, dict)
+            and command.get("name") == "parameters.list"
+            and isinstance(result, dict)
+        ):
+            parameters = result.get("parameters")
+            if not isinstance(parameters, list) or any(
+                not isinstance(parameter, dict)
+                or parameter.get("mode") not in {"constant", "expression", "export", "bind"}
+                or parameter.get("value_kind")
+                not in {
+                    "boolean",
+                    "integer",
+                    "number",
+                    "string",
+                    "menu",
+                    "operator",
+                    "pulse",
+                    "python",
+                    "sequence",
+                    "unknown",
+                }
+                for parameter in parameters
+            ):
+                raise ClientError("protocol_incompatible")
         return snapshot
 
     def wait(self, request_id: str) -> dict[str, Any]:
