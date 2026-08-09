@@ -22,9 +22,9 @@ def activate_agent_runtime(agent, extension_dat, heartbeat_dat, socket_dat, auth
     agent.par.ext0name = "Agent"
     agent.par.ext0promote = True
     agent.par.reinitextensions.pulse()
-    if not hasattr(agent, "Agent"):
+    if not hasattr(agent.ext, "Agent"):
         raise RuntimeError("Agent extension failed to initialize")
-    agent.Agent.refresh_auth(auth_table)
+    agent.ext.Agent.refresh_auth(auth_table)
     heartbeat_dat.par.start = True
     heartbeat_dat.par.framestart = True
     socket_dat.par.active = True

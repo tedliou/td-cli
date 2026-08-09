@@ -2,12 +2,12 @@
 
 
 def onOpen(dat):
-    dat.emit("register", parent().Agent.registration_payload())
+    dat.emit("register", parent().ext.Agent.registration_payload())
 
 
 def onReceiveEvent(dat, rowIndex, message, event):
     del rowIndex
-    agent = parent().Agent
+    agent = parent().ext.Agent
     if event == "registered":
         agent.connection_id = message["connection_id"]
         for result in agent.pending_results.values():
@@ -46,12 +46,12 @@ def onReceiveEvent(dat, rowIndex, message, event):
 
 def onClose(dat, failure):
     del failure
-    parent().Agent.connection_id = None
-    parent().Agent.refresh_auth(op("auth_table"))
+    parent().ext.Agent.connection_id = None
+    parent().ext.Agent.refresh_auth(op("auth_table"))
 
 
 def finishDraining(dat):
-    agent = parent().Agent
+    agent = parent().ext.Agent
     if agent.connection_id:
         dat.emit("unregister", agent.heartbeat_payload())
         dat.par.active = False
