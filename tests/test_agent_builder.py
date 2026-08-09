@@ -57,11 +57,16 @@ class GuardedRuntimeParameters:
 
 
 class FakeExtension:
-    def __init__(self) -> None:
+    def __init__(self, owner=None) -> None:
+        self.owner = owner
         self.auth_table = None
 
     def refresh_auth(self, table) -> None:
         self.auth_table = table
+
+
+class ExtensionModule:
+    AgentExt = FakeExtension
 
 
 class FakeAgentComponent:
@@ -85,10 +90,36 @@ def test_runtime_callbacks_start_only_after_promoted_agent_is_ready() -> None:
         auth_table=auth_table,
     )
 
-    assert agent.par.ext0object is extension_dat
     assert agent.par.ext0name == "Agent"
     assert agent.par.ext0promote is True
     assert agent.Agent.auth_table is auth_table
     assert heartbeat.par.start is True
     assert heartbeat.par.framestart is True
     assert socket.par.active is True
+
+
+def test_extension_object_expression_instantiates_agent_extension() -> None:
+    builder = load_builder()
+    agent = FakeAgentComponent()
+    heartbeat = SimpleNamespace(par=GuardedRuntimeParameters(agent))
+    socket = SimpleNamespace(par=GuardedRuntimeParameters(agent))
+    extension_dat = SimpleNamespace(module=ExtensionModule)
+
+    builder["activate_agent_runtime"](
+        agent=agent,
+        extension_dat=extension_dat,
+        heartbeat_dat=heartbeat,
+        socket_dat=socket,
+        auth_table=object(),
+    )
+
+    expression = agent.par.ext0object
+    compiled = compile(expression, "<TouchDesigner Extension 1>", "eval")
+    operators = {"./agent_extension": extension_dat}
+    extension = eval(
+        compiled,
+        {"op": operators.__getitem__, "me": agent},
+    )
+
+    assert isinstance(extension, FakeExtension)
+    assert extension.owner is agent
