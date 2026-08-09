@@ -168,7 +168,8 @@ class FakeOperator:
         elif operator_type == "executeDAT":
             child.par = GuardedRuntimeParameters(self)
         elif operator_type == "tableDAT":
-            child.rows = []
+            child.rows = [[""]]
+            child.clear = child.rows.clear
             child.appendRow = child.rows.append
         self.children.append(child)
         return child
@@ -201,6 +202,13 @@ def test_canonical_build_removes_unused_generated_socket_callbacks(tmp_path: Pat
 
     evidence = builder["build"]("agent", output, "revision")
 
+    assert project.op("td_agent").op("events_table").rows == [
+        ["registered"],
+        ["registration_error"],
+        ["request_dispatch"],
+        ["result_recorded"],
+        ["daemon_draining"],
+    ]
     assert evidence["operators"] == [
         "agent_extension",
         "agent_manifest",

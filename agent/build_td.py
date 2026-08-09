@@ -50,6 +50,7 @@ def build(source_dir, output_path, source_revision):
     heartbeat_dat.text = (source / "heartbeat_execute.py").read_text(encoding="utf-8")
 
     events = agent.create(tableDAT, "events_table")  # type: ignore[name-defined]
+    events.clear()
     for event in (
         "registered",
         "registration_error",
