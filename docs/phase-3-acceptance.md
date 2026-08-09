@@ -57,3 +57,8 @@ first mutation. A snapshot capped below the actual Operator count failed with
 Live iterations caught and corrected persistent-Daemon schema staleness,
 Phase 2 Agent state migration, explicit injection of TouchDesigner's `project`
 object, and the exact no-argument COMP `saveByteArray()` call.
+
+Finally, all three PyInstaller one-file executables were rebuilt. Their
+`--version` entry points passed from a clean temporary directory, and the
+packaged `td.exe --json project metadata` completed against the live Online
+Instance.
