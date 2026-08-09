@@ -6,18 +6,26 @@ specs. The localhost diagnostic bridge is development-only and is not included.
 
 ## Agent Component staging
 
-1. On the dedicated Windows 11 runner with TouchDesigner 2025.32050, build and
-   validate `td-agent.tox` against the exact source commit.
+1. On the local Windows 11 development machine with TouchDesigner 2025.32050,
+   build and validate `td-agent.tox` against the exact source commit. The local
+   machine is not an Actions runner.
 2. Save the machine-readable validation result with `"validated": true`, then
    run `scripts/prepare_agent_stage.py`. Keep its three output files outside the
    Actions checkout.
-3. Dispatch **Stage Agent Component** with the exact source commit, Release
-   Version, and absolute stage path on that runner.
+3. ZIP the three prepared files, record the ZIP SHA-256, and Base64-encode the
+   ZIP. Dispatch **Stage Agent Component** with the exact source commit, Release
+   Version, Base64 payload, and ZIP digest. The GitHub-hosted Windows runner
+   decodes and validates the stage without launching or depending on
+   TouchDesigner. `scripts/dispatch_agent_stage.ps1` performs the archive,
+   digest, encoding, dispatch, and temporary-file cleanup without placing the
+   payload in the repository.
 4. Record the run ID, artifact ID, artifact digest, head SHA, version, and expiry
    from the job summary. Restaging always creates a new artifact ID.
 
-The staging runner is not a general CI runner. Restrict repository access to the
-dedicated runner group and remove each local stage directory after upload.
+Remove the local stage directory and encoded payload after the immutable Actions
+artifact identity is recorded. TouchDesigner validation remains local
+development evidence; hosted CI verifies only source, evidence, checksum,
+version, and packaging contracts that do not require TouchDesigner.
 
 ## Repository policy gate
 
