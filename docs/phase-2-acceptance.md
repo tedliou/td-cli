@@ -1,8 +1,10 @@
 # Phase 2 locked-runtime acceptance
 
-Date: 2026-08-09  
-Platform: Windows 11, TouchDesigner 2025.32050, Python 3.11  
-Source revision: `88560df0724f2536835c5fa178ac4e3cf259678b`
+Date: 2026-08-09
+
+Platform: Windows 11, TouchDesigner 2025.32050, Python 3.11
+
+Source revision: `756d238f7b72401de3193ad09a32237b30757c65`
 
 ## Source-first Agent Component
 
@@ -11,7 +13,7 @@ TouchDesigner main thread. The resulting local derivative was independently
 hashed and inspected:
 
 - Artifact: `td-agent.tox`
-- SHA-256: `c36a913d776beda5f047508e6dc69be0acd85968aef9a25342dcb678d46f8877`
+- SHA-256: `3cec666ba4321f8f80c875c61c63d55e5a1229d007c7bfd1a59a0962a68223d8`
 - Operators: `agent_extension`, `agent_manifest`, `auth_table`, `events_table`,
   `heartbeat_execute`, `socket_callbacks`, `socketio1`
 - Registered capabilities: `ops.children`, `ops.get`, `parameters.get`,
