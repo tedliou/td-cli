@@ -25,3 +25,70 @@ def test_unlocked_runtime_is_rejected_with_observed_build() -> None:
         match=r"locked TouchDesigner 2025\.32050 required; got 2026\.10000",
     ):
         builder["locked_touchdesigner_version"](application)
+
+
+class PulseParameter:
+    def __init__(self, callback) -> None:
+        self.callback = callback
+
+    def pulse(self) -> None:
+        self.callback()
+
+
+class AgentParameters:
+    def __init__(self, agent) -> None:
+        self.ext0object = None
+        self.ext0name = ""
+        self.ext0promote = False
+        self.reinitextensions = PulseParameter(lambda: setattr(agent, "Agent", FakeExtension()))
+
+
+class GuardedRuntimeParameters:
+    def __init__(self, agent) -> None:
+        object.__setattr__(self, "agent", agent)
+        object.__setattr__(self, "start", False)
+        object.__setattr__(self, "framestart", False)
+        object.__setattr__(self, "active", False)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if name in {"start", "framestart", "active"} and value:
+            assert hasattr(self.agent, "Agent"), f"{name} enabled before Agent extension"
+        object.__setattr__(self, name, value)
+
+
+class FakeExtension:
+    def __init__(self) -> None:
+        self.auth_table = None
+
+    def refresh_auth(self, table) -> None:
+        self.auth_table = table
+
+
+class FakeAgentComponent:
+    def __init__(self) -> None:
+        self.par = AgentParameters(self)
+
+
+def test_runtime_callbacks_start_only_after_promoted_agent_is_ready() -> None:
+    builder = load_builder()
+    agent = FakeAgentComponent()
+    heartbeat = SimpleNamespace(par=GuardedRuntimeParameters(agent))
+    socket = SimpleNamespace(par=GuardedRuntimeParameters(agent))
+    extension_dat = object()
+    auth_table = object()
+
+    builder["activate_agent_runtime"](
+        agent=agent,
+        extension_dat=extension_dat,
+        heartbeat_dat=heartbeat,
+        socket_dat=socket,
+        auth_table=auth_table,
+    )
+
+    assert agent.par.ext0object is extension_dat
+    assert agent.par.ext0name == "Agent"
+    assert agent.par.ext0promote is True
+    assert agent.Agent.auth_table is auth_table
+    assert heartbeat.par.start is True
+    assert heartbeat.par.framestart is True
+    assert socket.par.active is True
