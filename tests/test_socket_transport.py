@@ -26,7 +26,7 @@ def registration_payload() -> dict[str, object]:
         "instance_id": INSTANCE_ID,
         "protocol_versions": [1],
         "agent_version": "0.1.0",
-        "capabilities": ["diagnostic.ping"],
+        "capabilities": ["ops.get"],
     }
 
 
@@ -120,7 +120,7 @@ async def test_draining_instance_remains_visible_but_rejects_new_requests(tmp_pa
                 json={
                     "request_id": REQUEST_ID,
                     "instance_id": INSTANCE_ID,
-                    "command": {"name": "diagnostic.ping", "input": {"message": "ping"}},
+                    "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
                 },
             )
             assert rejected.status == 409
@@ -181,7 +181,7 @@ async def test_request_for_offline_instance_is_rejected_before_acceptance(tmp_pa
                 json={
                     "request_id": REQUEST_ID,
                     "instance_id": INSTANCE_ID,
-                    "command": {"name": "diagnostic.ping", "input": {"message": "ping"}},
+                    "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
                 },
             )
             assert response.status == 409
@@ -243,7 +243,7 @@ async def test_durable_request_dispatches_and_result_is_acknowledged(tmp_path: P
                 json={
                     "request_id": REQUEST_ID,
                     "instance_id": INSTANCE_ID,
-                    "command": {"name": "diagnostic.ping", "input": {"message": "ping"}},
+                    "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
                 },
             )
             assert response.status == 201
@@ -302,7 +302,7 @@ async def test_requests_dispatch_one_at_a_time_in_fifo_order(tmp_path: Path) -> 
                     json={
                         "request_id": request_id,
                         "instance_id": INSTANCE_ID,
-                        "command": {"name": "diagnostic.ping", "input": {"message": request_id}},
+                        "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
                     },
                 )
                 assert response.status == 201
@@ -360,7 +360,7 @@ async def test_thirty_third_request_is_rejected_without_persistence(tmp_path: Pa
                     json={
                         "request_id": request_id,
                         "instance_id": INSTANCE_ID,
-                        "command": {"name": "diagnostic.ping", "input": {"message": str(index)}},
+                        "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
                     },
                 )
                 assert response.status == 201
@@ -371,7 +371,7 @@ async def test_thirty_third_request_is_rejected_without_persistence(tmp_path: Pa
                 json={
                     "request_id": rejected_id,
                     "instance_id": INSTANCE_ID,
-                    "command": {"name": "diagnostic.ping", "input": {"message": "overflow"}},
+                    "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
                 },
             )
             assert rejected.status == 409
@@ -430,7 +430,7 @@ async def test_disconnect_marks_in_flight_unknown_and_reconnect_resumes_queue(
                     json={
                         "request_id": request_id,
                         "instance_id": INSTANCE_ID,
-                        "command": {"name": "diagnostic.ping", "input": {"message": request_id}},
+                        "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
                     },
                 )
                 assert response.status == 201
@@ -469,7 +469,7 @@ async def test_disconnect_marks_in_flight_unknown_and_reconnect_resumes_queue(
 
 
 @pytest.mark.asyncio
-async def test_unadvertised_diagnostic_capability_is_rejected_before_fifo(tmp_path: Path) -> None:
+async def test_unadvertised_command_capability_is_rejected_before_fifo(tmp_path: Path) -> None:
     port = unused_port()
     server = uvicorn.Server(
         uvicorn.Config(
@@ -499,7 +499,7 @@ async def test_unadvertised_diagnostic_capability_is_rejected_before_fifo(tmp_pa
                 json={
                     "request_id": REQUEST_ID,
                     "instance_id": INSTANCE_ID,
-                    "command": {"name": "diagnostic.ping", "input": {"message": "ping"}},
+                    "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
                 },
             )
             assert response.status == 409
@@ -555,7 +555,7 @@ async def test_daemon_shutdown_drains_then_recovers_in_flight_and_queued_request
                     json={
                         "request_id": request_id,
                         "instance_id": INSTANCE_ID,
-                        "command": {"name": "diagnostic.ping", "input": {"message": request_id}},
+                        "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
                     },
                 )
                 assert accepted.status == 201

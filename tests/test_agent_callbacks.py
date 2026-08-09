@@ -136,7 +136,7 @@ def test_request_dispatch_uses_locked_runtime_emit_contract() -> None:
     callbacks["onReceiveEvent"](
         socket,
         0,
-        {"request_id": "request-2", "command": {"name": "diagnostic.ping"}},
+        {"request_id": "request-2", "command": {"name": "ops.get"}},
         "request_dispatch",
     )
 

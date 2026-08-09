@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [project.scripts]
-td = "td_cli.cli:app"
+td = "td_cli.cli:run"
 td-daemon = "td_cli.daemon.cli:app"
 td-agent = "td_cli.agent_tool:app"
 

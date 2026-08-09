@@ -41,6 +41,35 @@ class FakeOwner:
         self.values[key] = value
 
 
+class FakeParameter:
+    def __init__(self, value=None, *, mode="constant", read_only=False, pulseable=False) -> None:
+        self.val = value
+        self.expr = value if mode == "expression" else ""
+        self.mode = mode
+        self.readOnly = read_only
+        self.isPulse = pulseable
+        self.pulses = 0
+
+    def eval(self):
+        return self.val
+
+    def pulse(self) -> None:
+        self.pulses += 1
+
+
+class FakeOperator:
+    def __init__(self, path: str, *, op_type="base", family="COMP") -> None:
+        self.path = path
+        self.name = path.rsplit("/", 1)[-1]
+        self.OPType = op_type
+        self.family = family
+        self.children = []
+        self.par = SimpleNamespace()
+
+
+from types import SimpleNamespace
+
+
 def test_extension_reload_preserves_instance_identity_and_unconfirmed_results() -> None:
     owner = FakeOwner()
     first = AgentExt(owner)
@@ -71,3 +100,98 @@ def test_replacing_agent_component_in_same_runtime_preserves_identity_and_result
     replacement = AgentExt(FakeOwner())
     assert replacement.instance_id == first.instance_id
     assert replacement.pending_results == {"request": {"result": "pending"}}
+
+
+def test_agent_advertises_and_executes_all_five_typed_commands() -> None:
+    root = FakeOperator("/project1")
+    child_b = FakeOperator("/project1/z", op_type="null")
+    child_a = FakeOperator("/project1/a", op_type="base")
+    root.children = [child_b, child_a]
+    root.par.display = FakeParameter(True)
+    root.par.reset = FakeParameter(pulseable=True)
+    operators = {item.path: item for item in (root, child_a, child_b)}
+    agent = AgentExt(FakeOwner(), operator_lookup=operators.get)
+
+    assert agent.registration_payload()["capabilities"] == [
+        "ops.children",
+        "ops.get",
+        "parameters.get",
+        "parameters.pulse",
+        "parameters.set",
+    ]
+    assert agent.execute_command({"name": "ops.get", "input": {"operator_path": "/project1"}}) == {
+        "path": "/project1",
+        "name": "project1",
+        "op_type": "base",
+        "family": "COMP",
+    }
+    assert agent.execute_command(
+        {"name": "ops.children", "input": {"operator_path": "/project1", "op_type": None}}
+    ) == [
+        {"path": "/project1/a", "name": "a", "op_type": "base", "family": "COMP"},
+        {"path": "/project1/z", "name": "z", "op_type": "null", "family": "COMP"},
+    ]
+    assert (
+        agent.execute_command(
+            {
+                "name": "parameters.set",
+                "input": {
+                    "operator_path": "/project1",
+                    "parameter": "display",
+                    "mode": "constant",
+                    "value": False,
+                },
+            }
+        )["value"]
+        is False
+    )
+    assert (
+        agent.execute_command(
+            {
+                "name": "parameters.get",
+                "input": {"operator_path": "/project1", "parameter": "display"},
+            }
+        )["value_type"]
+        == "boolean"
+    )
+    assert agent.execute_command(
+        {
+            "name": "parameters.pulse",
+            "input": {"operator_path": "/project1", "parameter": "reset"},
+        }
+    ) == {"operator_path": "/project1", "parameter": "reset", "pulsed": True}
+    assert root.par.reset.pulses == 1
+
+
+def test_agent_rejects_invalid_expression_and_oversized_result_with_typed_errors() -> None:
+    root = FakeOperator("/project1")
+    root.par.display = FakeParameter(True)
+    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: root)
+    agent.connection_id = "connection-1"
+
+    invalid_event, invalid = agent.accept(
+        {
+            "request_id": "invalid-expression",
+            "command": {
+                "name": "parameters.set",
+                "input": {
+                    "operator_path": "/project1",
+                    "parameter": "display",
+                    "mode": "expression",
+                    "value": ")",
+                },
+            },
+        }
+    )
+    assert invalid_event == "request_rejected"
+    assert invalid["code"] == "expression_invalid"
+
+    agent.MAX_RESULT_BYTES = 1
+    oversized_event, oversized = agent.accept(
+        {
+            "request_id": "oversized-result",
+            "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
+        }
+    )
+    assert oversized_event == "request_rejected"
+    assert oversized["code"] == "result_too_large"
