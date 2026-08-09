@@ -7,7 +7,7 @@ import math
 from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class StrictModel(BaseModel):
@@ -65,7 +65,59 @@ class SetParameterInput(ParameterInput):
         return self
 
 
-CommandInput = OperatorInput | ChildrenInput | ParameterInput | SetParameterInput
+class SnapshotInput(OperatorInput):
+    max_depth: int = Field(default=4, ge=0, le=8)
+    max_operators: int = Field(default=256, ge=1, le=1000)
+
+
+class ProjectMetadataInput(StrictModel):
+    pass
+
+
+class BinaryExportInput(OperatorInput):
+    format: Literal["tox", "png"]
+    max_bytes: int = Field(default=194_560, ge=1, le=194_560)
+
+
+class EventsReadInput(StrictModel):
+    after: int = Field(default=0, ge=0)
+    limit: int = Field(default=100, ge=1, le=200)
+    include_errors: bool = True
+
+
+class BatchItem(StrictModel):
+    name: Literal["ops.get", "ops.children", "parameters.get", "parameters.set", "parameters.pulse"]
+    input: dict[str, Any]
+
+    @model_validator(mode="after")
+    def validate_input(self) -> BatchItem:
+        models: dict[str, type[StrictModel]] = {
+            "ops.get": OperatorInput,
+            "ops.children": ChildrenInput,
+            "parameters.get": ParameterInput,
+            "parameters.set": SetParameterInput,
+            "parameters.pulse": ParameterInput,
+        }
+        validated = models[self.name].model_validate(self.input)
+        self.input = validated.model_dump(mode="json")
+        return self
+
+
+class BatchExecuteInput(StrictModel):
+    commands: list[BatchItem] = Field(min_length=1, max_length=16)
+
+
+CommandInput = (
+    OperatorInput
+    | ChildrenInput
+    | ParameterInput
+    | SetParameterInput
+    | SnapshotInput
+    | ProjectMetadataInput
+    | BinaryExportInput
+    | EventsReadInput
+    | BatchExecuteInput
+)
 
 
 class Command(StrictModel):
@@ -75,6 +127,11 @@ class Command(StrictModel):
         "parameters.get",
         "parameters.set",
         "parameters.pulse",
+        "project.snapshot",
+        "project.metadata",
+        "binary.export",
+        "batch.execute",
+        "events.read",
     ]
     input: CommandInput
 
@@ -89,6 +146,11 @@ class Command(StrictModel):
             "parameters.get": ParameterInput,
             "parameters.set": SetParameterInput,
             "parameters.pulse": ParameterInput,
+            "project.snapshot": SnapshotInput,
+            "project.metadata": ProjectMetadataInput,
+            "binary.export": BinaryExportInput,
+            "events.read": EventsReadInput,
+            "batch.execute": BatchExecuteInput,
         }
         name = value.get("name")
         if not isinstance(name, str):

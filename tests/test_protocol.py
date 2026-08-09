@@ -119,3 +119,44 @@ def test_protocol_v1_typed_commands_validate_and_canonicalize(
 def test_protocol_v1_typed_commands_reject_invalid_input(payload: dict[str, object]) -> None:
     with pytest.raises(ValidationError):
         Command.model_validate(payload)
+
+
+def test_phase_3_commands_are_strict_and_bounded() -> None:
+    snapshot = Command.model_validate(
+        {"name": "project.snapshot", "input": {"operator_path": "/project1"}}
+    )
+    assert snapshot.input.model_dump() == {
+        "operator_path": "/project1",
+        "max_depth": 4,
+        "max_operators": 256,
+    }
+    batch = Command.model_validate(
+        {
+            "name": "batch.execute",
+            "input": {
+                "commands": [
+                    {"name": "ops.get", "input": {"operator_path": "/project1"}},
+                    {
+                        "name": "parameters.set",
+                        "input": {
+                            "operator_path": "/project1",
+                            "parameter": "display",
+                            "mode": "constant",
+                            "value": False,
+                        },
+                    },
+                ]
+            },
+        }
+    )
+    assert len(batch.input.commands) == 2
+
+    with pytest.raises(ValidationError):
+        Command.model_validate({"name": "events.read", "input": {"after": 0, "limit": 201}})
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {
+                "name": "batch.execute",
+                "input": {"commands": [{"name": "batch.execute", "input": {}}]},
+            }
+        )
