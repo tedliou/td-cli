@@ -1,0 +1,57 @@
+name: Stage Agent Component
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit: { description: "Exact commit built in locked TouchDesigner", required: true, type: string }
+      version: { description: "Exact pyproject Release Version", required: true, type: string }
+      stage_path: { description: "Absolute prepared stage path on the authorized locked runner", required: true, type: string }
+
+permissions:
+  contents: read
+
+jobs:
+  stage:
+    runs-on: [self-hosted, Windows, X64, touchdesigner-2025-32050]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { ref: "${{ inputs.source_commit }}", persist-credentials: false }
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+        with: { version: "0.8.11" }
+      - run: uv sync --locked --python 3.11
+      - name: Import immutable local stage input
+        shell: pwsh
+        env: { STAGE_PATH: "${{ inputs.stage_path }}" }
+        run: Copy-Item -Recurse -LiteralPath $env:STAGE_PATH -Destination agent-stage
+      - name: Validate staged files supplied by authorized environment
+        shell: pwsh
+        env:
+          RELEASE_VERSION: "${{ inputs.version }}"
+          SOURCE_COMMIT: "${{ inputs.source_commit }}"
+        run: |
+          $actual = uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])"
+          if ($actual -ne $env:RELEASE_VERSION) { throw 'Release Version mismatch' }
+          uv run python -c "import os; from pathlib import Path; from td_cli.release import validate_agent_stage; validate_agent_stage(Path('agent-stage'), expected_commit=os.environ['SOURCE_COMMIT'])"
+      - id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: "td-agent-component-${{ inputs.version }}-${{ inputs.source_commit }}"
+          path: agent-stage/
+          retention-days: 30
+          if-no-files-found: error
+          overwrite: false
+      - name: Record immutable staging identity
+        shell: pwsh
+        env:
+          ARTIFACT_ID: "${{ steps.upload.outputs.artifact-id }}"
+          ARTIFACT_DIGEST: "${{ steps.upload.outputs.artifact-digest }}"
+          SOURCE_COMMIT: "${{ inputs.source_commit }}"
+          RELEASE_VERSION: "${{ inputs.version }}"
+        run: |
+          @"
+          run_id=${{ github.run_id }}
+          artifact_id=$env:ARTIFACT_ID
+          artifact_digest=$env:ARTIFACT_DIGEST
+          head_sha=$env:SOURCE_COMMIT
+          version=$env:RELEASE_VERSION
+          retention_days=30
+          "@ | Out-File -Append $env:GITHUB_STEP_SUMMARY

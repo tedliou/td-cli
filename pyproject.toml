@@ -1,0 +1,51 @@
+[project]
+name = "touchdesigner-cli"
+version = "0.1.0"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  "fastapi>=0.116,<1",
+  "pydantic>=2.11,<3",
+  "python-socketio>=5.13,<6",
+  "typer>=0.16,<1",
+  "uvicorn>=0.35,<1",
+]
+
+[project.scripts]
+td = "td_cli.cli:run"
+td-daemon = "td_cli.daemon.cli:app"
+td-agent = "td_cli.agent_tool:app"
+
+[dependency-groups]
+dev = [
+  "aiohttp>=3.12,<4",
+  "httpx>=0.28,<1",
+  "mypy==1.17.1",
+  "pytest>=8.4,<9",
+  "pytest-asyncio>=1,<2",
+  "pyinstaller==6.15.0",
+  "ruff>=0.12,<1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/td_cli"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+
+[tool.ruff.lint.per-file-ignores]
+"agent/*.py" = ["F821", "PLR1711"]
+"tools/td_diagnostic_bridge/bootstrap.py" = ["F821"]
+"tools/td_diagnostic_bridge/core.py" = ["BLE001", "S102"]
