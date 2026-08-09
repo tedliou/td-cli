@@ -27,7 +27,8 @@ def source_revision(source: Path, required_files: list[str]) -> str:
     for name in sorted(["manifest.json", *required_files]):
         digest.update(name.encode("utf-8"))
         digest.update(b"\0")
-        digest.update((source / name).read_bytes())
+        normalized_text = (source / name).read_text(encoding="utf-8")
+        digest.update(normalized_text.encode("utf-8"))
         digest.update(b"\0")
     return digest.hexdigest()
 
