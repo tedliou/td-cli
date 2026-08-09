@@ -645,6 +645,23 @@ def test_network_mutation_failures_roll_back_partial_changes() -> None:
     assert target.inputConnectors[0].connections == []
 
 
+def test_accept_omits_optional_nulls_from_locked_socketio_payload() -> None:
+    agent = AgentExt(FakeOwner())
+    agent.connection_id = "connection-1"
+    agent.execute_command = lambda _: {
+        "required": True,
+        "optional": None,
+        "nested": {"value": None, "items": [1, None, 2]},
+    }
+
+    event, payload = agent.accept(
+        {"request_id": "wire-safe", "command": {"name": "ops.get", "input": {}}}
+    )
+
+    assert event == "request_result"
+    assert payload["result"] == {"required": True, "nested": {"items": [1, 2]}}
+
+
 def test_agent_rejects_invalid_expression_with_typed_error() -> None:
     root = FakeOperator("/project1")
     root.par.display = FakeParameter(True)
@@ -706,12 +723,13 @@ def test_parameter_list_reports_runtime_names_types_and_expression_capabilities(
         menuNames=["add", "multiply"],
         menuLabels=["Add", "Multiply"],
     )
+    empty_menu = parameter("empty", "Menu", isMenu=True, menuNames=None, menuLabels=None)
     python_value = parameter("payload", "Python", isPython=True)
     pulse = parameter("reset", "Pulse", isPulse=True)
     hidden = parameter("legacy", "Int", isInt=True, hidden=True)
     custom = parameter("Customvalue", "Str", isString=True, mode="expression")
     custom.expr = "'hello'"
-    root.builtinPars = [gain, menu, python_value, pulse, hidden]
+    root.builtinPars = [gain, menu, empty_menu, python_value, pulse, hidden]
     root.customPars = [custom]
 
     result = make_control(lambda _: root).execute(
@@ -726,6 +744,9 @@ def test_parameter_list_reports_runtime_names_types_and_expression_capabilities(
     }
     assert items["operation"]["menu_names"] == ["add", "multiply"]
     assert items["operation"]["menu_labels"] == ["Add", "Multiply"]
+    assert items["operation"]["expression"]["source"] is None
+    assert items["empty"]["menu_names"] == []
+    assert items["empty"]["menu_labels"] == []
     assert items["payload"]["constant_supported"] is False
     assert items["payload"]["expression_supported"] is False
     assert items["reset"]["pulse_supported"] is True

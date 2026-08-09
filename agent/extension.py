@@ -175,6 +175,7 @@ class OperatorControl:
         pulse_supported = not read_only and value_kind == "pulse"
         page = getattr(parameter, "page", None)
         menu = value_kind == "menu"
+        expression_source = getattr(parameter, "expr", None)
         return {
             "name": str(parameter.name),
             "label": str(parameter.label),
@@ -191,12 +192,14 @@ class OperatorControl:
             "pulse_supported": pulse_supported,
             "expression": {
                 "supported": expression_supported,
-                "source": str(getattr(parameter, "expr", "")) if expression_supported else None,
+                "source": str(expression_source)
+                if expression_supported and expression_source not in (None, "")
+                else None,
             },
-            "menu_names": [str(value) for value in getattr(parameter, "menuNames", [])]
+            "menu_names": [str(value) for value in (getattr(parameter, "menuNames", None) or [])]
             if menu
             else None,
-            "menu_labels": [str(value) for value in getattr(parameter, "menuLabels", [])]
+            "menu_labels": [str(value) for value in (getattr(parameter, "menuLabels", None) or [])]
             if menu
             else None,
         }
@@ -568,7 +571,7 @@ class AgentExt:
             "request_id": request_id,
             "instance_id": self.instance_id,
             "connection_id": self.connection_id,
-            "result": command_result,
+            "result": self._wire_value(command_result),
         }
         if len(json.dumps(result, separators=(",", ":")).encode("utf-8")) > self.MAX_RESULT_BYTES:
             self._record_event("command.failed", request_id, "result_too_large")
@@ -576,6 +579,15 @@ class AgentExt:
         self.pending_results[request_id] = result
         self._record_event("command.succeeded", request_id)
         return "request_result", result
+
+    @classmethod
+    def _wire_value(cls, value):
+        """Remove optional nulls that locked SocketIO DAT cannot serialize."""
+        if isinstance(value, dict):
+            return {key: cls._wire_value(item) for key, item in value.items() if item is not None}
+        if isinstance(value, list):
+            return [cls._wire_value(item) for item in value if item is not None]
+        return value
 
     def execute_command(self, command):
         name = command["name"]
