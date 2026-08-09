@@ -4,6 +4,11 @@ __pycache__/
 .ruff_cache/
 *.py[cod]
 *.tox
+*.tox.manifest.json
 dist/
 build/
+
+# Local TouchDesigner development workspace and machine-specific bridge launcher.
+/Sample.toe
+/td-diagnostic-bridge-command.txt
 

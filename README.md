@@ -6,6 +6,45 @@ Parameter control plus bounded project observation, binary export, batch
 execution, project metadata, and event/error observation. It never exposes
 arbitrary Python or remote network control.
 
+## Requirements
+
+- Windows x86-64
+- TouchDesigner `2025.32050`
+
+## Install and first use
+
+Install the latest stable Release from PowerShell. The installer verifies the
+published checksums and adds the executables to your user `PATH`:
+
+```powershell
+irm https://github.com/tedliou/td-cli/releases/latest/download/install.ps1 | iex
+```
+
+Open a new PowerShell window, confirm the installation, then start the Daemon:
+
+```powershell
+td --version
+td-daemon start
+```
+
+Drag
+`%LOCALAPPDATA%\Programs\touchdesigner-cli\current\td-agent.tox` into the
+TouchDesigner project. Once the Agent Component is connected, list the
+Instances, select an Online Instance, and create a supported Operator:
+
+```powershell
+td --json instances list
+td --json --instance <selector> ops create /project1 constantTOP source
+```
+
+Use the same install command to upgrade to the latest stable Release, then
+restart the Daemon. To uninstall the executables while preserving Daemon data
+and TouchDesigner projects:
+
+```powershell
+irm https://github.com/tedliou/td-cli/releases/latest/download/uninstall.ps1 | iex
+```
+
 ## Development
 
 Python 3.11 and [uv](https://docs.astral.sh/uv/) are required.
@@ -54,8 +93,9 @@ validation are performed locally in the locked TouchDesigner environment.
 
 ## Basic network control
 
-List Online Instances and use an explicit Selector whenever more than one is
-available. Protocol v1 can create a bounded set of built-in TOPs, configure
+List the Instances, select an Online Instance, and use an explicit Selector
+whenever more than one is available. Protocol v1 can create a bounded set of
+built-in TOPs, configure
 their Parameters, connect unoccupied same-family connectors, and inspect the
 result:
 
