@@ -100,13 +100,14 @@ Operators, inspect and configure their Parameters, and edit same-family wiring:
 ```powershell
 td --json instances list
 td --json --instance <selector> ops create /project1 constantTOP source --node-x -200
+td --json --instance <selector> ops create /project1 constantTOP replacement --node-x -200 --node-y 150
 td --json --instance <selector> ops create /project1 nullTOP output
 td --json --instance <selector> parameters set /project1/source colorr --number 0.25
 td --json --instance <selector> parameters list /project1/source
 td --json --instance <selector> ops connect /project1/source /project1/output
 td --json --instance <selector> ops rename /project1/output renamed_output
-td --json --instance <selector> ops connect /project1/source /project1/renamed_output --replace
-td --json --instance <selector> ops disconnect /project1/source /project1/renamed_output
+td --json --instance <selector> ops connect /project1/replacement /project1/renamed_output --replace
+td --json --instance <selector> ops disconnect /project1/replacement /project1/renamed_output
 td --json --instance <selector> ops children /project1 --op-type constantTOP
 td --json --instance <selector> parameters get /project1/source colorr
 ```
@@ -114,8 +115,10 @@ td --json --instance <selector> parameters get /project1/source colorr
 The locked TouchDesigner 2025.32050 catalog covers 680 built-in types across all
 seven Operator families: 478 are supported by default, 165 side-effect or
 environment-dependent types require `ops create --allow-conditional`, 37 are
-unsupported, and none remain unknown. The machine-readable details and failure
-evidence are in
+unsupported, and none of those locked built-ins remain unknown. Custom,
+third-party, and later-build OP types are outside this inventory and are
+rejected as unknown until a matching locked-build probe classifies them. The
+machine-readable details and failure evidence are in
 [`agent/touchdesigner-2025.32050-operators.json`](agent/touchdesigner-2025.32050-operators.json).
 
 Unsupported types are: `audioenvelopeCHOP`, `audiomixCHOP`,
