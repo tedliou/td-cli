@@ -68,6 +68,9 @@ def build(source_dir, output_path, source_revision):
     socket_dat.par.maxlines = 100
     socket_dat.inputConnectors[1].connect(events)
     socket_dat.inputConnectors[3].connect(auth)
+    generated_callbacks = agent.op(f"{socket_dat.name}_callbacks")
+    if generated_callbacks and generated_callbacks != callbacks_dat:
+        generated_callbacks.destroy()
 
     activate_agent_runtime(agent, extension_dat, heartbeat_dat, socket_dat, auth)
     agent.save(str(output))
