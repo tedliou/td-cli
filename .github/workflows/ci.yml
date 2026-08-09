@@ -47,9 +47,11 @@ jobs:
             if ($status.status -ne 'running' -or $status.protocol_versions -notcontains 1) {
               throw 'Frozen Daemon lifecycle smoke failed'
             }
-            & "$env:GITHUB_WORKSPACE/dist/td-daemon.exe" stop
           }
-          finally { Pop-Location }
+          finally {
+            & "$env:GITHUB_WORKSPACE/dist/td-daemon.exe" stop
+            Pop-Location
+          }
 
   promotion-policy:
     if: github.base_ref == 'main'
