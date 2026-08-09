@@ -157,3 +157,12 @@ def test_recognizable_json_parser_failure_uses_protocol_envelope(monkeypatch, ca
     assert stopped.value.code == 2
     assert json.loads(captured.out)["error"]["code"] == "invalid_arguments"
     assert "No such option: --json" in captured.err
+
+
+def test_instance_option_is_rejected_for_queries(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+
+    result = CliRunner().invoke(cli.app, ["--json", "--instance", "8cf8", "instances", "list"])
+
+    assert result.exit_code == 2
+    assert json.loads(result.stdout)["error"]["code"] == "invalid_arguments"

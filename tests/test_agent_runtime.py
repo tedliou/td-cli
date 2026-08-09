@@ -161,3 +161,37 @@ def test_agent_advertises_and_executes_all_five_typed_commands() -> None:
         }
     ) == {"operator_path": "/project1", "parameter": "reset", "pulsed": True}
     assert root.par.reset.pulses == 1
+
+
+def test_agent_rejects_invalid_expression_and_oversized_result_with_typed_errors() -> None:
+    root = FakeOperator("/project1")
+    root.par.display = FakeParameter(True)
+    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: root)
+    agent.connection_id = "connection-1"
+
+    invalid_event, invalid = agent.accept(
+        {
+            "request_id": "invalid-expression",
+            "command": {
+                "name": "parameters.set",
+                "input": {
+                    "operator_path": "/project1",
+                    "parameter": "display",
+                    "mode": "expression",
+                    "value": ")",
+                },
+            },
+        }
+    )
+    assert invalid_event == "request_rejected"
+    assert invalid["code"] == "expression_invalid"
+
+    agent.MAX_RESULT_BYTES = 1
+    oversized_event, oversized = agent.accept(
+        {
+            "request_id": "oversized-result",
+            "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
+        }
+    )
+    assert oversized_event == "request_rejected"
+    assert oversized["code"] == "result_too_large"

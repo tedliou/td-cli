@@ -18,6 +18,7 @@ class AgentCommandError(Exception):
 
 class AgentExt:
     MAX_UNCONFIRMED_RESULTS = 256
+    MAX_RESULT_BYTES = 256 * 1024
 
     CAPABILITIES = (
         "ops.children",
@@ -79,6 +80,11 @@ class AgentExt:
         try:
             command = request["command"]
             command_result = self.execute_command(command)
+            if (
+                len(json.dumps(command_result, separators=(",", ":")).encode("utf-8"))
+                > self.MAX_RESULT_BYTES
+            ):
+                raise AgentCommandError("result_too_large")
         except AgentCommandError as error:
             return "request_rejected", {"request_id": request_id, "code": error.code}
         except Exception:  # noqa: BLE001 - convert TD runtime failures to a wire error
@@ -114,6 +120,7 @@ class AgentExt:
                 raise AgentCommandError("parameter_read_only")
             try:
                 if payload["mode"] == "expression":
+                    compile(payload["value"], "<parameter-expression>", "eval")
                     parameter.expr = payload["value"]
                 else:
                     parameter.val = payload["value"]

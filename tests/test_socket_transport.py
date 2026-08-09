@@ -469,7 +469,7 @@ async def test_disconnect_marks_in_flight_unknown_and_reconnect_resumes_queue(
 
 
 @pytest.mark.asyncio
-async def test_unadvertised_diagnostic_capability_is_rejected_before_fifo(tmp_path: Path) -> None:
+async def test_unadvertised_command_capability_is_rejected_before_fifo(tmp_path: Path) -> None:
     port = unused_port()
     server = uvicorn.Server(
         uvicorn.Config(

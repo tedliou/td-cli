@@ -1,0 +1,45 @@
+from pathlib import Path
+
+import httpx
+import pytest
+
+from td_cli.client import ClientError, DaemonClient
+
+
+def client(tmp_path: Path) -> DaemonClient:
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / "auth.token").write_text("a" * 64, encoding="ascii")
+    return DaemonClient(timeout=1, root=tmp_path)
+
+
+def test_read_only_query_retries_with_fixed_backoffs(tmp_path: Path, monkeypatch) -> None:
+    attempts = 0
+    sleeps = []
+
+    def request(*args, **kwargs):
+        nonlocal attempts
+        del args, kwargs
+        attempts += 1
+        if attempts < 3:
+            raise httpx.ConnectError("not ready")
+        return httpx.Response(200, json=[])
+
+    monkeypatch.setattr(httpx, "request", request)
+    monkeypatch.setattr("td_cli.client.time.sleep", sleeps.append)
+
+    assert client(tmp_path).instances() == []
+    assert attempts == 3
+    assert sleeps == [0.1, 0.3]
+
+
+def test_command_transport_failure_preserves_known_request_id(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        httpx, "request", lambda *args, **kwargs: (_ for _ in ()).throw(httpx.ConnectError("down"))
+    )
+
+    with pytest.raises(ClientError) as caught:
+        client(tmp_path).submit("request-7", "instance-1", {"name": "ops.get", "input": {}})
+
+    assert caught.value.code == "daemon_unavailable"
+    assert caught.value.details == {"request_id": "request-7"}

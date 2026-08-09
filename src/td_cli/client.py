@@ -32,25 +32,49 @@ class DaemonClient:
         return {"Authorization": f"Bearer {token}"}
 
     def request(self, method: str, path: str, *, json: object = None) -> Any:
-        try:
-            response = httpx.request(
-                method,
-                f"{self.endpoint}{path}",
-                headers=self._headers(),
-                json=json,
-                timeout=self.timeout,
-            )
-        except (OSError, RuntimeError, httpx.HTTPError) as error:
-            raise ClientError("daemon_unavailable") from error
+        deadline = time.monotonic() + self.timeout
+        backoffs = (0.0, 0.1, 0.3) if method == "GET" else (0.0,)
+        response = None
+        last_error: Exception | None = None
+        for backoff in backoffs:
+            if backoff:
+                remaining = deadline - time.monotonic()
+                if remaining <= backoff:
+                    break
+                time.sleep(backoff)
+            try:
+                response = httpx.request(
+                    method,
+                    f"{self.endpoint}{path}",
+                    headers=self._headers(),
+                    json=json,
+                    timeout=max(0.001, deadline - time.monotonic()),
+                )
+                break
+            except (OSError, RuntimeError, httpx.HTTPError) as error:
+                last_error = error
+        if response is None:
+            raise ClientError("daemon_unavailable") from last_error
         if response.status_code >= 400:
             detail = response.json().get("detail", "transport_error")
             if isinstance(detail, list):
                 detail = "invalid_arguments"
+            if detail == "Not Found":
+                detail = "daemon_unavailable"
             raise ClientError(str(detail))
         return response.json()
 
+    def health(self) -> dict[str, Any]:
+        payload = self.request("GET", "/v1/health")
+        if 1 not in payload.get("protocol_versions", []):
+            raise ClientError("protocol_incompatible")
+        return payload
+
     def instances(self) -> list[dict[str, Any]]:
-        return self.request("GET", "/v1/instances")
+        items = self.request("GET", "/v1/instances")
+        if any(item.get("status") not in {"online", "offline", "draining"} for item in items):
+            raise ClientError("protocol_incompatible")
+        return items
 
     def select_instance(self, selector: str | None, *, online_only: bool = True) -> dict[str, Any]:
         instances = self.instances()
@@ -76,14 +100,30 @@ class DaemonClient:
         return instance
 
     def submit(self, request_id: str, instance_id: str, command: dict[str, Any]) -> dict[str, Any]:
-        return self.request(
-            "POST",
-            "/v1/requests",
-            json={"request_id": request_id, "instance_id": instance_id, "command": command},
-        )
+        try:
+            return self.request(
+                "POST",
+                "/v1/requests",
+                json={"request_id": request_id, "instance_id": instance_id, "command": command},
+            )
+        except ClientError as error:
+            error.details.setdefault("request_id", request_id)
+            raise
 
     def get_request(self, request_id: str) -> dict[str, Any]:
-        return self.request("GET", f"/v1/requests/{request_id}")
+        snapshot = self.request("GET", f"/v1/requests/{request_id}")
+        if snapshot.get("status") not in {
+            "queued",
+            "dispatched",
+            "running",
+            "succeeded",
+            "failed",
+            "unknown",
+            "instance_offline",
+            "daemon_shutdown",
+        }:
+            raise ClientError("protocol_incompatible")
+        return snapshot
 
     def wait(self, request_id: str) -> dict[str, Any]:
         deadline = time.monotonic() + self.timeout

@@ -14,10 +14,14 @@ from td_cli.daemon.cli import app as daemon_app
 def test_all_executable_interfaces_report_the_release_version() -> None:
     expected = version("touchdesigner-cli")
 
-    for app in (cli_app, daemon_app, agent_app):
+    for app in (daemon_app, agent_app):
         result = CliRunner().invoke(app, ["--version"])
         assert result.exit_code == 0, result.output
         assert result.stdout.strip() == expected
+
+    result = CliRunner().invoke(cli_app, ["--version"])
+    assert result.exit_code == 0, result.output
+    assert result.stdout.strip() == f"td {expected} (protocol 1)"
 
 
 def test_agent_manifest_uses_the_release_version() -> None:

@@ -12,7 +12,7 @@ import typer
 from pydantic import ValidationError
 from typer._click.exceptions import ClickException, UsageError
 
-from td_cli.cli_support import print_version
+from td_cli import __version__
 from td_cli.client import ClientError, DaemonClient
 from td_cli.protocol import Command
 
@@ -27,11 +27,17 @@ app.add_typer(ops_app, name="ops")
 app.add_typer(parameters_app, name="parameters")
 
 
+def _print_td_version(value: bool) -> None:
+    if value:
+        typer.echo(f"td {__version__} (protocol 1)")
+        raise typer.Exit()
+
+
 @app.callback()
 def main(
     ctx: typer.Context,
     version: Annotated[
-        bool | None, typer.Option("--version", callback=print_version, is_eager=True)
+        bool | None, typer.Option("--version", callback=_print_td_version, is_eager=True)
     ] = None,
     as_json: Annotated[bool, typer.Option("--json")] = False,
     timeout: Annotated[float, typer.Option("--timeout", min=0.1, max=3600)] = 30.0,
@@ -43,6 +49,11 @@ def main(
 
 def _client(ctx: typer.Context) -> DaemonClient:
     return DaemonClient(timeout=float(ctx.obj["timeout"]))
+
+
+def _reject_instance_on_query(ctx: typer.Context) -> None:
+    if ctx.obj["instance"] is not None:
+        raise ClientError("invalid_arguments")
 
 
 def _emit(ctx: typer.Context, data: object, *, request: dict[str, Any] | None = None) -> None:
@@ -107,6 +118,7 @@ def instances_list(
     ctx: typer.Context, status: Annotated[str | None, typer.Option("--status")] = None
 ) -> None:
     def operation() -> None:
+        _reject_instance_on_query(ctx)
         items = _client(ctx).instances()
         if status is not None:
             if status not in {"online", "offline", "draining"}:
@@ -121,22 +133,59 @@ def instances_list(
 def instances_get(
     ctx: typer.Context, selector: Annotated[str | None, typer.Argument()] = None
 ) -> None:
-    _run(ctx, lambda: _emit(ctx, _client(ctx).select_instance(selector, online_only=False)))
+    def operation() -> None:
+        _reject_instance_on_query(ctx)
+        _emit(ctx, _client(ctx).select_instance(selector, online_only=False))
+
+    _run(ctx, operation)
 
 
 @requests_app.command("get")
 def requests_get(ctx: typer.Context, request_id: str) -> None:
-    _run(ctx, lambda: _emit(ctx, _client(ctx).get_request(request_id)))
+    def operation() -> None:
+        _reject_instance_on_query(ctx)
+        _emit(ctx, _client(ctx).get_request(request_id))
+
+    _run(ctx, operation)
 
 
 @requests_app.command("wait")
 def requests_wait(ctx: typer.Context, request_id: str) -> None:
     def operation() -> None:
+        _reject_instance_on_query(ctx)
         snapshot = _client(ctx).wait(request_id)
         if snapshot["status"] != "succeeded":
             error = snapshot.get("error") or {"code": "internal_error"}
             raise ClientError(str(error["code"]), details={"request": snapshot})
         _emit(ctx, snapshot)
+
+    _run(ctx, operation)
+
+
+@app.command("version")
+def version_info(
+    ctx: typer.Context,
+    as_json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    def operation() -> None:
+        _reject_instance_on_query(ctx)
+        daemon_version = None
+        try:
+            daemon_version = _client(ctx).health()["release_version"]
+        except ClientError as error:
+            if error.code not in {"daemon_unavailable", "transport_error"}:
+                raise
+        data = {
+            "release_version": __version__,
+            "protocol_versions": [1],
+            "daemon_release_version": daemon_version,
+        }
+        original = ctx.obj["json"]
+        ctx.obj["json"] = original or as_json
+        try:
+            _emit(ctx, data)
+        finally:
+            ctx.obj["json"] = original
 
     _run(ctx, operation)
 
@@ -243,6 +292,8 @@ def ops_children(
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
     request_id: Annotated[str | None, typer.Option("--request-id")] = None,
 ) -> None:
+    if op_type is not None and operator_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
     dedicated = (
         {"operator_path": operator_path, "op_type": op_type} if operator_path is not None else None
     )
@@ -259,6 +310,8 @@ def parameters_get(
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
     request_id: Annotated[str | None, typer.Option("--request-id")] = None,
 ) -> None:
+    if (operator_path is None) != (parameter is None):
+        _fail(ctx, ClientError("invalid_arguments"))
     dedicated = (
         {"operator_path": operator_path, "parameter": parameter}
         if operator_path is not None and parameter is not None
@@ -277,6 +330,8 @@ def parameters_pulse(
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
     request_id: Annotated[str | None, typer.Option("--request-id")] = None,
 ) -> None:
+    if (operator_path is None) != (parameter is None):
+        _fail(ctx, ClientError("invalid_arguments"))
     dedicated = (
         {"operator_path": operator_path, "parameter": parameter}
         if operator_path is not None and parameter is not None
@@ -300,6 +355,10 @@ def parameters_set(
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
     request_id: Annotated[str | None, typer.Option("--request-id")] = None,
 ) -> None:
+    any_value_option = any(
+        value is not None for value in (bool_value, integer, number, string, expression)
+    )
+    any_dedicated = operator_path is not None or parameter is not None or any_value_option
     values = [("constant", value) for value in (integer, number, string) if value is not None]
     if bool_value is not None:
         if bool_value not in {"true", "false"}:
@@ -307,6 +366,8 @@ def parameters_set(
         values.append(("constant", bool_value == "true"))
     if expression is not None:
         values.append(("expression", expression))
+    if any_dedicated and (operator_path is None or parameter is None or len(values) != 1):
+        _fail(ctx, ClientError("invalid_arguments"))
     dedicated = None
     if operator_path is not None and parameter is not None and len(values) == 1:
         mode, value = values[0]
