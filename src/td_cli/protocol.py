@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from enum import StrEnum
 from typing import Any, Literal
 
@@ -33,6 +34,33 @@ class OperatorInput(StrictModel):
 
 class ChildrenInput(OperatorInput):
     op_type: str | None = None
+
+
+class CreateOperatorInput(StrictModel):
+    parent_path: str
+    op_type: Literal["constantTOP", "noiseTOP", "levelTOP", "nullTOP"]
+    name: str
+    node_x: int = Field(default=0, ge=-32768, le=32767)
+    node_y: int = Field(default=0, ge=-32768, le=32767)
+
+    _parent_path = field_validator("parent_path")(_valid_operator_path)
+
+    @field_validator("name")
+    @classmethod
+    def name_is_safe_and_exact(cls, value: str) -> str:
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", value) is None:
+            raise ValueError("name must be a safe exact Operator name")
+        return value
+
+
+class ConnectOperatorsInput(StrictModel):
+    source_path: str
+    target_path: str
+    output_index: int = Field(default=0, ge=0, le=255)
+    input_index: int = Field(default=0, ge=0, le=255)
+
+    _source_path = field_validator("source_path")(_valid_operator_path)
+    _target_path = field_validator("target_path")(_valid_operator_path)
 
 
 class ParameterInput(OperatorInput):
@@ -111,6 +139,8 @@ class BatchExecuteInput(StrictModel):
 
 COMMAND_INPUTS: dict[str, type[StrictModel]] = {
     **TYPED_COMMAND_INPUTS,
+    "ops.create": CreateOperatorInput,
+    "ops.connect": ConnectOperatorsInput,
     "project.snapshot": SnapshotInput,
     "project.metadata": ProjectMetadataInput,
     "binary.export": BinaryExportInput,
@@ -122,6 +152,8 @@ COMMAND_INPUTS: dict[str, type[StrictModel]] = {
 CommandInput = (
     OperatorInput
     | ChildrenInput
+    | CreateOperatorInput
+    | ConnectOperatorsInput
     | ParameterInput
     | SetParameterInput
     | SnapshotInput
@@ -136,6 +168,8 @@ class Command(StrictModel):
     name: Literal[
         "ops.get",
         "ops.children",
+        "ops.create",
+        "ops.connect",
         "parameters.get",
         "parameters.set",
         "parameters.pulse",

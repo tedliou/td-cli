@@ -16,7 +16,9 @@ AgentExt = module.AgentExt
 def isolated_touchdesigner_runtime():
     original_session = builtins._td_cli_runtime_session_id
     original_state = getattr(builtins, "_td_cli_agent_state", None)
+    original_app = getattr(builtins, "app", None)
     builtins._td_cli_runtime_session_id = str(uuid.uuid4())
+    builtins.app = SimpleNamespace(build="2025.32050")
     if hasattr(builtins, "_td_cli_agent_state"):
         del builtins._td_cli_agent_state
     try:
@@ -28,6 +30,11 @@ def isolated_touchdesigner_runtime():
                 del builtins._td_cli_agent_state
         else:
             builtins._td_cli_agent_state = original_state
+        if original_app is None:
+            if hasattr(builtins, "app"):
+                del builtins.app
+        else:
+            builtins.app = original_app
 
 
 class FakeOwner:
@@ -57,14 +64,47 @@ class FakeParameter:
         self.pulses += 1
 
 
+class FakeConnector:
+    def __init__(self, owner, index: int, *, is_input: bool) -> None:
+        self.owner = owner
+        self.index = index
+        self.isInput = is_input
+        self.isOutput = not is_input
+        self.connections = []
+
+    def connect(self, target) -> None:
+        self.connections.append(target)
+        target.connections.append(FakeConnector(self.owner, self.index, is_input=False))
+
+    def disconnect(self) -> None:
+        self.connections.clear()
+
+
 class FakeOperator:
-    def __init__(self, path: str, *, op_type="base", family="COMP") -> None:
+    def __init__(
+        self, path: str, *, op_type="base", family="COMP", inputs: int = 0, outputs: int = 0
+    ) -> None:
         self.path = path
         self.name = path.rsplit("/", 1)[-1]
         self.OPType = op_type
         self.family = family
         self.children = []
         self.par = SimpleNamespace()
+        self.nodeX = 0
+        self.nodeY = 0
+        self.inputConnectors = [
+            FakeConnector(self, index, is_input=True) for index in range(inputs)
+        ]
+        self.outputConnectors = [
+            FakeConnector(self, index, is_input=False) for index in range(outputs)
+        ]
+
+    def create(self, op_type: str, name: str):
+        created = FakeOperator(f"{self.path}/{name}", op_type=op_type, family="TOP", outputs=1)
+        if op_type != "constantTOP":
+            created.inputConnectors = [FakeConnector(created, 0, is_input=True)]
+        self.children.append(created)
+        return created
 
     def saveByteArray(self, *_):
         return bytearray(b"TD-BINARY")
@@ -85,6 +125,12 @@ def test_extension_reload_preserves_instance_identity_and_unconfirmed_results() 
     reloaded = AgentExt(owner)
     assert reloaded.instance_id == first.instance_id
     assert reloaded.pending_results == {"request": {"result": "pending"}}
+
+
+def test_extension_rejects_missing_touchdesigner_build() -> None:
+    del builtins.app
+    with pytest.raises(RuntimeError, match="app build"):
+        AgentExt(FakeOwner())
 
 
 def test_new_touchdesigner_runtime_session_creates_new_instance_identity() -> None:
@@ -125,7 +171,7 @@ def test_phase_2_runtime_state_is_migrated_without_changing_instance_identity() 
     assert upgraded.events == [{"id": 1, "kind": "command.succeeded", "request_id": "request-1"}]
 
 
-def test_agent_advertises_and_executes_all_five_typed_commands() -> None:
+def test_agent_advertises_and_executes_all_typed_commands() -> None:
     root = FakeOperator("/project1")
     child_b = FakeOperator("/project1/z", op_type="null")
     child_a = FakeOperator("/project1/a", op_type="base")
@@ -135,8 +181,11 @@ def test_agent_advertises_and_executes_all_five_typed_commands() -> None:
     operators = {item.path: item for item in (root, child_a, child_b)}
     agent = AgentExt(FakeOwner(), operator_lookup=operators.get)
 
+    assert agent.registration_payload()["td_build"] == "2025.32050"
     assert agent.registration_payload()["capabilities"] == [
         "ops.children",
+        "ops.connect",
+        "ops.create",
         "ops.get",
         "parameters.get",
         "parameters.pulse",
@@ -189,6 +238,169 @@ def test_agent_advertises_and_executes_all_five_typed_commands() -> None:
         }
     ) == {"operator_path": "/project1", "parameter": "reset", "pulsed": True}
     assert root.par.reset.pulses == 1
+
+
+def test_agent_creates_and_connects_a_bounded_basic_network() -> None:
+    parent = FakeOperator("/project1")
+    operators = {parent.path: parent}
+
+    def lookup(path: str):
+        for child in parent.children:
+            operators[child.path] = child
+        return operators.get(path)
+
+    agent = AgentExt(FakeOwner(), operator_lookup=lookup)
+    created = agent.execute_command(
+        {
+            "name": "ops.create",
+            "input": {
+                "parent_path": "/project1",
+                "op_type": "constantTOP",
+                "name": "source",
+                "node_x": -100,
+                "node_y": 25,
+            },
+        }
+    )
+    agent.execute_command(
+        {
+            "name": "ops.create",
+            "input": {
+                "parent_path": "/project1",
+                "op_type": "nullTOP",
+                "name": "output",
+                "node_x": 100,
+                "node_y": 25,
+            },
+        }
+    )
+    connected = agent.execute_command(
+        {
+            "name": "ops.connect",
+            "input": {
+                "source_path": "/project1/source",
+                "target_path": "/project1/output",
+                "output_index": 0,
+                "input_index": 0,
+            },
+        }
+    )
+
+    assert created == {
+        "path": "/project1/source",
+        "name": "source",
+        "op_type": "constantTOP",
+        "family": "TOP",
+    }
+    assert operators["/project1/source"].nodeX == -100
+    assert operators["/project1/source"].nodeY == 25
+    assert connected == {
+        "source_path": "/project1/source",
+        "target_path": "/project1/output",
+        "output_index": 0,
+        "input_index": 0,
+        "connected": True,
+    }
+    connection = operators["/project1/output"].inputConnectors[0].connections[0]
+    assert (connection.owner.path, connection.index, connection.isOutput) == (
+        "/project1/source",
+        0,
+        True,
+    )
+
+    with pytest.raises(module.AgentCommandError, match="operator_already_exists"):
+        agent.execute_command(
+            {
+                "name": "ops.create",
+                "input": {
+                    "parent_path": "/project1",
+                    "op_type": "constantTOP",
+                    "name": "source",
+                    "node_x": 0,
+                    "node_y": 0,
+                },
+            }
+        )
+
+    with pytest.raises(module.AgentCommandError, match="connector_occupied"):
+        agent.execute_command(
+            {
+                "name": "ops.connect",
+                "input": {
+                    "source_path": "/project1/source",
+                    "target_path": "/project1/output",
+                    "output_index": 0,
+                    "input_index": 0,
+                },
+            }
+        )
+
+
+def test_network_mutation_failures_roll_back_partial_changes() -> None:
+    parent = FakeOperator("/project1")
+
+    class FailingCreated:
+        path = "/project1/failing"
+        name = "failing"
+        family = "TOP"
+        OPType = "constantTOP"
+        destroyed = False
+
+        @property
+        def nodeX(self):
+            return 0
+
+        @nodeX.setter
+        def nodeX(self, value):
+            del value
+            raise RuntimeError("position rejected")
+
+        def destroy(self) -> None:
+            self.destroyed = True
+
+    partial = FailingCreated()
+    parent.create = lambda op_type, name: partial
+    operators = {parent.path: parent}
+    agent = AgentExt(FakeOwner(), operator_lookup=operators.get)
+
+    with pytest.raises(module.AgentCommandError, match="operator_create_failed"):
+        agent.execute_command(
+            {
+                "name": "ops.create",
+                "input": {
+                    "parent_path": "/project1",
+                    "op_type": "constantTOP",
+                    "name": "failing",
+                    "node_x": 1,
+                    "node_y": 2,
+                },
+            }
+        )
+    assert partial.destroyed is True
+
+    source = FakeOperator("/project1/source", family="TOP", outputs=1)
+    target = FakeOperator("/project1/target", family="TOP", inputs=1)
+
+    def connect_with_wrong_wrapper(target_connector) -> None:
+        wrong_owner = FakeOperator("/project1/wrong", family="TOP")
+        target_connector.connections.append(FakeConnector(wrong_owner, 0, is_input=False))
+
+    source.outputConnectors[0].connect = connect_with_wrong_wrapper
+    operators.update({source.path: source, target.path: target})
+
+    with pytest.raises(module.AgentCommandError, match="connector_connect_failed"):
+        agent.execute_command(
+            {
+                "name": "ops.connect",
+                "input": {
+                    "source_path": source.path,
+                    "target_path": target.path,
+                    "output_index": 0,
+                    "input_index": 0,
+                },
+            }
+        )
+    assert target.inputConnectors[0].connections == []
 
 
 def test_agent_rejects_invalid_expression_and_oversized_result_with_typed_errors() -> None:

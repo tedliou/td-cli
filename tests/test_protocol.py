@@ -160,3 +160,92 @@ def test_phase_3_commands_are_strict_and_bounded() -> None:
                 "input": {"commands": [{"name": "batch.execute", "input": {}}]},
             }
         )
+
+
+def test_network_mutation_commands_are_strict_bounded_and_not_batchable() -> None:
+    created = Command.model_validate(
+        {
+            "name": "ops.create",
+            "input": {
+                "parent_path": "/project1",
+                "op_type": "constantTOP",
+                "name": "source",
+                "node_x": -100,
+                "node_y": 25,
+            },
+        }
+    )
+    assert created.input.model_dump() == {
+        "parent_path": "/project1",
+        "op_type": "constantTOP",
+        "name": "source",
+        "node_x": -100,
+        "node_y": 25,
+    }
+    connected = Command.model_validate(
+        {
+            "name": "ops.connect",
+            "input": {
+                "source_path": "/project1/source",
+                "target_path": "/project1/output",
+            },
+        }
+    )
+    assert connected.input.model_dump() == {
+        "source_path": "/project1/source",
+        "target_path": "/project1/output",
+        "output_index": 0,
+        "input_index": 0,
+    }
+
+    invalid = [
+        {
+            "name": "ops.create",
+            "input": {
+                "parent_path": "/project1",
+                "op_type": "fileinTOP",
+                "name": "source",
+                "node_x": 0,
+                "node_y": 0,
+            },
+        },
+        {
+            "name": "ops.create",
+            "input": {
+                "parent_path": "/project1",
+                "op_type": "constantTOP",
+                "name": "bad/name",
+                "node_x": 0,
+                "node_y": 0,
+            },
+        },
+        {
+            "name": "ops.connect",
+            "input": {
+                "source_path": "/project1/source",
+                "target_path": "/project1/output",
+                "output_index": 256,
+                "input_index": 0,
+            },
+        },
+        {
+            "name": "batch.execute",
+            "input": {
+                "commands": [
+                    {
+                        "name": "ops.create",
+                        "input": {
+                            "parent_path": "/project1",
+                            "op_type": "constantTOP",
+                            "name": "source",
+                            "node_x": 0,
+                            "node_y": 0,
+                        },
+                    }
+                ]
+            },
+        },
+    ]
+    for payload in invalid:
+        with pytest.raises(ValidationError):
+            Command.model_validate(payload)

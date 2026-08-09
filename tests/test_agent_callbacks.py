@@ -30,6 +30,9 @@ class FakeAgentExtension:
     def begin_draining(self) -> None:
         self.draining = True
 
+    def end_draining(self) -> None:
+        self.draining = False
+
 
 class FakeSocket:
     def __init__(self) -> None:
@@ -57,6 +60,7 @@ def test_heartbeat_start_uses_named_extension_object() -> None:
 
 def test_socket_open_uses_named_extension_object() -> None:
     extension = FakeAgentExtension()
+    extension.draining = True
     component = SimpleNamespace(ext=SimpleNamespace(Agent=extension), extensions=[extension])
     socket = FakeSocket()
     callbacks = run_path(
@@ -67,6 +71,7 @@ def test_socket_open_uses_named_extension_object() -> None:
     callbacks["onOpen"](socket)
 
     assert socket.emitted == [("register", {"instance_id": "instance-1"})]
+    assert extension.draining is False
     assert not hasattr(component, "Agent")
 
 
@@ -162,9 +167,14 @@ def test_orderly_draining_uses_locked_runtime_emit_contract() -> None:
     extension.pending_results.clear()
     component = SimpleNamespace(ext=SimpleNamespace(Agent=extension), extensions=[extension])
     socket = FakeSocket()
+    scheduled = []
+
+    def schedule(script, dat, **options) -> None:
+        scheduled.append((script, dat, options))
+
     callbacks = run_path(
         str(Path("agent/socket_callbacks.py")),
-        init_globals={"parent": lambda: component},
+        init_globals={"parent": lambda: component, "run": schedule, "me": object()},
     )
 
     callbacks["onReceiveEvent"](
@@ -186,3 +196,10 @@ def test_orderly_draining_uses_locked_runtime_emit_contract() -> None:
         ),
     ]
     assert socket.par.active is False
+    assert len(scheduled) == 1
+    assert scheduled[0][0] == "op('socket_callbacks').module.resumeAfterDraining(args[0])"
+    assert scheduled[0][2]["delayMilliSeconds"] == 1500
+
+    callbacks["resumeAfterDraining"](socket)
+    assert socket.par.active is True
+    assert extension.draining is True

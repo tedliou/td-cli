@@ -51,3 +51,26 @@ Artifact inspection requires the adjacent
 the artifact to the canonical source revision, TouchDesigner `2025.32050`, and
 the required DAT/operator topology. Actual `.tox` creation and Online Instance
 validation are performed locally in the locked TouchDesigner environment.
+
+## Basic network control
+
+List Online Instances and use an explicit Selector whenever more than one is
+available. Protocol v1 can create a bounded set of built-in TOPs, configure
+their Parameters, connect unoccupied same-family connectors, and inspect the
+result:
+
+```powershell
+td --json instances list
+td --json --instance <selector> ops create /project1 constantTOP source --node-x -200
+td --json --instance <selector> ops create /project1 nullTOP output
+td --json --instance <selector> parameters set /project1/source colorr --number 0.25
+td --json --instance <selector> ops connect /project1/source /project1/output
+td --json --instance <selector> ops children /project1 --op-type constantTOP
+td --json --instance <selector> parameters get /project1/source colorr
+```
+
+`ops.create` accepts only `constantTOP`, `noiseTOP`, `levelTOP`, and `nullTOP`.
+It rejects name collisions instead of accepting TouchDesigner's automatic
+renaming. `ops.connect` rejects family mismatch, missing connector indices, and
+occupied inputs instead of silently rewiring an existing network. Neither
+Command is allowed inside `batch.execute`.

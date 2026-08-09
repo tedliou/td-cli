@@ -19,7 +19,7 @@ def _write_agent_stage(root: Path, *, source_commit: str = "a" * 40) -> None:
     tox = root / "td-agent.tox"
     tox.write_bytes(b"tox")
     manifest = {
-        "agent_version": "0.1.0.dev0",
+        "agent_version": "0.1.0",
         "locked_touchdesigner_version": "2025.32050",
         "source_commit": source_commit,
         "artifact_sha256": hashlib.sha256(b"tox").hexdigest(),
@@ -49,10 +49,10 @@ def test_release_packaging_creates_the_four_root_layouts_and_sorted_checksums(
     } == first_digests
 
     assert [path.name for path in artifacts] == [
-        "td-agent-cli-v0.1.0.dev0-windows-x86_64.zip",
-        "td-agent-component-v0.1.0.dev0-td2025.32050.zip",
-        "td-daemon-v0.1.0.dev0-windows-x86_64.zip",
-        "td-v0.1.0.dev0-windows-x86_64.zip",
+        "td-agent-cli-v0.1.0-windows-x86_64.zip",
+        "td-agent-component-v0.1.0-td2025.32050.zip",
+        "td-daemon-v0.1.0-windows-x86_64.zip",
+        "td-v0.1.0-windows-x86_64.zip",
     ]
     expected_entries = {
         artifacts[0].name: ["td-agent.exe"],
@@ -70,7 +70,7 @@ def test_release_packaging_creates_the_four_root_layouts_and_sorted_checksums(
     assert [line.split("  ")[1] for line in checksum_lines] == sorted(expected_entries)
     assert all(len(line.split("  ")[0]) == 64 for line in checksum_lines)
     assert "__VERSION__" not in (output / "install.ps1").read_text(encoding="utf-8")
-    assert "0.1.0.dev0" in (output / "install.ps1").read_text(encoding="utf-8")
+    assert "0.1.0" in (output / "install.ps1").read_text(encoding="utf-8")
     assert (output / "uninstall.ps1").is_file()
 
 

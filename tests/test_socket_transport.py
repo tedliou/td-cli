@@ -26,8 +26,43 @@ def registration_payload() -> dict[str, object]:
         "instance_id": INSTANCE_ID,
         "protocol_versions": [1],
         "agent_version": "0.1.0",
+        "td_build": "2025.32050",
         "capabilities": ["ops.get"],
     }
+
+
+@pytest.mark.asyncio
+async def test_incompatible_touchdesigner_build_is_rejected(tmp_path: Path) -> None:
+    port = unused_port()
+    server = uvicorn.Server(
+        uvicorn.Config(
+            create_transport_app(tmp_path, token=TOKEN),
+            host="127.0.0.1",
+            port=port,
+            log_level="error",
+        )
+    )
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    while not server.started:
+        await asyncio.sleep(0.01)
+    client = socketio.AsyncClient(reconnection=False)
+    rejected: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
+    client.on("registration_error", lambda data: rejected.set_result(data))
+    try:
+        await client.connect(f"http://127.0.0.1:{port}", auth={"token": TOKEN})
+        await client.emit("register", {**registration_payload(), "td_build": "2025.99999"})
+        assert await asyncio.wait_for(rejected, 2) == {"code": "protocol_incompatible"}
+        for _ in range(100):
+            if not client.connected:
+                break
+            await asyncio.sleep(0.01)
+        assert client.connected is False
+    finally:
+        if client.connected:
+            await client.disconnect()
+        server.should_exit = True
+        thread.join(timeout=5)
 
 
 @pytest.mark.asyncio

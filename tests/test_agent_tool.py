@@ -12,7 +12,7 @@ def test_canonical_agent_sources_pass_structural_inspection() -> None:
     assert result.exit_code == 0, result.output
     report = json.loads(result.stdout)
     assert report == {
-        "agent_version": "0.1.0.dev0",
+        "agent_version": "0.1.0",
         "locked_touchdesigner_version": "2025.32050",
         "protocol_versions": [1],
         "required_files": [
@@ -29,7 +29,7 @@ def test_inspection_rejects_source_that_does_not_match_manifest(tmp_path: Path) 
     (tmp_path / "manifest.json").write_text(
         json.dumps(
             {
-                "agent_version": "0.1.0.dev0",
+                "agent_version": "0.1.0",
                 "locked_touchdesigner_version": "2025.32050",
                 "protocol_versions": [1],
                 "required_files": ["missing.py"],

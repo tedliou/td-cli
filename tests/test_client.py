@@ -85,3 +85,27 @@ def test_unknown_parameter_result_enum_is_protocol_incompatible(
         client(tmp_path).get_request("request-1")
 
     assert caught.value.code == "protocol_incompatible"
+
+
+def test_network_mutation_error_remains_typed(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        httpx,
+        "request",
+        lambda *args, **kwargs: httpx.Response(
+            200,
+            json={
+                "request_id": "request-1",
+                "status": "failed",
+                "command": {"name": "ops.connect", "input": {}},
+                "result": None,
+                "error": {
+                    "code": "connector_occupied",
+                    "message": "connector_occupied",
+                    "details": {},
+                    "retryable": False,
+                },
+            },
+        ),
+    )
+
+    assert client(tmp_path).get_request("request-1")["error"]["code"] == "connector_occupied"

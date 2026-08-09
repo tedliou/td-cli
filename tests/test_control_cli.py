@@ -99,6 +99,42 @@ def test_parameters_set_bool_consumes_an_explicit_boolean_value(monkeypatch) -> 
     ("argv", "expected"),
     [
         (
+            [
+                "--json",
+                "ops",
+                "create",
+                "/project1",
+                "constantTOP",
+                "source",
+                "--node-x",
+                "-100",
+                "--node-y",
+                "25",
+            ],
+            {
+                "name": "ops.create",
+                "input": {
+                    "parent_path": "/project1",
+                    "op_type": "constantTOP",
+                    "name": "source",
+                    "node_x": -100,
+                    "node_y": 25,
+                },
+            },
+        ),
+        (
+            ["--json", "ops", "connect", "/project1/source", "/project1/output"],
+            {
+                "name": "ops.connect",
+                "input": {
+                    "source_path": "/project1/source",
+                    "target_path": "/project1/output",
+                    "output_index": 0,
+                    "input_index": 0,
+                },
+            },
+        ),
+        (
             ["--json", "ops", "children", "/project1", "--op-type", "base"],
             {"name": "ops.children", "input": {"operator_path": "/project1", "op_type": "base"}},
         ),
