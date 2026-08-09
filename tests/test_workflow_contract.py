@@ -18,12 +18,16 @@ def test_release_workflow_gates_publication_on_main_and_remote_digests() -> None
 def test_release_workflow_bootstraps_tag_identity_and_handles_missing_draft() -> None:
     workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
     assert "function Get-ReleaseByTag" in workflow
-    assert "HTTP 404" in workflow
+    assert "gh release list --limit 100 --json tagName" in workflow
+    assert "releases/tags/$Tag" not in workflow
+    assert "gh release view $Tag --json databaseId" in workflow
+    assert "releases/$($summary.databaseId)" in workflow
     assert "git config user.name 'github-actions[bot]'" in workflow
     assert (
         "git config user.email '41898282+github-actions[bot]@users.noreply.github.com'" in workflow
     )
-    assert "gh auth setup-git" in workflow
+    assert "persist-credentials: true" in workflow
+    assert "gh auth setup-git" not in workflow
     assert workflow.index("git config user.name") < workflow.index("git tag -a")
 
 
