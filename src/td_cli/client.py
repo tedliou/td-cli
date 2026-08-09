@@ -51,8 +51,10 @@ class DaemonClient:
                     timeout=max(0.001, deadline - time.monotonic()),
                 )
                 break
-            except (OSError, RuntimeError, httpx.HTTPError) as error:
+            except httpx.ConnectError as error:
                 last_error = error
+            except (OSError, RuntimeError, httpx.HTTPError) as error:
+                raise ClientError("daemon_unavailable") from error
         if response is None:
             raise ClientError("daemon_unavailable") from last_error
         if response.status_code >= 400:
@@ -72,7 +74,11 @@ class DaemonClient:
 
     def instances(self) -> list[dict[str, Any]]:
         items = self.request("GET", "/v1/instances")
-        if any(item.get("status") not in {"online", "offline", "draining"} for item in items):
+        if any(
+            item.get("status") not in {"online", "offline", "draining"}
+            or item.get("protocol_version") != 1
+            for item in items
+        ):
             raise ClientError("protocol_incompatible")
         return items
 
@@ -122,6 +128,48 @@ class DaemonClient:
             "instance_offline",
             "daemon_shutdown",
         }:
+            raise ClientError("protocol_incompatible")
+        error = snapshot.get("error")
+        if isinstance(error, dict) and error.get("code") not in {
+            "invalid_arguments",
+            "daemon_unavailable",
+            "transport_error",
+            "protocol_incompatible",
+            "instance_not_found",
+            "instance_selector_ambiguous",
+            "instance_offline",
+            "instance_draining",
+            "instance_busy",
+            "command_unsupported",
+            "request_not_found",
+            "request_id_conflict",
+            "request_rejected",
+            "request_outcome_unknown",
+            "result_buffer_full",
+            "operator_not_found",
+            "result_too_large",
+            "parameter_not_found",
+            "parameter_read_only",
+            "parameter_not_pulseable",
+            "parameter_type_unsupported",
+            "parameter_write_rejected",
+            "expression_invalid",
+            "wait_timeout",
+            "daemon_shutdown",
+            "internal_error",
+        }:
+            raise ClientError("protocol_incompatible")
+        command = snapshot.get("command")
+        result = snapshot.get("result")
+        if (
+            isinstance(command, dict)
+            and command.get("name") in {"parameters.get", "parameters.set"}
+            and isinstance(result, dict)
+            and (
+                result.get("mode") not in {"constant", "expression"}
+                or result.get("value_type") not in {"boolean", "integer", "number", "string"}
+            )
+        ):
             raise ClientError("protocol_incompatible")
         return snapshot
 

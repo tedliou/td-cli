@@ -43,3 +43,45 @@ def test_command_transport_failure_preserves_known_request_id(tmp_path: Path, mo
 
     assert caught.value.code == "daemon_unavailable"
     assert caught.value.details == {"request_id": "request-7"}
+
+
+def test_read_timeout_is_not_retried(tmp_path: Path, monkeypatch) -> None:
+    attempts = 0
+
+    def request(*args, **kwargs):
+        nonlocal attempts
+        del args, kwargs
+        attempts += 1
+        raise httpx.ReadTimeout("response stalled")
+
+    monkeypatch.setattr(httpx, "request", request)
+
+    with pytest.raises(ClientError) as caught:
+        client(tmp_path).instances()
+
+    assert caught.value.code == "daemon_unavailable"
+    assert attempts == 1
+
+
+def test_unknown_parameter_result_enum_is_protocol_incompatible(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        httpx,
+        "request",
+        lambda *args, **kwargs: httpx.Response(
+            200,
+            json={
+                "request_id": "request-1",
+                "status": "succeeded",
+                "command": {"name": "parameters.get", "input": {}},
+                "result": {"mode": "future", "value_type": "future"},
+                "error": None,
+            },
+        ),
+    )
+
+    with pytest.raises(ClientError) as caught:
+        client(tmp_path).get_request("request-1")
+
+    assert caught.value.code == "protocol_incompatible"

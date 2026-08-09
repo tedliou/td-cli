@@ -80,11 +80,6 @@ class AgentExt:
         try:
             command = request["command"]
             command_result = self.execute_command(command)
-            if (
-                len(json.dumps(command_result, separators=(",", ":")).encode("utf-8"))
-                > self.MAX_RESULT_BYTES
-            ):
-                raise AgentCommandError("result_too_large")
         except AgentCommandError as error:
             return "request_rejected", {"request_id": request_id, "code": error.code}
         except Exception:  # noqa: BLE001 - convert TD runtime failures to a wire error
@@ -95,6 +90,8 @@ class AgentExt:
             "connection_id": self.connection_id,
             "result": command_result,
         }
+        if len(json.dumps(result, separators=(",", ":")).encode("utf-8")) > self.MAX_RESULT_BYTES:
+            return "request_rejected", {"request_id": request_id, "code": "result_too_large"}
         self.pending_results[request_id] = result
         return "request_result", result
 
