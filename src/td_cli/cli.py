@@ -316,6 +316,7 @@ def ops_create(
     name: Annotated[str | None, typer.Argument()] = None,
     node_x: Annotated[int | None, typer.Option("--node-x")] = None,
     node_y: Annotated[int | None, typer.Option("--node-y")] = None,
+    allow_conditional: Annotated[bool, typer.Option("--allow-conditional")] = False,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
@@ -326,7 +327,7 @@ def ops_create(
         value is not None for value in identity
     ):
         _fail(ctx, ClientError("invalid_arguments"))
-    if (node_x is not None or node_y is not None) and parent_path is None:
+    if (node_x is not None or node_y is not None or allow_conditional) and parent_path is None:
         _fail(ctx, ClientError("invalid_arguments"))
     dedicated = None
     if parent_path is not None and op_type is not None and name is not None:
@@ -336,6 +337,7 @@ def ops_create(
             "name": name,
             "node_x": node_x or 0,
             "node_y": node_y or 0,
+            "allow_conditional": allow_conditional,
         }
     _command(ctx, "ops.create", dedicated, input, input_file, no_wait, request_id)
 

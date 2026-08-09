@@ -1,7 +1,9 @@
 import builtins
 import importlib.util
+import json
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -13,6 +15,14 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 AgentExt = module.AgentExt
 OperatorControl = module.OperatorControl
+OperatorCatalog = module.OperatorCatalog
+RUNTIME_OPERATOR_CATALOG = OperatorCatalog(
+    json.loads(Path("agent/touchdesigner-2025.32050-operators.json").read_text(encoding="utf-8"))
+)
+
+
+def make_control(operator_lookup):
+    return OperatorControl(operator_lookup, RUNTIME_OPERATOR_CATALOG)
 
 
 @pytest.fixture(autouse=True)
@@ -49,6 +59,13 @@ class FakeOwner:
 
     def store(self, key: str, value: object) -> None:
         self.values[key] = value
+
+    def op(self, name: str):
+        if name != "operator_catalog":
+            return None
+        return SimpleNamespace(
+            text=Path("agent/touchdesigner-2025.32050-operators.json").read_text(encoding="utf-8")
+        )
 
 
 class FakeParameter:
@@ -121,12 +138,9 @@ class FakeOperator:
         return ["sample error"]
 
 
-from types import SimpleNamespace
-
-
 def test_operator_control_is_the_touchdesigner_graph_interface() -> None:
     root = FakeOperator("/project1")
-    control = OperatorControl({root.path: root}.get)
+    control = make_control({root.path: root}.get)
 
     assert control.execute({"name": "ops.get", "input": {"operator_path": root.path}}) == {
         "path": "/project1",
@@ -299,6 +313,7 @@ def test_agent_creates_and_connects_a_bounded_basic_network() -> None:
         "name": "source",
         "op_type": "constantTOP",
         "family": "TOP",
+        "catalog_status": "supported",
     }
     assert operators["/project1/source"].nodeX == -100
     assert operators["/project1/source"].nodeY == 25
@@ -346,6 +361,46 @@ def test_agent_creates_and_connects_a_bounded_basic_network() -> None:
         )
 
 
+def test_agent_create_enforces_embedded_operator_catalog() -> None:
+    parent = FakeOperator("/project1")
+
+    def lookup(path: str):
+        return next(
+            (item for item in [parent, *parent.children] if item.path == path),
+            None,
+        )
+
+    agent = AgentExt(FakeOwner(), operator_lookup=lookup)
+    conditional = {
+        "parent_path": parent.path,
+        "op_type": "videodeviceinTOP",
+        "name": "camera",
+        "node_x": 0,
+        "node_y": 0,
+        "allow_conditional": False,
+    }
+    with pytest.raises(module.AgentCommandError, match="operator_type_conditional"):
+        agent.execute_command({"name": "ops.create", "input": conditional})
+
+    created = agent.execute_command(
+        {"name": "ops.create", "input": {**conditional, "allow_conditional": True}}
+    )
+    assert created["catalog_status"] == "conditional"
+
+    with pytest.raises(module.AgentCommandError, match="operator_type_unsupported"):
+        agent.execute_command(
+            {
+                "name": "ops.create",
+                "input": {
+                    **conditional,
+                    "op_type": "futureTOP",
+                    "name": "future",
+                    "allow_conditional": True,
+                },
+            }
+        )
+
+
 def test_operator_control_renames_exactly_and_rejects_collision() -> None:
     class RenameOperator(FakeOperator):
         def __init__(self, path: str) -> None:
@@ -367,7 +422,7 @@ def test_operator_control_renames_exactly_and_rejects_collision() -> None:
     def lookup(path: str):
         return next((item for item in (operator, occupied) if item.path == path), None)
 
-    control = OperatorControl(lookup)
+    control = make_control(lookup)
     assert control.execute(
         {"name": "ops.rename", "input": {"operator_path": operator.path, "new_name": "renamed"}}
     ) == {
@@ -411,7 +466,7 @@ def test_rename_failure_rolls_back_or_reports_uncertain_state() -> None:
 
     restored = CorrectingOperator(rollback_fails=False)
     with pytest.raises(module.AgentCommandError, match="operator_rename_failed"):
-        OperatorControl(lambda _: restored).execute(
+        make_control(lambda _: restored).execute(
             {
                 "name": "ops.rename",
                 "input": {"operator_path": restored.path, "new_name": "renamed"},
@@ -421,7 +476,7 @@ def test_rename_failure_rolls_back_or_reports_uncertain_state() -> None:
 
     uncertain = CorrectingOperator(rollback_fails=True)
     with pytest.raises(module.AgentCommandError, match="operator_rename_rollback_failed"):
-        OperatorControl(lambda _: uncertain).execute(
+        make_control(lambda _: uncertain).execute(
             {
                 "name": "ops.rename",
                 "input": {"operator_path": uncertain.path, "new_name": "renamed"},
@@ -434,7 +489,7 @@ def test_operator_control_disconnects_exactly_and_replaces_input_connection() ->
     second = FakeOperator("/project1/second", family="TOP", outputs=1)
     target = FakeOperator("/project1/target", family="TOP", inputs=1)
     operators = {item.path: item for item in (first, second, target)}
-    control = OperatorControl(operators.get)
+    control = make_control(operators.get)
     first.outputConnectors[0].connect(target.inputConnectors[0])
 
     with pytest.raises(module.AgentCommandError, match="connection_not_found"):
@@ -493,7 +548,7 @@ def test_replace_failure_restores_previous_connection_or_reports_uncertain_state
     second = FakeOperator("/project1/second", family="TOP", outputs=1)
     target = FakeOperator("/project1/target", family="TOP", inputs=1)
     operators = {item.path: item for item in (first, second, target)}
-    control = OperatorControl(operators.get)
+    control = make_control(operators.get)
     connector = target.inputConnectors[0]
     first.outputConnectors[0].connect(connector)
     input_connect = connector.connect
@@ -659,7 +714,7 @@ def test_parameter_list_reports_runtime_names_types_and_expression_capabilities(
     root.builtinPars = [gain, menu, python_value, pulse, hidden]
     root.customPars = [custom]
 
-    result = OperatorControl(lambda _: root).execute(
+    result = make_control(lambda _: root).execute(
         {"name": "parameters.list", "input": {"operator_path": root.path}}
     )
     items = {item["name"]: item for item in result["parameters"]}
@@ -678,7 +733,7 @@ def test_parameter_list_reports_runtime_names_types_and_expression_capabilities(
     assert items["Customvalue"]["custom"] is True
     assert items["Customvalue"]["mode"] == "expression"
 
-    batch = OperatorControl(lambda _: root)
+    batch = make_control(lambda _: root)
     batch.preflight({"name": "parameters.list", "input": {"operator_path": root.path}})
 
 
@@ -686,7 +741,7 @@ def test_parameter_list_reports_runtime_names_types_and_expression_capabilities(
 def test_parameter_get_reports_non_constant_runtime_modes(mode: str) -> None:
     root = FakeOperator("/project1")
     root.par.driven = FakeParameter(2.5, mode=mode)
-    result = OperatorControl(lambda _: root).execute(
+    result = make_control(lambda _: root).execute(
         {
             "name": "parameters.get",
             "input": {"operator_path": root.path, "parameter": "driven"},

@@ -19,6 +19,25 @@ class AgentCommandError(Exception):
         self.code = code
 
 
+class OperatorCatalog:
+    """Agent-side view of the embedded locked-build create catalog."""
+
+    def __init__(self, manifest):
+        self.touchdesigner_build = str(manifest["touchdesigner_build"])
+        self.entries = {str(entry["op_type"]): entry for entry in manifest["operators"]}
+
+    def require_creatable(self, op_type, allow_conditional=False):
+        entry = self.entries.get(op_type)
+        status = None if entry is None else entry.get("status")
+        if status == "supported":
+            return status
+        if status == "conditional":
+            if allow_conditional:
+                return status
+            raise AgentCommandError("operator_type_conditional")
+        raise AgentCommandError("operator_type_unsupported")
+
+
 class OperatorControl:
     """Execute typed Commands against one TouchDesigner Operator graph."""
 
@@ -35,8 +54,9 @@ class OperatorControl:
         "parameters.set": "_set_parameter",
     }
 
-    def __init__(self, operator_lookup):
+    def __init__(self, operator_lookup, operator_catalog):
         self.operator_lookup = operator_lookup
+        self.operator_catalog = operator_catalog
 
     def execute(self, command):
         name = command["name"]
@@ -219,6 +239,9 @@ class OperatorControl:
             self._preflight_parameter(name, operator, payload, parameter)
 
     def _create_operator(self, payload):
+        catalog_status = self.operator_catalog.require_creatable(
+            payload["op_type"], payload.get("allow_conditional", False)
+        )
         parent = self.operator_lookup(payload["parent_path"])
         if parent is None:
             raise AgentCommandError("operator_not_found")
@@ -240,7 +263,7 @@ class OperatorControl:
         except Exception:  # noqa: BLE001 - TouchDesigner raises tdError subclasses
             self._destroy_operator(created)
             raise AgentCommandError("operator_create_failed")
-        return self._operator_result(created)
+        return {**self._operator_result(created), "catalog_status": catalog_status}
 
     @staticmethod
     def _destroy_operator(operator):
@@ -466,11 +489,20 @@ class AgentExt:
     def __init__(self, owner_comp, operator_lookup=None, project_info=None, app_info=None):
         self.owner_comp = owner_comp
         self.operator_lookup = operator_lookup or (lambda path: op(path))
-        self.operator_control = OperatorControl(self.operator_lookup)
         self.project_info = project_info or getattr(builtins, "project", None)
         self.app_info = app_info or getattr(builtins, "app", None)
         if self.app_info is None or not hasattr(self.app_info, "build"):
             raise RuntimeError("TouchDesigner app build is required")
+        catalog_dat = owner_comp.op("operator_catalog")
+        if catalog_dat is None:
+            raise RuntimeError("Operator catalog DAT is required")
+        try:
+            operator_catalog = OperatorCatalog(json.loads(catalog_dat.text))
+        except (KeyError, TypeError, ValueError) as error:
+            raise RuntimeError("Operator catalog DAT is invalid") from error
+        if operator_catalog.touchdesigner_build != str(self.app_info.build):
+            raise RuntimeError("Operator catalog TouchDesigner build does not match runtime")
+        self.operator_control = OperatorControl(self.operator_lookup, operator_catalog)
         runtime_session_id = builtins._td_cli_runtime_session_id
         state = getattr(builtins, "_td_cli_agent_state", None)
         if state is None or state["runtime_session_id"] != runtime_session_id:

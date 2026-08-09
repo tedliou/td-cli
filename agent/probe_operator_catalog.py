@@ -176,7 +176,7 @@ def _unprobed_entry(op_type, side_effect, notes):
         "builtin_parameters": None,
         "custom_parameters": None,
         "side_effect_class": side_effect,
-        "experimental": False,
+        "experimental": None,
         "create_verified": False,
         "notes": notes,
     }
@@ -224,7 +224,7 @@ def probe_operator_classes(operator_classes, container):
                     "builtin_parameters": len(node.builtinPars),
                     "custom_parameters": len(node.customPars),
                     "side_effect_class": effect,
-                    "experimental": False,
+                    "experimental": None,
                     "create_verified": exact,
                     "notes": notes,
                 }

@@ -9,6 +9,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from td_cli.operator_catalog import OPERATOR_CATALOG
+
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -37,10 +39,11 @@ class ChildrenInput(OperatorInput):
 
 class CreateOperatorInput(StrictModel):
     parent_path: str
-    op_type: Literal["constantTOP", "noiseTOP", "levelTOP", "nullTOP"]
+    op_type: str
     name: str
     node_x: int = Field(default=0, ge=-32768, le=32767)
     node_y: int = Field(default=0, ge=-32768, le=32767)
+    allow_conditional: bool = False
 
     _parent_path = field_validator("parent_path")(_valid_operator_path)
 
@@ -48,6 +51,11 @@ class CreateOperatorInput(StrictModel):
     @classmethod
     def name_is_safe_and_exact(cls, value: str) -> str:
         return _valid_operator_name(value)
+
+    @model_validator(mode="after")
+    def operator_type_is_in_locked_catalog(self) -> CreateOperatorInput:
+        OPERATOR_CATALOG.require_creatable(self.op_type, allow_conditional=self.allow_conditional)
+        return self
 
 
 def _valid_operator_name(value: str) -> str:

@@ -194,6 +194,7 @@ def test_network_mutation_commands_are_strict_bounded_and_not_batchable() -> Non
         "name": "source",
         "node_x": -100,
         "node_y": 25,
+        "allow_conditional": False,
     }
     connected = Command.model_validate(
         {

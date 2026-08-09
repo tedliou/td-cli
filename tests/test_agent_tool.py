@@ -44,6 +44,7 @@ def test_canonical_agent_sources_pass_structural_inspection() -> None:
             "socket_callbacks.py",
             "heartbeat_execute.py",
             "build_td.py",
+            "touchdesigner-2025.32050-operators.json",
         ],
         "valid": True,
     }

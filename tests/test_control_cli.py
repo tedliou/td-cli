@@ -119,6 +119,7 @@ def test_parameters_set_bool_consumes_an_explicit_boolean_value(monkeypatch) -> 
                     "name": "source",
                     "node_x": -100,
                     "node_y": 25,
+                    "allow_conditional": False,
                 },
             },
         ),
@@ -203,6 +204,36 @@ def test_instance_option_is_rejected_for_queries(monkeypatch) -> None:
 
     assert result.exit_code == 2
     assert json.loads(result.stdout)["error"]["code"] == "invalid_arguments"
+
+
+def test_create_conditional_operator_requires_explicit_cli_opt_in(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "--json",
+            "ops",
+            "create",
+            "/project1",
+            "videodeviceinTOP",
+            "camera",
+            "--allow-conditional",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert FakeDaemonClient.submitted == {
+        "name": "ops.create",
+        "input": {
+            "parent_path": "/project1",
+            "op_type": "videodeviceinTOP",
+            "name": "camera",
+            "node_x": 0,
+            "node_y": 0,
+            "allow_conditional": True,
+        },
+    }
 
 
 @pytest.mark.parametrize(

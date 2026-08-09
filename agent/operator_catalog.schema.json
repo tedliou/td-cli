@@ -53,7 +53,7 @@
         "side_effect_class": {
           "enum": ["pure", "device", "file", "network", "process", "loader", "script"]
         },
-        "experimental": {"type": "boolean"},
+        "experimental": {"type": ["boolean", "null"]},
         "create_verified": {"type": "boolean"},
         "notes": {"type": "array", "items": {"type": "string"}}
       }

@@ -93,7 +93,7 @@ def test_probe_records_verified_shape_and_conservative_status() -> None:
         "builtin_parameters": None,
         "custom_parameters": None,
         "side_effect_class": "pure",
-        "experimental": False,
+        "experimental": None,
         "create_verified": False,
         "notes": ["create failed: RuntimeError: cannot create"],
     }
@@ -168,3 +168,4 @@ def test_locked_build_candidate_manifest_has_complete_schema_and_seven_families(
         entry["status"] != "supported" or entry["side_effect_class"] == "pure"
         for entry in operators
     )
+    assert all(entry["experimental"] is None for entry in operators)
