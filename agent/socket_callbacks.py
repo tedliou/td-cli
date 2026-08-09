@@ -2,7 +2,7 @@
 
 
 def onOpen(dat):
-    dat.emit("register", parent().ext.Agent.registration_payload())
+    dat.emit("register", data=parent().ext.Agent.registration_payload())
 
 
 def onReceiveEvent(dat, rowIndex, message, event):
@@ -12,8 +12,8 @@ def onReceiveEvent(dat, rowIndex, message, event):
         agent.connection_id = message["connection_id"]
         for result in agent.pending_results.values():
             result["connection_id"] = agent.connection_id
-            dat.emit("request_result", result)
-        dat.emit("results_replayed", agent.heartbeat_payload())
+            dat.emit("request_result", data=result)
+        dat.emit("results_replayed", data=agent.heartbeat_payload())
     elif event == "request_dispatch":
         envelope = {
             "request_id": message["request_id"],
@@ -22,17 +22,17 @@ def onReceiveEvent(dat, rowIndex, message, event):
         }
         result_event, result = agent.accept(message)
         if result_event == "request_result":
-            dat.emit("request_accepted", envelope)
+            dat.emit("request_accepted", data=envelope)
         else:
             result = {**envelope, **result}
-        dat.emit(result_event, result)
+        dat.emit(result_event, data=result)
     elif event == "result_recorded":
         agent.acknowledge_result(message["request_id"])
         if agent.draining and not agent.pending_results:
             finishDraining(dat)
     elif event == "daemon_draining":
         agent.begin_draining()
-        dat.emit("heartbeat", agent.heartbeat_payload())
+        dat.emit("heartbeat", data=agent.heartbeat_payload())
         if not agent.pending_results:
             finishDraining(dat)
         else:
@@ -53,5 +53,5 @@ def onClose(dat, failure):
 def finishDraining(dat):
     agent = parent().ext.Agent
     if agent.connection_id:
-        dat.emit("unregister", agent.heartbeat_payload())
+        dat.emit("unregister", data=agent.heartbeat_payload())
         dat.par.active = False
