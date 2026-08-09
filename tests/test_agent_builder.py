@@ -223,6 +223,7 @@ def test_canonical_build_removes_unused_generated_socket_callbacks(tmp_path: Pat
         "auth_table",
         "events_table",
         "heartbeat_execute",
+        "operator_catalog",
         "socket_callbacks",
         "socketio1",
     ]

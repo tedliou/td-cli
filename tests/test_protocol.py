@@ -194,6 +194,7 @@ def test_network_mutation_commands_are_strict_bounded_and_not_batchable() -> Non
         "name": "source",
         "node_x": -100,
         "node_y": 25,
+        "allow_conditional": False,
     }
     connected = Command.model_validate(
         {
@@ -209,6 +210,7 @@ def test_network_mutation_commands_are_strict_bounded_and_not_batchable() -> Non
         "target_path": "/project1/output",
         "output_index": 0,
         "input_index": 0,
+        "replace": False,
     }
 
     invalid = [
@@ -262,3 +264,101 @@ def test_network_mutation_commands_are_strict_bounded_and_not_batchable() -> Non
     for payload in invalid:
         with pytest.raises(ValidationError):
             Command.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected_input"),
+    [
+        (
+            {
+                "name": "ops.rename",
+                "input": {"operator_path": "/project1/old", "new_name": "new_name"},
+            },
+            {"operator_path": "/project1/old", "new_name": "new_name"},
+        ),
+        (
+            {
+                "name": "ops.disconnect",
+                "input": {"source_path": "/project1/a", "target_path": "/project1/b"},
+            },
+            {
+                "source_path": "/project1/a",
+                "target_path": "/project1/b",
+                "output_index": 0,
+                "input_index": 0,
+            },
+        ),
+        (
+            {
+                "name": "ops.connect",
+                "input": {
+                    "source_path": "/project1/a",
+                    "target_path": "/project1/b",
+                    "replace": True,
+                },
+            },
+            {
+                "source_path": "/project1/a",
+                "target_path": "/project1/b",
+                "output_index": 0,
+                "input_index": 0,
+                "replace": True,
+            },
+        ),
+        (
+            {"name": "parameters.list", "input": {"operator_path": "/project1/a"}},
+            {"operator_path": "/project1/a"},
+        ),
+    ],
+)
+def test_v011_commands_validate_at_the_protocol_seam(payload, expected_input) -> None:
+    command = Command.model_validate(payload)
+    assert command.input.model_dump() == expected_input
+
+
+@pytest.mark.parametrize("name", ["ops.rename", "ops.disconnect", "ops.connect"])
+def test_v011_mutations_are_not_batchable(name: str) -> None:
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {"name": "batch.execute", "input": {"commands": [{"name": name, "input": {}}]}}
+        )
+
+
+def test_parameters_list_is_batchable() -> None:
+    command = Command.model_validate(
+        {
+            "name": "batch.execute",
+            "input": {
+                "commands": [{"name": "parameters.list", "input": {"operator_path": "/project1/a"}}]
+            },
+        }
+    )
+    assert command.input.commands[0].name == "parameters.list"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"name": "ops.rename", "input": {"operator_path": "/project1/a", "new_name": "bad/name"}},
+        {"name": "ops.rename", "input": {"operator_path": "/project1/a", "new_name": "9bad"}},
+        {
+            "name": "ops.disconnect",
+            "input": {
+                "source_path": "/project1/a",
+                "target_path": "/project1/b",
+                "input_index": 256,
+            },
+        },
+        {
+            "name": "ops.connect",
+            "input": {
+                "source_path": "/project1/a",
+                "target_path": "/project1/b",
+                "replace": 1,
+            },
+        },
+    ],
+)
+def test_v011_commands_reject_unsafe_names_bounds_and_coercion(payload) -> None:
+    with pytest.raises(ValidationError):
+        Command.model_validate(payload)

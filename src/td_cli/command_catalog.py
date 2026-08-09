@@ -9,6 +9,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from td_cli.operator_catalog import OPERATOR_CATALOG
+
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -37,22 +39,49 @@ class ChildrenInput(OperatorInput):
 
 class CreateOperatorInput(StrictModel):
     parent_path: str
-    op_type: Literal["constantTOP", "noiseTOP", "levelTOP", "nullTOP"]
+    op_type: str
     name: str
     node_x: int = Field(default=0, ge=-32768, le=32767)
     node_y: int = Field(default=0, ge=-32768, le=32767)
+    allow_conditional: bool = False
 
     _parent_path = field_validator("parent_path")(_valid_operator_path)
 
     @field_validator("name")
     @classmethod
     def name_is_safe_and_exact(cls, value: str) -> str:
-        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", value) is None:
-            raise ValueError("name must be a safe exact Operator name")
-        return value
+        return _valid_operator_name(value)
+
+    @model_validator(mode="after")
+    def operator_type_is_in_locked_catalog(self) -> CreateOperatorInput:
+        OPERATOR_CATALOG.require_creatable(self.op_type, allow_conditional=self.allow_conditional)
+        return self
+
+
+def _valid_operator_name(value: str) -> str:
+    if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", value) is None:
+        raise ValueError("name must be a safe exact Operator name")
+    return value
+
+
+class RenameOperatorInput(OperatorInput):
+    new_name: str
+
+    _new_name = field_validator("new_name")(_valid_operator_name)
 
 
 class ConnectOperatorsInput(StrictModel):
+    source_path: str
+    target_path: str
+    output_index: int = Field(default=0, ge=0, le=255)
+    input_index: int = Field(default=0, ge=0, le=255)
+    replace: bool = False
+
+    _source_path = field_validator("source_path")(_valid_operator_path)
+    _target_path = field_validator("target_path")(_valid_operator_path)
+
+
+class DisconnectOperatorsInput(StrictModel):
     source_path: str
     target_path: str
     output_index: int = Field(default=0, ge=0, le=255)
@@ -166,10 +195,13 @@ COMMAND_CATALOG = CommandCatalog(
         CommandDefinition("ops.get", OperatorInput, batchable=True),
         CommandDefinition("ops.children", ChildrenInput, batchable=True),
         CommandDefinition("parameters.get", ParameterInput, batchable=True),
+        CommandDefinition("parameters.list", OperatorInput, batchable=True),
         CommandDefinition("parameters.set", SetParameterInput, batchable=True),
         CommandDefinition("parameters.pulse", ParameterInput, batchable=True),
         CommandDefinition("ops.create", CreateOperatorInput),
+        CommandDefinition("ops.rename", RenameOperatorInput),
         CommandDefinition("ops.connect", ConnectOperatorsInput),
+        CommandDefinition("ops.disconnect", DisconnectOperatorsInput),
         CommandDefinition("project.snapshot", SnapshotInput),
         CommandDefinition("project.metadata", ProjectMetadataInput),
         CommandDefinition("binary.export", BinaryExportInput),
@@ -183,7 +215,9 @@ CommandInput = (
     OperatorInput
     | ChildrenInput
     | CreateOperatorInput
+    | RenameOperatorInput
     | ConnectOperatorsInput
+    | DisconnectOperatorsInput
     | ParameterInput
     | SetParameterInput
     | SnapshotInput
