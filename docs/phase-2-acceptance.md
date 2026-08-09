@@ -4,7 +4,10 @@ Date: 2026-08-09
 
 Platform: Windows 11, TouchDesigner 2025.32050, Python 3.11
 
-Source revision: `756d238f7b72401de3193ad09a32237b30757c65`
+Git source commit: `756d238f7b72401de3193ad09a32237b30757c65`
+
+Canonical Agent source revision:
+`24ad82716a68b5e80d718685f0cfa77611334523ea18e1913716caf80f2452bc`
 
 ## Source-first Agent Component
 
@@ -13,7 +16,7 @@ TouchDesigner main thread. The resulting local derivative was independently
 hashed and inspected:
 
 - Artifact: `td-agent.tox`
-- SHA-256: `3cec666ba4321f8f80c875c61c63d55e5a1229d007c7bfd1a59a0962a68223d8`
+- SHA-256: `85f98c7c9d576f0c12590c1f9d94002f832d8b059b61ea1345e8f2711949915a`
 - Operators: `agent_extension`, `agent_manifest`, `auth_table`, `events_table`,
   `heartbeat_execute`, `socket_callbacks`, `socketio1`
 - Registered capabilities: `ops.children`, `ops.get`, `parameters.get`,
