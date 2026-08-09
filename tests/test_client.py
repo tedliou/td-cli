@@ -109,3 +109,92 @@ def test_network_mutation_error_remains_typed(tmp_path: Path, monkeypatch) -> No
     )
 
     assert client(tmp_path).get_request("request-1")["error"]["code"] == "connector_occupied"
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "operator_rename_forbidden",
+        "operator_rename_failed",
+        "operator_rename_rollback_failed",
+        "connection_not_found",
+        "connector_disconnect_failed",
+        "connector_replace_failed",
+        "connector_replace_rollback_failed",
+        "operator_type_unsupported",
+        "operator_type_conditional",
+    ],
+)
+def test_v011_execution_errors_remain_typed(tmp_path: Path, monkeypatch, code: str) -> None:
+    monkeypatch.setattr(
+        httpx,
+        "request",
+        lambda *args, **kwargs: httpx.Response(
+            200,
+            json={
+                "request_id": "request-1",
+                "status": "failed",
+                "command": {"name": "ops.rename", "input": {}},
+                "result": None,
+                "error": {"code": code, "message": code, "details": {}, "retryable": False},
+            },
+        ),
+    )
+    assert client(tmp_path).get_request("request-1")["error"]["code"] == code
+
+
+@pytest.mark.parametrize("mode", ["constant", "expression", "export", "bind"])
+@pytest.mark.parametrize(
+    "value_kind",
+    [
+        "boolean",
+        "integer",
+        "number",
+        "string",
+        "menu",
+        "operator",
+        "pulse",
+        "python",
+        "sequence",
+        "unknown",
+    ],
+)
+def test_parameter_list_accepts_locked_introspection_enums(
+    tmp_path: Path, monkeypatch, mode: str, value_kind: str
+) -> None:
+    snapshot = {
+        "request_id": "request-1",
+        "status": "succeeded",
+        "command": {"name": "parameters.list", "input": {}},
+        "result": {"parameters": [{"mode": mode, "value_kind": value_kind}]},
+        "error": None,
+    }
+    monkeypatch.setattr(
+        httpx, "request", lambda *args, **kwargs: httpx.Response(200, json=snapshot)
+    )
+    assert client(tmp_path).get_request("request-1") == snapshot
+
+
+@pytest.mark.parametrize(
+    "parameter",
+    [{"mode": "future", "value_kind": "number"}, {"mode": "constant", "value_kind": "future"}],
+)
+def test_parameter_list_rejects_unknown_introspection_enums(
+    tmp_path: Path, monkeypatch, parameter: dict[str, str]
+) -> None:
+    monkeypatch.setattr(
+        httpx,
+        "request",
+        lambda *args, **kwargs: httpx.Response(
+            200,
+            json={
+                "request_id": "request-1",
+                "status": "succeeded",
+                "command": {"name": "parameters.list", "input": {}},
+                "result": {"parameters": [parameter]},
+                "error": None,
+            },
+        ),
+    )
+    with pytest.raises(ClientError, match="protocol_incompatible"):
+        client(tmp_path).get_request("request-1")

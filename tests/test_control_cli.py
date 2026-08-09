@@ -131,6 +131,7 @@ def test_parameters_set_bool_consumes_an_explicit_boolean_value(monkeypatch) -> 
                     "target_path": "/project1/output",
                     "output_index": 0,
                     "input_index": 0,
+                    "replace": False,
                 },
             },
         ),
@@ -253,3 +254,66 @@ def test_phase_3_commands_reach_public_submission_seam(monkeypatch, argv, expect
 
     assert result.exit_code == 0, result.output
     assert FakeDaemonClient.submitted == expected
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [
+        (
+            ["--json", "ops", "rename", "/project1/old", "new_name"],
+            {
+                "name": "ops.rename",
+                "input": {"operator_path": "/project1/old", "new_name": "new_name"},
+            },
+        ),
+        (
+            ["--json", "ops", "disconnect", "/project1/a", "/project1/b", "--input-index", "2"],
+            {
+                "name": "ops.disconnect",
+                "input": {
+                    "source_path": "/project1/a",
+                    "target_path": "/project1/b",
+                    "output_index": 0,
+                    "input_index": 2,
+                },
+            },
+        ),
+        (
+            ["--json", "ops", "connect", "/project1/a", "/project1/b", "--replace"],
+            {
+                "name": "ops.connect",
+                "input": {
+                    "source_path": "/project1/a",
+                    "target_path": "/project1/b",
+                    "output_index": 0,
+                    "input_index": 0,
+                    "replace": True,
+                },
+            },
+        ),
+        (
+            ["--json", "parameters", "list", "/project1/a"],
+            {"name": "parameters.list", "input": {"operator_path": "/project1/a"}},
+        ),
+    ],
+)
+def test_v011_dedicated_cli_commands_reach_submission_seam(monkeypatch, argv, expected) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+    result = CliRunner().invoke(cli.app, argv)
+    assert result.exit_code == 0, result.output
+    assert FakeDaemonClient.submitted == expected
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--json", "ops", "rename", "/project1/old"],
+        ["--json", "ops", "disconnect", "/project1/a", "--input-index", "1"],
+        ["--json", "ops", "connect", "--replace"],
+    ],
+)
+def test_v011_cli_rejects_incomplete_dedicated_modes(monkeypatch, argv) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+    result = CliRunner().invoke(cli.app, argv)
+    assert result.exit_code == 2
+    assert json.loads(result.stdout)["error"]["code"] == "invalid_arguments"

@@ -347,6 +347,55 @@ def ops_connect(
     target_path: Annotated[str | None, typer.Argument()] = None,
     output_index: Annotated[int | None, typer.Option("--output-index")] = None,
     input_index: Annotated[int | None, typer.Option("--input-index")] = None,
+    replace: Annotated[bool, typer.Option("--replace")] = False,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    if (source_path is None) != (target_path is None):
+        _fail(ctx, ClientError("invalid_arguments"))
+    if (output_index is not None or input_index is not None or replace) and source_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = None
+    if source_path is not None and target_path is not None:
+        dedicated = {
+            "source_path": source_path,
+            "target_path": target_path,
+            "output_index": output_index or 0,
+            "input_index": input_index or 0,
+            "replace": replace,
+        }
+    _command(ctx, "ops.connect", dedicated, input, input_file, no_wait, request_id)
+
+
+@ops_app.command("rename")
+def ops_rename(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    new_name: Annotated[str | None, typer.Argument()] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    if (operator_path is None) != (new_name is None):
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = (
+        {"operator_path": operator_path, "new_name": new_name}
+        if operator_path is not None and new_name is not None
+        else None
+    )
+    _command(ctx, "ops.rename", dedicated, input, input_file, no_wait, request_id)
+
+
+@ops_app.command("disconnect")
+def ops_disconnect(
+    ctx: typer.Context,
+    source_path: Annotated[str | None, typer.Argument()] = None,
+    target_path: Annotated[str | None, typer.Argument()] = None,
+    output_index: Annotated[int | None, typer.Option("--output-index")] = None,
+    input_index: Annotated[int | None, typer.Option("--input-index")] = None,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
@@ -364,7 +413,7 @@ def ops_connect(
             "output_index": output_index or 0,
             "input_index": input_index or 0,
         }
-    _command(ctx, "ops.connect", dedicated, input, input_file, no_wait, request_id)
+    _command(ctx, "ops.disconnect", dedicated, input, input_file, no_wait, request_id)
 
 
 @parameters_app.command("get")
@@ -385,6 +434,26 @@ def parameters_get(
         else None
     )
     _command(ctx, "parameters.get", dedicated, input, input_file, no_wait, request_id)
+
+
+@parameters_app.command("list")
+def parameters_list(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    _command(
+        ctx,
+        "parameters.list",
+        {"operator_path": operator_path} if operator_path is not None else None,
+        input,
+        input_file,
+        no_wait,
+        request_id,
+    )
 
 
 @parameters_app.command("pulse")
