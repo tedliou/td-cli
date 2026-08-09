@@ -40,3 +40,5 @@ line-length = 100
 
 [tool.ruff.lint.per-file-ignores]
 "agent/*.py" = ["F821", "PLR1711"]
+"tools/td_diagnostic_bridge/bootstrap.py" = ["F821"]
+"tools/td_diagnostic_bridge/core.py" = ["BLE001", "S102"]
