@@ -5,11 +5,14 @@ from pathlib import Path
 
 import pytest
 
+from td_cli.command_catalog import COMMAND_CATALOG
+
 spec = importlib.util.spec_from_file_location("td_agent_extension", Path("agent/extension.py"))
 assert spec is not None and spec.loader is not None
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 AgentExt = module.AgentExt
+OperatorControl = module.OperatorControl
 
 
 @pytest.fixture(autouse=True)
@@ -117,6 +120,20 @@ class FakeOperator:
 from types import SimpleNamespace
 
 
+def test_operator_control_is_the_touchdesigner_graph_interface() -> None:
+    root = FakeOperator("/project1")
+    control = OperatorControl({root.path: root}.get)
+
+    assert control.execute({"name": "ops.get", "input": {"operator_path": root.path}}) == {
+        "path": "/project1",
+        "name": "project1",
+        "op_type": "base",
+        "family": "COMP",
+    }
+    with pytest.raises(module.AgentCommandError, match="operator_not_found"):
+        control.execute({"name": "ops.get", "input": {"operator_path": "/missing"}})
+
+
 def test_extension_reload_preserves_instance_identity_and_unconfirmed_results() -> None:
     owner = FakeOwner()
     first = AgentExt(owner)
@@ -182,20 +199,7 @@ def test_agent_advertises_and_executes_all_typed_commands() -> None:
     agent = AgentExt(FakeOwner(), operator_lookup=operators.get)
 
     assert agent.registration_payload()["td_build"] == "2025.32050"
-    assert agent.registration_payload()["capabilities"] == [
-        "ops.children",
-        "ops.connect",
-        "ops.create",
-        "ops.get",
-        "parameters.get",
-        "parameters.pulse",
-        "parameters.set",
-        "batch.execute",
-        "binary.export",
-        "events.read",
-        "project.metadata",
-        "project.snapshot",
-    ]
+    assert set(agent.registration_payload()["capabilities"]) == set(COMMAND_CATALOG.names)
     assert agent.execute_command({"name": "ops.get", "input": {"operator_path": "/project1"}}) == {
         "path": "/project1",
         "name": "project1",
@@ -403,7 +407,7 @@ def test_network_mutation_failures_roll_back_partial_changes() -> None:
     assert target.inputConnectors[0].connections == []
 
 
-def test_agent_rejects_invalid_expression_and_oversized_result_with_typed_errors() -> None:
+def test_agent_rejects_invalid_expression_with_typed_error() -> None:
     root = FakeOperator("/project1")
     root.par.display = FakeParameter(True)
     agent = AgentExt(FakeOwner(), operator_lookup=lambda _: root)
@@ -425,16 +429,6 @@ def test_agent_rejects_invalid_expression_and_oversized_result_with_typed_errors
     )
     assert invalid_event == "request_rejected"
     assert invalid["code"] == "expression_invalid"
-
-    agent.MAX_RESULT_BYTES = 1
-    oversized_event, oversized = agent.accept(
-        {
-            "request_id": "oversized-result",
-            "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
-        }
-    )
-    assert oversized_event == "request_rejected"
-    assert oversized["code"] == "result_too_large"
 
 
 def test_phase_3_observation_binary_metadata_and_events_are_bounded() -> None:
@@ -612,9 +606,15 @@ def test_event_ring_retains_1000_and_reads_at_most_requested_200() -> None:
 
 def test_accept_records_internal_and_oversized_outcomes() -> None:
     root = FakeOperator("/project1")
-    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: root)
+    lookup_fails = {"value": True}
+
+    def lookup(_):
+        if lookup_fails["value"]:
+            raise RuntimeError("boom")
+        return root
+
+    agent = AgentExt(FakeOwner(), operator_lookup=lookup)
     agent.connection_id = "connection-1"
-    agent.operator_lookup = lambda _: (_ for _ in ()).throw(RuntimeError("boom"))
     event, result = agent.accept(
         {
             "request_id": "internal",
@@ -623,7 +623,7 @@ def test_accept_records_internal_and_oversized_outcomes() -> None:
     )
     assert (event, result["code"]) == ("request_rejected", "internal_error")
 
-    agent.operator_lookup = lambda _: root
+    lookup_fails["value"] = False
     agent.MAX_RESULT_BYTES = 1
     event, result = agent.accept(
         {

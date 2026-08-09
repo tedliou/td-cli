@@ -3,7 +3,20 @@ import json
 import pytest
 from pydantic import ValidationError
 
+from td_cli.command_catalog import COMMAND_CATALOG
 from td_cli.protocol import Command, OperatorInput, RequestSnapshot, RequestStatus
+
+
+def test_command_catalog_is_the_single_command_contract() -> None:
+    assert len(COMMAND_CATALOG.names) == len(set(COMMAND_CATALOG.names))
+    assert set(COMMAND_CATALOG.batch_names) < set(COMMAND_CATALOG.names)
+    assert COMMAND_CATALOG.validate_input("ops.get", {"operator_path": "/project1"}) == {
+        "operator_path": "/project1"
+    }
+    with pytest.raises(ValueError, match="unsupported Command"):
+        COMMAND_CATALOG.validate_input("future.command", {"operator_path": "/project1"})
+    with pytest.raises(ValidationError):
+        Command.model_validate({"name": "future.command", "input": {"operator_path": "/project1"}})
 
 
 def test_protocol_rejects_unknown_and_coerced_command_input_fields() -> None:
