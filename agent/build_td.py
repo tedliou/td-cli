@@ -18,7 +18,7 @@ def locked_touchdesigner_version(application):
 
 
 def activate_agent_runtime(agent, extension_dat, heartbeat_dat, socket_dat, auth_table):
-    agent.par.ext0object = extension_dat
+    agent.par.ext0object = "op('./agent_extension').module.AgentExt(me)"
     agent.par.ext0name = "Agent"
     agent.par.ext0promote = True
     agent.par.reinitextensions.pulse()
