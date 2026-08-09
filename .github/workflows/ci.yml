@@ -42,6 +42,7 @@ jobs:
           try {
             'td','td-daemon','td-agent' | ForEach-Object { & "$env:GITHUB_WORKSPACE/dist/$_.exe" --version }
             & "$env:GITHUB_WORKSPACE/dist/td-daemon.exe" start
+            & icacls "$env:LOCALAPPDATA/touchdesigner-cli"
             $status = & "$env:GITHUB_WORKSPACE/dist/td-daemon.exe" status --json | ConvertFrom-Json
             if ($status.status -ne 'running' -or $status.protocol_versions -notcontains 1) {
               throw 'Frozen Daemon lifecycle smoke failed'
