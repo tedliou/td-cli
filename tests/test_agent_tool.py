@@ -7,6 +7,30 @@ from typer.testing import CliRunner
 from td_cli.agent_tool import app, source_revision
 
 
+def test_source_revision_is_stable_across_text_checkout_line_endings(
+    tmp_path: Path,
+) -> None:
+    lf_source = tmp_path / "lf"
+    crlf_source = tmp_path / "crlf"
+    lf_source.mkdir()
+    crlf_source.mkdir()
+    for source, newline in ((lf_source, "\n"), (crlf_source, "\r\n")):
+        (source / "manifest.json").write_text(
+            '{"required_files":["extension.py"]}' + newline,
+            encoding="utf-8",
+            newline="",
+        )
+        (source / "extension.py").write_text(
+            f"def value():{newline}    return 1{newline}",
+            encoding="utf-8",
+            newline="",
+        )
+
+    assert source_revision(lf_source, ["extension.py"]) == source_revision(
+        crlf_source, ["extension.py"]
+    )
+
+
 def test_canonical_agent_sources_pass_structural_inspection() -> None:
     result = CliRunner().invoke(app, ["inspect-source", "agent"])
     assert result.exit_code == 0, result.output
