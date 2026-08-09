@@ -40,7 +40,7 @@ class AgentParameters:
         self.ext0object = None
         self.ext0name = ""
         self.ext0promote = False
-        self.reinitextensions = PulseParameter(lambda: setattr(agent, "Agent", FakeExtension()))
+        self.reinitextensions = PulseParameter(lambda: initialize_extension(agent))
 
 
 class GuardedRuntimeParameters:
@@ -52,7 +52,7 @@ class GuardedRuntimeParameters:
 
     def __setattr__(self, name: str, value: object) -> None:
         if name in {"start", "framestart", "active"} and value:
-            assert hasattr(self.agent, "Agent"), f"{name} enabled before Agent extension"
+            assert hasattr(self.agent.ext, "Agent"), f"{name} enabled before Agent extension"
         object.__setattr__(self, name, value)
 
 
@@ -69,8 +69,16 @@ class ExtensionModule:
     AgentExt = FakeExtension
 
 
+def initialize_extension(agent) -> None:
+    extension = FakeExtension(agent)
+    agent.ext.Agent = extension
+    agent.extensions = [extension]
+
+
 class FakeAgentComponent:
     def __init__(self) -> None:
+        self.ext = SimpleNamespace()
+        self.extensions = []
         self.par = AgentParameters(self)
 
 
@@ -92,7 +100,9 @@ def test_runtime_callbacks_start_only_after_promoted_agent_is_ready() -> None:
 
     assert agent.par.ext0name == "Agent"
     assert agent.par.ext0promote is True
-    assert agent.Agent.auth_table is auth_table
+    assert not hasattr(agent, "Agent")
+    assert agent.extensions[0] is agent.ext.Agent
+    assert agent.ext.Agent.auth_table is auth_table
     assert heartbeat.par.start is True
     assert heartbeat.par.framestart is True
     assert socket.par.active is True
