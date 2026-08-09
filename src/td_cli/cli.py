@@ -388,15 +388,11 @@ def parameters_set(
     _command(ctx, "parameters.set", dedicated, input, input_file, no_wait, request_id)
 
 
-def _phase3_command(ctx, name, dedicated, input, input_file, no_wait, request_id):
-    _command(ctx, name, dedicated, input, input_file, no_wait, request_id)
-
-
 @project_app.command("metadata")
 def project_metadata(
     ctx: typer.Context, no_wait: bool = False, request_id: str | None = None
 ) -> None:
-    _phase3_command(ctx, "project.metadata", {}, None, None, no_wait, request_id)
+    _command(ctx, "project.metadata", {}, None, None, no_wait, request_id)
 
 
 @project_app.command("snapshot")
@@ -415,7 +411,7 @@ def project_snapshot(
         if operator_path is not None
         else None
     )
-    _phase3_command(ctx, "project.snapshot", dedicated, input, input_file, no_wait, request_id)
+    _command(ctx, "project.snapshot", dedicated, input, input_file, no_wait, request_id)
 
 
 @binary_app.command("export")
@@ -434,7 +430,7 @@ def binary_export(
         if operator_path is not None and format is not None
         else None
     )
-    _phase3_command(ctx, "binary.export", dedicated, input, input_file, no_wait, request_id)
+    _command(ctx, "binary.export", dedicated, input, input_file, no_wait, request_id)
 
 
 @batch_app.command("execute")
@@ -445,7 +441,7 @@ def batch_execute(
     no_wait: bool = False,
     request_id: str | None = None,
 ) -> None:
-    _phase3_command(ctx, "batch.execute", None, input, input_file, no_wait, request_id)
+    _command(ctx, "batch.execute", None, input, input_file, no_wait, request_id)
 
 
 @events_app.command("read")
@@ -457,7 +453,7 @@ def events_read(
     no_wait: bool = False,
     request_id: str | None = None,
 ) -> None:
-    _phase3_command(
+    _command(
         ctx,
         "events.read",
         {"after": after, "limit": limit, "include_errors": include_errors},

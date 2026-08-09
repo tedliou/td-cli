@@ -85,26 +85,38 @@ class EventsReadInput(StrictModel):
     include_errors: bool = True
 
 
+TYPED_COMMAND_INPUTS: dict[str, type[StrictModel]] = {
+    "ops.get": OperatorInput,
+    "ops.children": ChildrenInput,
+    "parameters.get": ParameterInput,
+    "parameters.set": SetParameterInput,
+    "parameters.pulse": ParameterInput,
+}
+
+
 class BatchItem(StrictModel):
     name: Literal["ops.get", "ops.children", "parameters.get", "parameters.set", "parameters.pulse"]
     input: dict[str, Any]
 
     @model_validator(mode="after")
     def validate_input(self) -> BatchItem:
-        models: dict[str, type[StrictModel]] = {
-            "ops.get": OperatorInput,
-            "ops.children": ChildrenInput,
-            "parameters.get": ParameterInput,
-            "parameters.set": SetParameterInput,
-            "parameters.pulse": ParameterInput,
-        }
-        validated = models[self.name].model_validate(self.input)
+        validated = TYPED_COMMAND_INPUTS[self.name].model_validate(self.input)
         self.input = validated.model_dump(mode="json")
         return self
 
 
 class BatchExecuteInput(StrictModel):
     commands: list[BatchItem] = Field(min_length=1, max_length=16)
+
+
+COMMAND_INPUTS: dict[str, type[StrictModel]] = {
+    **TYPED_COMMAND_INPUTS,
+    "project.snapshot": SnapshotInput,
+    "project.metadata": ProjectMetadataInput,
+    "binary.export": BinaryExportInput,
+    "events.read": EventsReadInput,
+    "batch.execute": BatchExecuteInput,
+}
 
 
 CommandInput = (
@@ -140,22 +152,10 @@ class Command(StrictModel):
     def input_matches_name(cls, value: Any) -> Any:
         if not isinstance(value, dict):
             return value
-        models: dict[str, type[StrictModel]] = {
-            "ops.get": OperatorInput,
-            "ops.children": ChildrenInput,
-            "parameters.get": ParameterInput,
-            "parameters.set": SetParameterInput,
-            "parameters.pulse": ParameterInput,
-            "project.snapshot": SnapshotInput,
-            "project.metadata": ProjectMetadataInput,
-            "binary.export": BinaryExportInput,
-            "events.read": EventsReadInput,
-            "batch.execute": BatchExecuteInput,
-        }
         name = value.get("name")
         if not isinstance(name, str):
             return value
-        model = models.get(name)
+        model = COMMAND_INPUTS.get(name)
         if model is None:
             return value
         return {**value, "input": model.model_validate(value.get("input"))}

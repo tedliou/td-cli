@@ -38,15 +38,21 @@ TouchDesigner main thread. Independent artifact inspection passed with the
 required seven-Operator topology.
 
 - Canonical Agent source revision:
-  `18fc77dc3ba0ace8b5ba92b42640af734bb61d18bb5a575475f8388d9318e978`
+  `4f74b1c6286c8000c075f19dcead4ad3f6d88081dd643d251893309bc925792b`
 - Local derived artifact SHA-256:
-  `391b872f182c966aa1bc125d6387faebe678bb6e3e0e1596e4be91755d7472d7`
+  `a2a7a6153d23240b73fdb6f3610def3e616ec2a689ca72ae8380021e68bcaf8c`
 
 The Online TouchDesigner Instance advertised all ten capabilities. Public
 `td --json` calls proved project metadata, a depth-one `/project1` snapshot,
 ordered two-item batch set/readback, cursor event/error reads, and COMP `tox`
 export of `/project1/td_agent` (4,942 bytes; SHA-256
 `5620425a8c535a7a95ebbed4eb55b21066cb1c048a5fa6680c839805cc31895d`).
+
+A locked-runtime negative batch first proposed `display=false` and then read a
+missing Parameter. It failed with `parameter_not_found`; a subsequent public
+read proved `display` remained `true`, so every item was preflighted before the
+first mutation. A snapshot capped below the actual Operator count failed with
+`result_too_large`, and the next event read contained both typed failures.
 
 Live iterations caught and corrected persistent-Daemon schema staleness,
 Phase 2 Agent state migration, explicit injection of TouchDesigner's `project`

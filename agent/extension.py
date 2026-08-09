@@ -97,6 +97,7 @@ class AgentExt:
             self._record_event("command.failed", request_id, error.code)
             return "request_rejected", {"request_id": request_id, "code": error.code}
         except Exception:  # noqa: BLE001 - convert TD runtime failures to a wire error
+            self._record_event("command.failed", request_id, "internal_error")
             return "request_rejected", {"request_id": request_id, "code": "internal_error"}
         result = {
             "request_id": request_id,
@@ -105,6 +106,7 @@ class AgentExt:
             "result": command_result,
         }
         if len(json.dumps(result, separators=(",", ":")).encode("utf-8")) > self.MAX_RESULT_BYTES:
+            self._record_event("command.failed", request_id, "result_too_large")
             return "request_rejected", {"request_id": request_id, "code": "result_too_large"}
         self.pending_results[request_id] = result
         self._record_event("command.succeeded", request_id)
@@ -138,14 +140,12 @@ class AgentExt:
                 children = [child for child in children if child["op_type"] == op_type]
             return sorted(children, key=lambda child: child["path"])
         parameter = self._parameter(operator, payload["parameter"])
+        self._preflight_parameter(name, operator, payload, parameter)
         if name == "parameters.get":
             return self._parameter_result(operator, payload["parameter"], parameter)
         if name == "parameters.set":
-            if getattr(parameter, "readOnly", False):
-                raise AgentCommandError("parameter_read_only")
             try:
                 if payload["mode"] == "expression":
-                    compile(payload["value"], "<parameter-expression>", "eval")
                     parameter.expr = payload["value"]
                 else:
                     parameter.val = payload["value"]
@@ -161,8 +161,6 @@ class AgentExt:
                 raise AgentCommandError("parameter_write_rejected")
             return result
         if name == "parameters.pulse":
-            if not getattr(parameter, "isPulse", False):
-                raise AgentCommandError("parameter_not_pulseable")
             parameter.pulse()
             return {
                 "operator_path": str(operator.path),
@@ -179,16 +177,21 @@ class AgentExt:
             raise AgentCommandError("operator_not_found")
         if name.startswith("parameters."):
             parameter = self._parameter(operator, payload["parameter"])
-            if name == "parameters.set":
-                if getattr(parameter, "readOnly", False):
-                    raise AgentCommandError("parameter_read_only")
-                if payload["mode"] == "expression":
-                    try:
-                        compile(payload["value"], "<parameter-expression>", "eval")
-                    except SyntaxError:
-                        raise AgentCommandError("expression_invalid")
-            if name == "parameters.pulse" and not getattr(parameter, "isPulse", False):
-                raise AgentCommandError("parameter_not_pulseable")
+            self._preflight_parameter(name, operator, payload, parameter)
+
+    def _preflight_parameter(self, name, operator, payload, parameter):
+        if name in {"parameters.get", "parameters.set"}:
+            self._parameter_result(operator, payload["parameter"], parameter)
+        if name == "parameters.set":
+            if getattr(parameter, "readOnly", False):
+                raise AgentCommandError("parameter_read_only")
+            if payload["mode"] == "expression":
+                try:
+                    compile(payload["value"], "<parameter-expression>", "eval")
+                except SyntaxError:
+                    raise AgentCommandError("expression_invalid")
+        if name == "parameters.pulse" and not getattr(parameter, "isPulse", False):
+            raise AgentCommandError("parameter_not_pulseable")
 
     def _snapshot(self, root, payload):
         maximum = payload["max_operators"]
@@ -200,8 +203,10 @@ class AgentExt:
                 raise AgentCommandError("result_too_large")
             rows.append({**self._operator_result(operator), "depth": depth})
             if depth < payload["max_depth"]:
-                queue.extend((child, depth + 1) for child in operator.children)
-        rows.sort(key=lambda item: item["path"])
+                queue.extend(
+                    (child, depth + 1)
+                    for child in sorted(operator.children, key=lambda child: str(child.path))
+                )
         return {"root_path": str(root.path), "operators": rows}
 
     @staticmethod

@@ -298,3 +298,129 @@ def test_batch_preflights_every_item_before_any_mutation() -> None:
             }
         )
     assert root.par.display.val is True
+
+
+def test_batch_preflights_unsupported_parameter_value_before_mutation() -> None:
+    root = FakeOperator("/project1")
+    root.par.display = FakeParameter(True)
+    root.par.unsupported = FakeParameter(object())
+    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: root)
+
+    with pytest.raises(module.AgentCommandError, match="parameter_type_unsupported"):
+        agent.execute_command(
+            {
+                "name": "batch.execute",
+                "input": {
+                    "commands": [
+                        {
+                            "name": "parameters.set",
+                            "input": {
+                                "operator_path": "/project1",
+                                "parameter": "display",
+                                "mode": "constant",
+                                "value": False,
+                            },
+                        },
+                        {
+                            "name": "parameters.get",
+                            "input": {"operator_path": "/project1", "parameter": "unsupported"},
+                        },
+                    ]
+                },
+            }
+        )
+    assert root.par.display.val is True
+
+
+def test_snapshot_is_deterministic_breadth_first_and_enforces_operator_cap() -> None:
+    root = FakeOperator("/project1")
+    child_b = FakeOperator("/project1/b")
+    child_a = FakeOperator("/project1/a")
+    grandchild = FakeOperator("/project1/a/z")
+    child_a.children = [grandchild]
+    root.children = [child_b, child_a]
+    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: root)
+
+    result = agent.execute_command(
+        {
+            "name": "project.snapshot",
+            "input": {"operator_path": "/project1", "max_depth": 2, "max_operators": 4},
+        }
+    )
+    assert [(item["path"], item["depth"]) for item in result["operators"]] == [
+        ("/project1", 0),
+        ("/project1/a", 1),
+        ("/project1/b", 1),
+        ("/project1/a/z", 2),
+    ]
+    with pytest.raises(module.AgentCommandError, match="result_too_large"):
+        agent.execute_command(
+            {
+                "name": "project.snapshot",
+                "input": {"operator_path": "/project1", "max_depth": 2, "max_operators": 3},
+            }
+        )
+
+
+def test_binary_export_enforces_family_and_raw_byte_cap() -> None:
+    comp = FakeOperator("/project1/component", family="COMP")
+    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: comp)
+
+    with pytest.raises(module.AgentCommandError, match="command_unsupported"):
+        agent.execute_command(
+            {
+                "name": "binary.export",
+                "input": {"operator_path": comp.path, "format": "png", "max_bytes": 100},
+            }
+        )
+    with pytest.raises(module.AgentCommandError, match="result_too_large"):
+        agent.execute_command(
+            {
+                "name": "binary.export",
+                "input": {"operator_path": comp.path, "format": "tox", "max_bytes": 1},
+            }
+        )
+
+
+def test_event_ring_retains_1000_and_reads_at_most_requested_200() -> None:
+    root = FakeOperator("/")
+    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: root)
+    for index in range(1001):
+        agent._record_event("command.succeeded", f"request-{index}")
+
+    result = agent.execute_command(
+        {"name": "events.read", "input": {"after": 0, "limit": 200, "include_errors": False}}
+    )
+
+    assert len(agent.events) == 1000
+    assert len(result["events"]) == 200
+    assert result["events"][0]["id"] == 2
+    assert result["next_after"] == 201
+
+
+def test_accept_records_internal_and_oversized_outcomes() -> None:
+    root = FakeOperator("/project1")
+    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: root)
+    agent.connection_id = "connection-1"
+    agent.operator_lookup = lambda _: (_ for _ in ()).throw(RuntimeError("boom"))
+    event, result = agent.accept(
+        {
+            "request_id": "internal",
+            "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
+        }
+    )
+    assert (event, result["code"]) == ("request_rejected", "internal_error")
+
+    agent.operator_lookup = lambda _: root
+    agent.MAX_RESULT_BYTES = 1
+    event, result = agent.accept(
+        {
+            "request_id": "oversized",
+            "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
+        }
+    )
+    assert (event, result["code"]) == ("request_rejected", "result_too_large")
+    assert [(item["request_id"], item["code"]) for item in agent.events] == [
+        ("internal", "internal_error"),
+        ("oversized", "result_too_large"),
+    ]
