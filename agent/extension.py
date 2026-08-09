@@ -42,6 +42,8 @@ class AgentExt:
         self.operator_lookup = operator_lookup or (lambda path: op(path))
         self.project_info = project_info or getattr(builtins, "project", None)
         self.app_info = app_info or getattr(builtins, "app", None)
+        if self.app_info is None or not hasattr(self.app_info, "build"):
+            raise RuntimeError("TouchDesigner app build is required")
         runtime_session_id = builtins._td_cli_runtime_session_id
         state = getattr(builtins, "_td_cli_agent_state", None)
         if state is None or state["runtime_session_id"] != runtime_session_id:
@@ -68,7 +70,7 @@ class AgentExt:
         return {
             "instance_id": self.instance_id,
             "agent_version": "0.1.0",
-            "td_build": str(getattr(self.app_info, "build", "2025.32050")),
+            "td_build": str(self.app_info.build),
             "protocol_versions": [1],
             "capabilities": list(self.CAPABILITIES),
             "status": "draining" if self.draining else "online",
@@ -186,18 +188,29 @@ class AgentExt:
         expected_path = str(parent.path).rstrip("/") + "/" + payload["name"]
         if self.operator_lookup(expected_path) is not None:
             raise AgentCommandError("operator_already_exists")
+        created = None
         try:
             created = parent.create(payload["op_type"], payload["name"])
             if str(created.path) != expected_path or str(created.name) != payload["name"]:
-                created.destroy()
                 raise AgentCommandError("operator_create_failed")
             created.nodeX = payload["node_x"]
             created.nodeY = payload["node_y"]
         except AgentCommandError:
+            self._destroy_operator(created)
             raise
         except Exception:  # noqa: BLE001 - TouchDesigner raises tdError subclasses
+            self._destroy_operator(created)
             raise AgentCommandError("operator_create_failed")
         return self._operator_result(created)
+
+    @staticmethod
+    def _destroy_operator(operator):
+        if operator is None:
+            return
+        try:
+            operator.destroy()
+        except Exception:  # noqa: BLE001, S110 - rollback is best effort
+            pass
 
     def _connect_operators(self, payload):
         source = self.operator_lookup(payload["source_path"])
@@ -219,6 +232,7 @@ class AgentExt:
         try:
             source_connector.connect(target_connector)
         except Exception:  # noqa: BLE001 - TouchDesigner raises tdError subclasses
+            self._disconnect_connector(target_connector)
             raise AgentCommandError("connector_connect_failed")
         if not any(
             str(connection.owner.path) == str(source.path)
@@ -226,6 +240,7 @@ class AgentExt:
             and bool(connection.isOutput)
             for connection in target_connector.connections
         ):
+            self._disconnect_connector(target_connector)
             raise AgentCommandError("connector_connect_failed")
         return {
             "source_path": str(source.path),
@@ -234,6 +249,13 @@ class AgentExt:
             "input_index": input_index,
             "connected": True,
         }
+
+    @staticmethod
+    def _disconnect_connector(connector):
+        try:
+            connector.disconnect()
+        except Exception:  # noqa: BLE001, S110 - rollback is best effort
+            pass
 
     def _preflight(self, command):
         name = command["name"]

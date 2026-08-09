@@ -15,8 +15,7 @@ import socketio
 from fastapi import HTTPException
 
 from td_cli.daemon.app import SubmitRequest, create_app
-
-LOCKED_TOUCHDESIGNER_BUILD = "2025.32050"
+from td_cli.release import LOCKED_TOUCHDESIGNER_VERSION
 
 
 @dataclass
@@ -176,7 +175,7 @@ def create_transport_app(
         if (
             not normalized_instance_id
             or not valid_versions
-            or data.get("td_build") != LOCKED_TOUCHDESIGNER_BUILD
+            or data.get("td_build") != LOCKED_TOUCHDESIGNER_VERSION
         ):
             await sio.emit("registration_error", {"code": "protocol_incompatible"}, to=sid)
             await sio.disconnect(sid)

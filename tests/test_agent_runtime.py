@@ -16,7 +16,9 @@ AgentExt = module.AgentExt
 def isolated_touchdesigner_runtime():
     original_session = builtins._td_cli_runtime_session_id
     original_state = getattr(builtins, "_td_cli_agent_state", None)
+    original_app = getattr(builtins, "app", None)
     builtins._td_cli_runtime_session_id = str(uuid.uuid4())
+    builtins.app = SimpleNamespace(build="2025.32050")
     if hasattr(builtins, "_td_cli_agent_state"):
         del builtins._td_cli_agent_state
     try:
@@ -28,6 +30,11 @@ def isolated_touchdesigner_runtime():
                 del builtins._td_cli_agent_state
         else:
             builtins._td_cli_agent_state = original_state
+        if original_app is None:
+            if hasattr(builtins, "app"):
+                del builtins.app
+        else:
+            builtins.app = original_app
 
 
 class FakeOwner:
@@ -68,6 +75,9 @@ class FakeConnector:
     def connect(self, target) -> None:
         self.connections.append(target)
         target.connections.append(FakeConnector(self.owner, self.index, is_input=False))
+
+    def disconnect(self) -> None:
+        self.connections.clear()
 
 
 class FakeOperator:
@@ -115,6 +125,12 @@ def test_extension_reload_preserves_instance_identity_and_unconfirmed_results() 
     reloaded = AgentExt(owner)
     assert reloaded.instance_id == first.instance_id
     assert reloaded.pending_results == {"request": {"result": "pending"}}
+
+
+def test_extension_rejects_missing_touchdesigner_build() -> None:
+    del builtins.app
+    with pytest.raises(RuntimeError, match="app build"):
+        AgentExt(FakeOwner())
 
 
 def test_new_touchdesigner_runtime_session_creates_new_instance_identity() -> None:
@@ -305,6 +321,7 @@ def test_agent_creates_and_connects_a_bounded_basic_network() -> None:
                 },
             }
         )
+
     with pytest.raises(module.AgentCommandError, match="connector_occupied"):
         agent.execute_command(
             {
@@ -317,6 +334,73 @@ def test_agent_creates_and_connects_a_bounded_basic_network() -> None:
                 },
             }
         )
+
+
+def test_network_mutation_failures_roll_back_partial_changes() -> None:
+    parent = FakeOperator("/project1")
+
+    class FailingCreated:
+        path = "/project1/failing"
+        name = "failing"
+        family = "TOP"
+        OPType = "constantTOP"
+        destroyed = False
+
+        @property
+        def nodeX(self):
+            return 0
+
+        @nodeX.setter
+        def nodeX(self, value):
+            del value
+            raise RuntimeError("position rejected")
+
+        def destroy(self) -> None:
+            self.destroyed = True
+
+    partial = FailingCreated()
+    parent.create = lambda op_type, name: partial
+    operators = {parent.path: parent}
+    agent = AgentExt(FakeOwner(), operator_lookup=operators.get)
+
+    with pytest.raises(module.AgentCommandError, match="operator_create_failed"):
+        agent.execute_command(
+            {
+                "name": "ops.create",
+                "input": {
+                    "parent_path": "/project1",
+                    "op_type": "constantTOP",
+                    "name": "failing",
+                    "node_x": 1,
+                    "node_y": 2,
+                },
+            }
+        )
+    assert partial.destroyed is True
+
+    source = FakeOperator("/project1/source", family="TOP", outputs=1)
+    target = FakeOperator("/project1/target", family="TOP", inputs=1)
+
+    def connect_with_wrong_wrapper(target_connector) -> None:
+        wrong_owner = FakeOperator("/project1/wrong", family="TOP")
+        target_connector.connections.append(FakeConnector(wrong_owner, 0, is_input=False))
+
+    source.outputConnectors[0].connect = connect_with_wrong_wrapper
+    operators.update({source.path: source, target.path: target})
+
+    with pytest.raises(module.AgentCommandError, match="connector_connect_failed"):
+        agent.execute_command(
+            {
+                "name": "ops.connect",
+                "input": {
+                    "source_path": source.path,
+                    "target_path": target.path,
+                    "output_index": 0,
+                    "input_index": 0,
+                },
+            }
+        )
+    assert target.inputConnectors[0].connections == []
 
 
 def test_agent_rejects_invalid_expression_and_oversized_result_with_typed_errors() -> None:
