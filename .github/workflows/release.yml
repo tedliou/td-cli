@@ -17,7 +17,7 @@ jobs:
     environment: release
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with: { ref: "${{ inputs.source_commit }}", fetch-depth: 0, persist-credentials: false }
+        with: { ref: "${{ inputs.source_commit }}", fetch-depth: 0, persist-credentials: true }
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
         with: { version: "0.8.11" }
       - run: uv sync --locked --python 3.11
@@ -57,10 +57,16 @@ jobs:
           SOURCE_COMMIT: "${{ inputs.source_commit }}"
         run: |
           function Get-ReleaseByTag([string]$Tag) {
-            $response = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$Tag" 2>&1
-            if ($LASTEXITCODE -eq 0) { return ($response | ConvertFrom-Json) }
-            if (([string]$response) -match 'HTTP 404') { return $null }
-            throw "Release lookup failed: $response"
+            $releases = gh release list --limit 100 --json tagName | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0) { throw 'Release list failed' }
+            $matches = @($releases | Where-Object tagName -eq $Tag)
+            if ($matches.Count -gt 1) { throw "Multiple Releases use tag: $Tag" }
+            if ($matches.Count -eq 0) { return $null }
+            $summary = gh release view $Tag --json databaseId | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0) { throw "Release view failed: $Tag" }
+            $release = gh api "repos/$env:GITHUB_REPOSITORY/releases/$($summary.databaseId)" | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0) { throw "Release lookup by ID failed: $Tag" }
+            return $release
           }
           $version = uv run python -c "from td_cli import __version__; print(__version__)"
           $tag = "v$version"
@@ -68,7 +74,6 @@ jobs:
           if (-not (git tag -l $tag)) {
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            gh auth setup-git
             git tag -a $tag $env:SOURCE_COMMIT -m "Release $tag"
             git push origin $tag
           }
