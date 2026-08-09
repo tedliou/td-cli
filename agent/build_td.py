@@ -17,6 +17,19 @@ def locked_touchdesigner_version(application):
     return touchdesigner_version
 
 
+def activate_agent_runtime(agent, extension_dat, heartbeat_dat, socket_dat, auth_table):
+    agent.par.ext0object = extension_dat
+    agent.par.ext0name = "Agent"
+    agent.par.ext0promote = True
+    agent.par.reinitextensions.pulse()
+    if not hasattr(agent, "Agent"):
+        raise RuntimeError("Agent extension failed to initialize")
+    agent.Agent.refresh_auth(auth_table)
+    heartbeat_dat.par.start = True
+    heartbeat_dat.par.framestart = True
+    socket_dat.par.active = True
+
+
 def build(source_dir, output_path, source_revision):
     touchdesigner_version = locked_touchdesigner_version(app)  # type: ignore[name-defined]
     source = Path(source_dir)
@@ -35,8 +48,6 @@ def build(source_dir, output_path, source_revision):
     callbacks_dat.text = (source / "socket_callbacks.py").read_text(encoding="utf-8")
     heartbeat_dat = agent.create(executeDAT, "heartbeat_execute")  # type: ignore[name-defined]
     heartbeat_dat.text = (source / "heartbeat_execute.py").read_text(encoding="utf-8")
-    heartbeat_dat.par.start = True
-    heartbeat_dat.par.framestart = True
 
     events = agent.create(tableDAT, "events_table")  # type: ignore[name-defined]
     for event in (
@@ -49,6 +60,7 @@ def build(source_dir, output_path, source_revision):
         events.appendRow([event])
     auth = agent.create(tableDAT, "auth_table")  # type: ignore[name-defined]
     socket_dat = agent.create(socketioDAT, "socketio1")  # type: ignore[name-defined]
+    socket_dat.par.active = False
     socket_dat.par.url = "http://127.0.0.1:9982"
     socket_dat.par.delay = 1000
     socket_dat.par.callbacks = callbacks_dat
@@ -57,10 +69,7 @@ def build(source_dir, output_path, source_revision):
     socket_dat.inputConnectors[1].connect(events)
     socket_dat.inputConnectors[3].connect(auth)
 
-    if hasattr(agent.par, "ext0object"):
-        agent.par.ext0object = extension_dat
-        agent.par.ext0name = "Agent"
-        agent.par.promoteextension0 = True
+    activate_agent_runtime(agent, extension_dat, heartbeat_dat, socket_dat, auth)
     agent.save(str(output))
     operators = sorted(child.name for child in agent.children)
     evidence = {
