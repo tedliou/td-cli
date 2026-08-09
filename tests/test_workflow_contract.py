@@ -8,6 +8,11 @@ def test_release_workflow_gates_publication_on_main_and_remote_digests() -> None
     assert "Remote asset digest mismatch" in workflow
     assert "SHA256SUMS does not match remote asset" in workflow
     assert workflow.index("Remote asset digest mismatch") < workflow.index("--draft=false")
+    assert "contents: write" in workflow
+    assert "environment: release" in workflow
+    assert 'GH_TOKEN: "${{ github.token }}"' in workflow
+    assert "create-github-app-token" not in workflow
+    assert "RELEASE_APP_" not in workflow
 
 
 def test_workflows_pin_actions_to_commit_shas() -> None:

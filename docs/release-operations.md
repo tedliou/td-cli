@@ -35,24 +35,28 @@ Before publication, an administrator must configure:
   require resolved conversations, one approval, and both CI jobs. `develop`
   additionally requires the local TouchDesigner evidence status; `main`
   requires promotion from `develop` and the packaging/staging evidence.
-- A `v*` tag ruleset that restricts creation, update, and deletion. Its sole
-  bypass actor is a dedicated GitHub App with only repository Contents write.
-- A protected `release` environment with human approval and secrets
-  `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY` for that App.
+- A `v*` tag ruleset that blocks updates and deletion of published version
+  tags. Initial creation remains available to the manually approved Release
+  workflow, which uses its repository-scoped short-lived `GITHUB_TOKEN`.
+- A protected `release` environment with human approval. The workflow receives
+  `contents: write` only for its publish job and needs no long-lived Release
+  credential or additional GitHub App.
 - Immutable Releases in repository settings. Administrators retain emergency
   bypass only with a recorded reason.
 
 The current configuration can be audited with `gh api repos/tedliou/td-cli/rulesets`.
-No workflow can grant its own GitHub App or ruleset bypass.
+The environment approval, exact-main validation, immutable staged artifact,
+draft-first upload, and remote digest checks remain mandatory publication gates.
 
 ## Publish and recover
 
 Dispatch **Publish Release** from `main` with the exact main commit, staged
 artifact ID, and staged artifact digest. The workflow validates identity and
 expiry, builds all executables, packages the four ZIPs, creates an annotated tag
-with the dedicated App, and uploads to a draft. A rerun skips matching assets and
-replaces mismatches only while draft. Publication is a one-way immutable step;
-correct published mistakes with a new SemVer.
+with the environment-approved short-lived `GITHUB_TOKEN`, and uploads to a draft.
+A rerun skips matching assets and replaces mismatches only while draft.
+Publication is a one-way immutable step; correct published mistakes with a new
+SemVer.
 
 Stable install/upgrade:
 
