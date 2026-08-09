@@ -176,11 +176,21 @@ def start() -> None:
         flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
         startupinfo = subprocess.STARTUPINFO()
         startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    frozen = bool(getattr(sys, "frozen", False))
+    command = (
+        [sys.executable, "serve"]
+        if frozen
+        else [sys.executable, "-m", "td_cli.daemon.cli", "serve"]
+    )
+    child_environment = dict(os.environ)
+    if frozen:
+        child_environment["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
     subprocess.Popen(
-        [sys.executable, "-m", "td_cli.daemon.cli", "serve"],
+        command,
         creationflags=flags,
         startupinfo=startupinfo,
         close_fds=True,
+        env=child_environment,
     )
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
