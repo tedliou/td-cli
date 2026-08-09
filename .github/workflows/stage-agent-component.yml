@@ -4,24 +4,31 @@ on:
     inputs:
       source_commit: { description: "Exact commit built in locked TouchDesigner", required: true, type: string }
       version: { description: "Exact pyproject Release Version", required: true, type: string }
-      stage_path: { description: "Absolute prepared stage path on the authorized locked runner", required: true, type: string }
+      stage_archive_base64: { description: "Base64 ZIP prepared after local locked-TD validation", required: true, type: string }
+      stage_archive_sha256: { description: "SHA-256 of the decoded stage ZIP", required: true, type: string }
 
 permissions:
   contents: read
 
 jobs:
   stage:
-    runs-on: [self-hosted, Windows, X64, touchdesigner-2025-32050]
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: { ref: "${{ inputs.source_commit }}", persist-credentials: false }
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
         with: { version: "0.8.11" }
       - run: uv sync --locked --python 3.11
-      - name: Import immutable local stage input
+      - name: Import locally validated stage input
         shell: pwsh
-        env: { STAGE_PATH: "${{ inputs.stage_path }}" }
-        run: Copy-Item -Recurse -LiteralPath $env:STAGE_PATH -Destination agent-stage
+        env:
+          STAGE_ARCHIVE_BASE64: "${{ inputs.stage_archive_base64 }}"
+          STAGE_ARCHIVE_SHA256: "${{ inputs.stage_archive_sha256 }}"
+        run: |
+          [IO.File]::WriteAllBytes('agent-stage.zip', [Convert]::FromBase64String($env:STAGE_ARCHIVE_BASE64))
+          $actual = (Get-FileHash agent-stage.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $env:STAGE_ARCHIVE_SHA256.ToLowerInvariant()) { throw 'Stage archive digest mismatch' }
+          Expand-Archive agent-stage.zip agent-stage
       - name: Validate staged files supplied by authorized environment
         shell: pwsh
         env:
