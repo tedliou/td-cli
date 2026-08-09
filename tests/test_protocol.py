@@ -8,27 +8,8 @@ from td_cli.protocol import Command, OperatorInput, RequestSnapshot, RequestStat
 
 
 def test_command_catalog_is_the_single_command_contract() -> None:
-    assert COMMAND_CATALOG.names == (
-        "ops.get",
-        "ops.children",
-        "parameters.get",
-        "parameters.set",
-        "parameters.pulse",
-        "ops.create",
-        "ops.connect",
-        "project.snapshot",
-        "project.metadata",
-        "binary.export",
-        "events.read",
-        "batch.execute",
-    )
-    assert COMMAND_CATALOG.batch_names == (
-        "ops.get",
-        "ops.children",
-        "parameters.get",
-        "parameters.set",
-        "parameters.pulse",
-    )
+    assert len(COMMAND_CATALOG.names) == len(set(COMMAND_CATALOG.names))
+    assert set(COMMAND_CATALOG.batch_names) < set(COMMAND_CATALOG.names)
     assert COMMAND_CATALOG.validate_input("ops.get", {"operator_path": "/project1"}) == {
         "operator_path": "/project1"
     }

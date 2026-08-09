@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from td_cli.command_catalog import COMMAND_CATALOG
+
 spec = importlib.util.spec_from_file_location("td_agent_extension", Path("agent/extension.py"))
 assert spec is not None and spec.loader is not None
 module = importlib.util.module_from_spec(spec)
@@ -197,20 +199,7 @@ def test_agent_advertises_and_executes_all_typed_commands() -> None:
     agent = AgentExt(FakeOwner(), operator_lookup=operators.get)
 
     assert agent.registration_payload()["td_build"] == "2025.32050"
-    assert agent.registration_payload()["capabilities"] == [
-        "ops.children",
-        "ops.connect",
-        "ops.create",
-        "ops.get",
-        "parameters.get",
-        "parameters.pulse",
-        "parameters.set",
-        "batch.execute",
-        "binary.export",
-        "events.read",
-        "project.metadata",
-        "project.snapshot",
-    ]
+    assert set(agent.registration_payload()["capabilities"]) == set(COMMAND_CATALOG.names)
     assert agent.execute_command({"name": "ops.get", "input": {"operator_path": "/project1"}}) == {
         "path": "/project1",
         "name": "project1",

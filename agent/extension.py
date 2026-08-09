@@ -7,6 +7,7 @@ import json
 import os
 import uuid
 from pathlib import Path
+from typing import ClassVar
 
 if not hasattr(builtins, "_td_cli_runtime_session_id"):
     builtins._td_cli_runtime_session_id = str(uuid.uuid4())
@@ -21,15 +22,15 @@ class AgentCommandError(Exception):
 class OperatorControl:
     """Execute typed Commands against one TouchDesigner Operator graph."""
 
-    COMMANDS = (
-        "ops.children",
-        "ops.connect",
-        "ops.create",
-        "ops.get",
-        "parameters.get",
-        "parameters.pulse",
-        "parameters.set",
-    )
+    HANDLERS: ClassVar[dict] = {
+        "ops.children": "_children",
+        "ops.connect": "_connect_operators",
+        "ops.create": "_create_operator",
+        "ops.get": "_get_operator",
+        "parameters.get": "_get_parameter",
+        "parameters.pulse": "_pulse_parameter",
+        "parameters.set": "_set_parameter",
+    }
 
     def __init__(self, operator_lookup):
         self.operator_lookup = operator_lookup
@@ -37,35 +38,47 @@ class OperatorControl:
     def execute(self, command):
         name = command["name"]
         payload = command["input"]
-        if name == "ops.create":
-            return self._create_operator(payload)
-        if name == "ops.connect":
-            return self._connect_operators(payload)
+        handler_name = self.HANDLERS.get(name)
+        if handler_name is None:
+            raise AgentCommandError("command_unsupported")
+        return getattr(self, handler_name)(payload)
+
+    def _operator(self, payload):
         operator = self.operator_lookup(payload["operator_path"])
         if operator is None:
             raise AgentCommandError("operator_not_found")
-        if name == "ops.get":
-            return self._operator_result(operator)
-        if name == "ops.children":
-            children = [self._operator_result(child) for child in operator.children]
-            op_type = payload.get("op_type")
-            if op_type is not None:
-                children = [child for child in children if child["op_type"] == op_type]
-            return sorted(children, key=lambda child: child["path"])
+        return operator
+
+    def _get_operator(self, payload):
+        return self._operator_result(self._operator(payload))
+
+    def _children(self, payload):
+        operator = self._operator(payload)
+        children = [self._operator_result(child) for child in operator.children]
+        op_type = payload.get("op_type")
+        if op_type is not None:
+            children = [child for child in children if child["op_type"] == op_type]
+        return sorted(children, key=lambda child: child["path"])
+
+    def _parameter_for_payload(self, payload):
+        operator = self._operator(payload)
         parameter = self._parameter(operator, payload["parameter"])
-        self._preflight_parameter(name, operator, payload, parameter)
-        if name == "parameters.get":
-            return self._parameter_result(operator, payload["parameter"], parameter)
-        if name == "parameters.set":
-            return self._set_parameter(operator, payload, parameter)
-        if name == "parameters.pulse":
-            parameter.pulse()
-            return {
-                "operator_path": str(operator.path),
-                "parameter": payload["parameter"],
-                "pulsed": True,
-            }
-        raise AgentCommandError("command_unsupported")
+        return operator, parameter
+
+    def _get_parameter(self, payload):
+        operator, parameter = self._parameter_for_payload(payload)
+        self._preflight_parameter("parameters.get", operator, payload, parameter)
+        return self._parameter_result(operator, payload["parameter"], parameter)
+
+    def _pulse_parameter(self, payload):
+        operator, parameter = self._parameter_for_payload(payload)
+        self._preflight_parameter("parameters.pulse", operator, payload, parameter)
+        parameter.pulse()
+        return {
+            "operator_path": str(operator.path),
+            "parameter": payload["parameter"],
+            "pulsed": True,
+        }
 
     def preflight(self, command):
         name = command["name"]
@@ -169,7 +182,9 @@ class OperatorControl:
         if name == "parameters.pulse" and not getattr(parameter, "isPulse", False):
             raise AgentCommandError("parameter_not_pulseable")
 
-    def _set_parameter(self, operator, payload, parameter):
+    def _set_parameter(self, payload):
+        operator, parameter = self._parameter_for_payload(payload)
+        self._preflight_parameter("parameters.set", operator, payload, parameter)
         try:
             if payload["mode"] == "expression":
                 parameter.expr = payload["value"]
@@ -234,7 +249,7 @@ class AgentExt:
     MAX_UNCONFIRMED_RESULTS = 256
     MAX_RESULT_BYTES = 256 * 1024
 
-    CAPABILITIES = OperatorControl.COMMANDS + (
+    CAPABILITIES = tuple(OperatorControl.HANDLERS) + (
         "batch.execute",
         "binary.export",
         "events.read",
@@ -334,9 +349,9 @@ class AgentExt:
         if name == "batch.execute":
             commands = payload["commands"]
             for item in commands:
-                self._preflight(item)
+                self.operator_control.preflight(item)
             return {"results": [self.execute_command(item) for item in commands]}
-        if name in OperatorControl.COMMANDS:
+        if name in OperatorControl.HANDLERS:
             return self.operator_control.execute(command)
         operator = self.operator_lookup(payload["operator_path"])
         if operator is None:
@@ -346,9 +361,6 @@ class AgentExt:
         if name == "binary.export":
             return self._binary_export(operator, payload)
         raise AgentCommandError("command_unsupported")
-
-    def _preflight(self, command):
-        self.operator_control.preflight(command)
 
     def _snapshot(self, root, payload):
         maximum = payload["max_operators"]
