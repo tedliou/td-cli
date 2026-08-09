@@ -133,3 +133,80 @@ def test_extension_object_expression_instantiates_agent_extension() -> None:
 
     assert isinstance(extension, FakeExtension)
     assert extension.owner is agent
+
+
+class FakeConnector:
+    def connect(self, _operator) -> None:
+        pass
+
+
+class FakeOperator:
+    def __init__(self, name: str, parent=None) -> None:
+        self.name = name
+        self.parent = parent
+        self.children = []
+        self.text = ""
+        self.par = SimpleNamespace()
+        self.inputConnectors = [FakeConnector() for _ in range(4)]
+
+    def create(self, operator_type, name: str):
+        child = FakeOperator(name, self)
+        if operator_type == "baseCOMP":
+            child.ext = SimpleNamespace()
+            child.extensions = []
+            child.par = AgentParameters(child)
+        elif operator_type == "socketioDAT":
+            child.par = SimpleNamespace(
+                active=False,
+                url="",
+                delay=0,
+                callbacks=None,
+                clamp=False,
+                maxlines=0,
+            )
+            self.children.append(FakeOperator(f"{name}_callbacks", self))
+        elif operator_type == "executeDAT":
+            child.par = GuardedRuntimeParameters(self)
+        elif operator_type == "tableDAT":
+            child.rows = []
+            child.appendRow = child.rows.append
+        self.children.append(child)
+        return child
+
+    def op(self, name: str):
+        return next((child for child in self.children if child.name == name), None)
+
+    def destroy(self) -> None:
+        self.parent.children.remove(self)
+
+    def save(self, output: str) -> None:
+        Path(output).write_bytes(b"derived")
+
+
+def test_canonical_build_removes_unused_generated_socket_callbacks(tmp_path: Path) -> None:
+    project = FakeOperator("project1")
+    builder = run_path(
+        str(Path("agent/build_td.py")),
+        init_globals={
+            "app": SimpleNamespace(build="2025.32050"),
+            "op": lambda path: project if path == "/project1" else None,
+            "baseCOMP": "baseCOMP",
+            "textDAT": "textDAT",
+            "executeDAT": "executeDAT",
+            "tableDAT": "tableDAT",
+            "socketioDAT": "socketioDAT",
+        },
+    )
+    output = tmp_path / "td-agent.tox"
+
+    evidence = builder["build"]("agent", output, "revision")
+
+    assert evidence["operators"] == [
+        "agent_extension",
+        "agent_manifest",
+        "auth_table",
+        "events_table",
+        "heartbeat_execute",
+        "socket_callbacks",
+        "socketio1",
+    ]
