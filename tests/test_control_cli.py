@@ -166,3 +166,54 @@ def test_instance_option_is_rejected_for_queries(monkeypatch) -> None:
 
     assert result.exit_code == 2
     assert json.loads(result.stdout)["error"]["code"] == "invalid_arguments"
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [
+        (["--json", "project", "metadata"], {"name": "project.metadata", "input": {}}),
+        (
+            ["--json", "project", "snapshot", "/project1"],
+            {
+                "name": "project.snapshot",
+                "input": {"operator_path": "/project1", "max_depth": 4, "max_operators": 256},
+            },
+        ),
+        (
+            ["--json", "binary", "export", "/project1", "--format", "tox"],
+            {
+                "name": "binary.export",
+                "input": {"operator_path": "/project1", "format": "tox", "max_bytes": 194560},
+            },
+        ),
+        (
+            [
+                "--json",
+                "batch",
+                "execute",
+                "--input",
+                '{"commands":[{"name":"ops.get","input":{"operator_path":"/project1"}}]}',
+            ],
+            {
+                "name": "batch.execute",
+                "input": {
+                    "commands": [{"name": "ops.get", "input": {"operator_path": "/project1"}}]
+                },
+            },
+        ),
+        (
+            ["--json", "events", "read", "--after", "7", "--limit", "10"],
+            {
+                "name": "events.read",
+                "input": {"after": 7, "limit": 10, "include_errors": True},
+            },
+        ),
+    ],
+)
+def test_phase_3_commands_reach_public_submission_seam(monkeypatch, argv, expected) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+
+    result = CliRunner().invoke(cli.app, argv)
+
+    assert result.exit_code == 0, result.output
+    assert FakeDaemonClient.submitted == expected

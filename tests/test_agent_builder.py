@@ -57,8 +57,9 @@ class GuardedRuntimeParameters:
 
 
 class FakeExtension:
-    def __init__(self, owner=None) -> None:
+    def __init__(self, owner=None, project_info=None) -> None:
         self.owner = owner
+        self.project_info = project_info
         self.auth_table = None
 
     def refresh_auth(self, table) -> None:
@@ -128,7 +129,7 @@ def test_extension_object_expression_instantiates_agent_extension() -> None:
     operators = {"./agent_extension": extension_dat}
     extension = eval(
         compiled,
-        {"op": operators.__getitem__, "me": agent},
+        {"op": operators.__getitem__, "me": agent, "project": object()},
     )
 
     assert isinstance(extension, FakeExtension)

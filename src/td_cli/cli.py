@@ -21,10 +21,18 @@ instances_app = typer.Typer()
 requests_app = typer.Typer()
 ops_app = typer.Typer()
 parameters_app = typer.Typer()
+project_app = typer.Typer()
+binary_app = typer.Typer()
+batch_app = typer.Typer()
+events_app = typer.Typer()
 app.add_typer(instances_app, name="instances")
 app.add_typer(requests_app, name="requests")
 app.add_typer(ops_app, name="ops")
 app.add_typer(parameters_app, name="parameters")
+app.add_typer(project_app, name="project")
+app.add_typer(binary_app, name="binary")
+app.add_typer(batch_app, name="batch")
+app.add_typer(events_app, name="events")
 
 
 def _print_td_version(value: bool) -> None:
@@ -378,6 +386,82 @@ def parameters_set(
             "value": value,
         }
     _command(ctx, "parameters.set", dedicated, input, input_file, no_wait, request_id)
+
+
+@project_app.command("metadata")
+def project_metadata(
+    ctx: typer.Context, no_wait: bool = False, request_id: str | None = None
+) -> None:
+    _command(ctx, "project.metadata", {}, None, None, no_wait, request_id)
+
+
+@project_app.command("snapshot")
+def project_snapshot(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    max_depth: Annotated[int, typer.Option("--max-depth")] = 4,
+    max_operators: Annotated[int, typer.Option("--max-operators")] = 256,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: bool = False,
+    request_id: str | None = None,
+) -> None:
+    dedicated = (
+        {"operator_path": operator_path, "max_depth": max_depth, "max_operators": max_operators}
+        if operator_path is not None
+        else None
+    )
+    _command(ctx, "project.snapshot", dedicated, input, input_file, no_wait, request_id)
+
+
+@binary_app.command("export")
+def binary_export(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    format: Annotated[str | None, typer.Option("--format")] = None,
+    max_bytes: Annotated[int, typer.Option("--max-bytes")] = 194_560,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: bool = False,
+    request_id: str | None = None,
+) -> None:
+    dedicated = (
+        {"operator_path": operator_path, "format": format, "max_bytes": max_bytes}
+        if operator_path is not None and format is not None
+        else None
+    )
+    _command(ctx, "binary.export", dedicated, input, input_file, no_wait, request_id)
+
+
+@batch_app.command("execute")
+def batch_execute(
+    ctx: typer.Context,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: bool = False,
+    request_id: str | None = None,
+) -> None:
+    _command(ctx, "batch.execute", None, input, input_file, no_wait, request_id)
+
+
+@events_app.command("read")
+def events_read(
+    ctx: typer.Context,
+    after: int = 0,
+    limit: int = 100,
+    include_errors: bool = True,
+    no_wait: bool = False,
+    request_id: str | None = None,
+) -> None:
+    _command(
+        ctx,
+        "events.read",
+        {"after": after, "limit": limit, "include_errors": include_errors},
+        None,
+        None,
+        no_wait,
+        request_id,
+    )
 
 
 def run() -> None:

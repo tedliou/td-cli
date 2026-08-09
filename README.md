@@ -1,9 +1,10 @@
 # td-cli
 
-Phase 1 prototype of a local, authenticated control path between Codex and a
-TouchDesigner Instance. This branch intentionally implements only the
-`diagnostic.ping` tracer command; the five public TouchDesigner Commands belong
-to Phase 2.
+Prototype of a local, authenticated control path between Codex and a
+TouchDesigner Instance. The public `td` surface provides typed Operator and
+Parameter control plus bounded project observation, binary export, batch
+execution, project metadata, and event/error observation. It never exposes
+arbitrary Python or remote network control.
 
 ## Development
 
