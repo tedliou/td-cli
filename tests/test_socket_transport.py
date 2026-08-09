@@ -51,6 +51,30 @@ def test_locked_socketio_omissions_are_restored_at_the_public_result_boundary() 
     assert listed["parameters"][1]["menu_labels"] == []
     assert listed["items"] == [1, None, 2]
 
+    batched = _normalize_command_result(
+        {
+            "name": "batch.execute",
+            "input": {
+                "commands": [{"name": "parameters.list", "input": {"operator_path": "/project1/a"}}]
+            },
+        },
+        {
+            "results": [
+                {
+                    "parameters": [
+                        {
+                            "name": "gain",
+                            "value_kind": "number",
+                            "expression": {"supported": True},
+                        }
+                    ]
+                }
+            ]
+        },
+    )
+    assert batched["results"][0]["parameters"][0]["page"] is None
+    assert batched["results"][0]["parameters"][0]["menu_names"] is None
+
 
 def unused_port() -> int:
     with socket.socket() as sock:

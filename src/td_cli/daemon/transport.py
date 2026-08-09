@@ -383,7 +383,18 @@ def _normalize_command_result(command: object, result: object) -> object:
         return result
     normalized = dict(result)
     name = command.get("name")
-    if name == "ops.connect":
+    if name == "batch.execute":
+        command_input = command.get("input")
+        nested_commands = command_input.get("commands") if isinstance(command_input, dict) else None
+        nested_results = normalized.get("results")
+        if isinstance(nested_commands, list) and isinstance(nested_results, list):
+            normalized["results"] = [
+                _normalize_command_result(nested_command, nested_result)
+                for nested_command, nested_result in zip(
+                    nested_commands, nested_results, strict=False
+                )
+            ]
+    elif name == "ops.connect":
         normalized.setdefault("previous_connection", None)
     elif name == "parameters.list" and isinstance(normalized.get("parameters"), list):
         parameters = []
