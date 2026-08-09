@@ -7,7 +7,19 @@ from typing import Annotated
 
 import typer
 
+from td_cli.cli_support import print_version
+
 app = typer.Typer(no_args_is_help=True)
+
+
+@app.callback()
+def main(
+    version: Annotated[
+        bool | None,
+        typer.Option("--version", callback=print_version, is_eager=True),
+    ] = None,
+) -> None:
+    """Inspect and install the TouchDesigner Agent Component."""
 
 
 def source_revision(source: Path, required_files: list[str]) -> str:
@@ -85,3 +97,7 @@ def build_instructions(
     )
     typer.echo(f"TouchDesigner {manifest['locked_touchdesigner_version']} Textport command:")
     typer.echo(command)
+
+
+if __name__ == "__main__":
+    app()

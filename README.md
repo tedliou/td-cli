@@ -40,9 +40,9 @@ Reviewable files under `agent/` are canonical. `td-agent.tox` is a derived local
 artifact and is ignored by Git.
 
 ```powershell
-uv run td-agent-tool inspect-source agent
-uv run td-agent-tool build-instructions --output path\to\td-agent.tox --source agent
-uv run td-agent-tool inspect-artifact path\to\td-agent.tox --source agent
+uv run td-agent inspect-source agent
+uv run td-agent build-instructions --output path\to\td-agent.tox --source agent
+uv run td-agent inspect-artifact path\to\td-agent.tox --source agent
 ```
 
 Artifact inspection requires the adjacent

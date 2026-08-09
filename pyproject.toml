@@ -11,15 +11,18 @@ dependencies = [
 ]
 
 [project.scripts]
+td = "td_cli.cli:app"
 td-daemon = "td_cli.daemon.cli:app"
-td-agent-tool = "td_cli.agent_tool:app"
+td-agent = "td_cli.agent_tool:app"
 
 [dependency-groups]
 dev = [
   "aiohttp>=3.12,<4",
   "httpx>=0.28,<1",
+  "mypy==1.17.1",
   "pytest>=8.4,<9",
   "pytest-asyncio>=1,<2",
+  "pyinstaller==6.15.0",
   "ruff>=0.12,<1",
 ]
 
@@ -37,6 +40,10 @@ asyncio_mode = "auto"
 [tool.ruff]
 target-version = "py311"
 line-length = 100
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
 
 [tool.ruff.lint.per-file-ignores]
 "agent/*.py" = ["F821", "PLR1711"]

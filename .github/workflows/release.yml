@@ -1,0 +1,94 @@
+name: Publish Release
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit: { description: "Exact main commit", required: true, type: string }
+      agent_artifact_id: { description: "Immutable staged Actions artifact ID", required: true, type: string }
+      agent_artifact_digest: { description: "Expected staged artifact SHA-256 digest", required: true, type: string }
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-2022
+    environment: release
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { ref: "${{ inputs.source_commit }}", fetch-depth: 0, persist-credentials: false }
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+        with: { version: "0.8.11" }
+      - run: uv sync --locked --python 3.11
+      - name: Validate main tip and releasable version
+        shell: pwsh
+        env:
+          GH_TOKEN: "${{ github.token }}"
+          SOURCE_COMMIT: "${{ inputs.source_commit }}"
+        run: |
+          $main = gh api "repos/$env:GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha
+          if ($main -ne $env:SOURCE_COMMIT -or (git rev-parse HEAD) -ne $env:SOURCE_COMMIT) { throw 'Release source must be the current main tip' }
+          $version = uv run python -c "from td_cli import __version__; print(__version__)"
+          if ($version -notmatch '^0\.1\.0-(alpha|beta|rc)\.\d+$' -and $version -ne '0.1.0') { throw 'Release Version is not an approved Phase prerelease or v0.1.0' }
+      - name: Download immutable Agent Component stage by ID
+        shell: pwsh
+        env:
+          GH_TOKEN: "${{ github.token }}"
+          ARTIFACT_ID: "${{ inputs.agent_artifact_id }}"
+          ARTIFACT_DIGEST: "${{ inputs.agent_artifact_digest }}"
+          SOURCE_COMMIT: "${{ inputs.source_commit }}"
+        run: |
+          $meta = gh api "repos/$env:GITHUB_REPOSITORY/actions/artifacts/$env:ARTIFACT_ID" | ConvertFrom-Json
+          if ($meta.expired -or $meta.digest -ne $env:ARTIFACT_DIGEST) { throw 'Staged artifact identity mismatch or expiry' }
+          if ($meta.workflow_run.head_sha -ne $env:SOURCE_COMMIT) { throw 'Staged artifact source commit mismatch' }
+          gh api "repos/$env:GITHUB_REPOSITORY/actions/artifacts/$env:ARTIFACT_ID/zip" > agent-stage.zip
+          Expand-Archive agent-stage.zip agent-stage
+      - name: Build and package
+        shell: pwsh
+        env: { SOURCE_COMMIT: "${{ inputs.source_commit }}" }
+        run: |
+          $epoch = git show -s --format=%ct HEAD
+          uv run python scripts/build_release.py --agent-stage agent-stage --output release-dist --source-epoch $epoch --source-commit $env:SOURCE_COMMIT
+      - id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+        with:
+          app-id: "${{ secrets.RELEASE_APP_ID }}"
+          private-key: "${{ secrets.RELEASE_APP_PRIVATE_KEY }}"
+          permission-contents: write
+      - name: Create or resume draft, verify assets, publish once
+        shell: pwsh
+        env:
+          GH_TOKEN: "${{ steps.app-token.outputs.token }}"
+          SOURCE_COMMIT: "${{ inputs.source_commit }}"
+        run: |
+          $version = uv run python -c "from td_cli import __version__; print(__version__)"
+          $tag = "v$version"
+          git tag -l $tag | ForEach-Object { if ((git rev-list -n 1 $tag) -ne $env:SOURCE_COMMIT) { throw 'Existing tag targets another commit' } }
+          if (-not (git tag -l $tag)) { git tag -a $tag $env:SOURCE_COMMIT -m "Release $tag"; git push origin $tag }
+          $release = gh api "repos/${{ github.repository }}/releases/tags/$tag" 2>$null | ConvertFrom-Json
+          if ($release -and -not $release.draft) { throw 'Published Releases are immutable; publish a new SemVer' }
+          if (-not $release) { gh release create $tag --draft --verify-tag --generate-notes --title $tag; $release = gh api "repos/${{ github.repository }}/releases/tags/$tag" | ConvertFrom-Json }
+          Get-ChildItem release-dist -File | ForEach-Object {
+            $digest = 'sha256:' + (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            $existing = $release.assets | Where-Object name -eq $_.Name
+            if (-not ($existing -and $existing.digest -eq $digest)) {
+              if ($existing) { gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$($existing.id)" }
+              gh release upload $tag $_.FullName
+            }
+          }
+          $release = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag" | ConvertFrom-Json
+          $required = @(Get-ChildItem release-dist -File)
+          if ($release.assets.Count -ne $required.Count) { throw 'Draft Release asset set is incomplete' }
+          foreach ($file in $required) {
+            $asset = $release.assets | Where-Object name -eq $file.Name
+            $digest = 'sha256:' + (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            if (-not $asset -or $asset.digest -ne $digest) { throw "Remote asset digest mismatch: $($file.Name)" }
+          }
+          $sums = @{}
+          Get-Content release-dist/SHA256SUMS | ForEach-Object { if ($_ -notmatch '^([0-9a-f]{64})  (.+\.zip)$') { throw 'Invalid SHA256SUMS' }; $sums[$Matches[2]] = $Matches[1] }
+          foreach ($name in $sums.Keys) {
+            $asset = $release.assets | Where-Object name -eq $name
+            if (-not $asset -or $asset.digest -ne "sha256:$($sums[$name])") { throw "SHA256SUMS does not match remote asset: $name" }
+          }
+          gh release edit $tag --draft=false --prerelease=$($version -match '-') --latest=$($version -notmatch '-')

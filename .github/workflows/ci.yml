@@ -1,0 +1,54 @@
+name: CI
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality-and-tests:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { persist-credentials: false }
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+        with: { version: "0.8.11", enable-cache: true }
+      - run: uv sync --locked --python 3.11
+      - run: uv run ruff format --check .
+      - run: uv run ruff check .
+      - run: uv run mypy src
+      - run: uv run pytest -q
+      - run: uv run pytest tests/test_protocol.py tests/test_socket_transport.py tests/test_management.py -q
+
+  executable-build-smoke:
+    runs-on: windows-2022
+    env:
+      PYTHONHASHSEED: "0"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { persist-credentials: false }
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+        with: { version: "0.8.11", enable-cache: true }
+      - run: uv sync --locked --python 3.11
+      - shell: pwsh
+        run: |
+          $env:SOURCE_DATE_EPOCH = git show -s --format=%ct HEAD
+          'td','td-daemon','td-agent' | ForEach-Object { uv run pyinstaller --clean --noconfirm "packaging/$_.spec" }
+          $clean = New-Item -ItemType Directory "$env:RUNNER_TEMP/clean"
+          Push-Location $clean
+          try { 'td','td-daemon','td-agent' | ForEach-Object { & "$env:GITHUB_WORKSPACE/dist/$_.exe" --version } }
+          finally { Pop-Location }
+
+  promotion-policy:
+    if: github.base_ref == 'main'
+    runs-on: windows-2022
+    steps:
+      - shell: pwsh
+        env: { HEAD_REPO: "${{ github.event.pull_request.head.repo.full_name }}", HEAD_REF: "${{ github.head_ref }}" }
+        run: |
+          if ($env:HEAD_REPO -ne '${{ github.repository }}' -or $env:HEAD_REF -ne 'develop') {
+            throw 'Pull requests to main must promote the repository develop branch'
+          }
