@@ -57,14 +57,44 @@ class FakeParameter:
         self.pulses += 1
 
 
+class FakeConnector:
+    def __init__(self, owner, index: int, *, is_input: bool) -> None:
+        self.owner = owner
+        self.index = index
+        self.isInput = is_input
+        self.isOutput = not is_input
+        self.connections = []
+
+    def connect(self, target) -> None:
+        self.connections.append(target)
+        target.connections.append(FakeConnector(self.owner, self.index, is_input=False))
+
+
 class FakeOperator:
-    def __init__(self, path: str, *, op_type="base", family="COMP") -> None:
+    def __init__(
+        self, path: str, *, op_type="base", family="COMP", inputs: int = 0, outputs: int = 0
+    ) -> None:
         self.path = path
         self.name = path.rsplit("/", 1)[-1]
         self.OPType = op_type
         self.family = family
         self.children = []
         self.par = SimpleNamespace()
+        self.nodeX = 0
+        self.nodeY = 0
+        self.inputConnectors = [
+            FakeConnector(self, index, is_input=True) for index in range(inputs)
+        ]
+        self.outputConnectors = [
+            FakeConnector(self, index, is_input=False) for index in range(outputs)
+        ]
+
+    def create(self, op_type: str, name: str):
+        created = FakeOperator(f"{self.path}/{name}", op_type=op_type, family="TOP", outputs=1)
+        if op_type != "constantTOP":
+            created.inputConnectors = [FakeConnector(created, 0, is_input=True)]
+        self.children.append(created)
+        return created
 
     def saveByteArray(self, *_):
         return bytearray(b"TD-BINARY")
@@ -125,7 +155,7 @@ def test_phase_2_runtime_state_is_migrated_without_changing_instance_identity() 
     assert upgraded.events == [{"id": 1, "kind": "command.succeeded", "request_id": "request-1"}]
 
 
-def test_agent_advertises_and_executes_all_five_typed_commands() -> None:
+def test_agent_advertises_and_executes_all_typed_commands() -> None:
     root = FakeOperator("/project1")
     child_b = FakeOperator("/project1/z", op_type="null")
     child_a = FakeOperator("/project1/a", op_type="base")
@@ -135,8 +165,11 @@ def test_agent_advertises_and_executes_all_five_typed_commands() -> None:
     operators = {item.path: item for item in (root, child_a, child_b)}
     agent = AgentExt(FakeOwner(), operator_lookup=operators.get)
 
+    assert agent.registration_payload()["td_build"] == "2025.32050"
     assert agent.registration_payload()["capabilities"] == [
         "ops.children",
+        "ops.connect",
+        "ops.create",
         "ops.get",
         "parameters.get",
         "parameters.pulse",
@@ -189,6 +222,101 @@ def test_agent_advertises_and_executes_all_five_typed_commands() -> None:
         }
     ) == {"operator_path": "/project1", "parameter": "reset", "pulsed": True}
     assert root.par.reset.pulses == 1
+
+
+def test_agent_creates_and_connects_a_bounded_basic_network() -> None:
+    parent = FakeOperator("/project1")
+    operators = {parent.path: parent}
+
+    def lookup(path: str):
+        for child in parent.children:
+            operators[child.path] = child
+        return operators.get(path)
+
+    agent = AgentExt(FakeOwner(), operator_lookup=lookup)
+    created = agent.execute_command(
+        {
+            "name": "ops.create",
+            "input": {
+                "parent_path": "/project1",
+                "op_type": "constantTOP",
+                "name": "source",
+                "node_x": -100,
+                "node_y": 25,
+            },
+        }
+    )
+    agent.execute_command(
+        {
+            "name": "ops.create",
+            "input": {
+                "parent_path": "/project1",
+                "op_type": "nullTOP",
+                "name": "output",
+                "node_x": 100,
+                "node_y": 25,
+            },
+        }
+    )
+    connected = agent.execute_command(
+        {
+            "name": "ops.connect",
+            "input": {
+                "source_path": "/project1/source",
+                "target_path": "/project1/output",
+                "output_index": 0,
+                "input_index": 0,
+            },
+        }
+    )
+
+    assert created == {
+        "path": "/project1/source",
+        "name": "source",
+        "op_type": "constantTOP",
+        "family": "TOP",
+    }
+    assert operators["/project1/source"].nodeX == -100
+    assert operators["/project1/source"].nodeY == 25
+    assert connected == {
+        "source_path": "/project1/source",
+        "target_path": "/project1/output",
+        "output_index": 0,
+        "input_index": 0,
+        "connected": True,
+    }
+    connection = operators["/project1/output"].inputConnectors[0].connections[0]
+    assert (connection.owner.path, connection.index, connection.isOutput) == (
+        "/project1/source",
+        0,
+        True,
+    )
+
+    with pytest.raises(module.AgentCommandError, match="operator_already_exists"):
+        agent.execute_command(
+            {
+                "name": "ops.create",
+                "input": {
+                    "parent_path": "/project1",
+                    "op_type": "constantTOP",
+                    "name": "source",
+                    "node_x": 0,
+                    "node_y": 0,
+                },
+            }
+        )
+    with pytest.raises(module.AgentCommandError, match="connector_occupied"):
+        agent.execute_command(
+            {
+                "name": "ops.connect",
+                "input": {
+                    "source_path": "/project1/source",
+                    "target_path": "/project1/output",
+                    "output_index": 0,
+                    "input_index": 0,
+                },
+            }
+        )
 
 
 def test_agent_rejects_invalid_expression_and_oversized_result_with_typed_errors() -> None:

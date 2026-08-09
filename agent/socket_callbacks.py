@@ -2,7 +2,9 @@
 
 
 def onOpen(dat):
-    dat.emit("register", data=parent().ext.Agent.registration_payload())
+    agent = parent().ext.Agent
+    agent.end_draining()
+    dat.emit("register", data=agent.registration_payload())
 
 
 def onReceiveEvent(dat, rowIndex, message, event):
@@ -33,13 +35,20 @@ def onReceiveEvent(dat, rowIndex, message, event):
     elif event == "daemon_draining":
         agent.begin_draining()
         dat.emit("heartbeat", data=agent.heartbeat_payload())
+        deadline_milliseconds = int(float(message["deadline_seconds"]) * 1000)
+        run(
+            "op('socket_callbacks').module.resumeAfterDraining(args[0])",
+            dat,
+            delayMilliSeconds=deadline_milliseconds + 500,
+            fromOP=me,
+        )
         if not agent.pending_results:
             finishDraining(dat)
         else:
             run(
                 "op('socket_callbacks').module.finishDraining(args[0])",
                 dat,
-                delayMilliSeconds=int(float(message["deadline_seconds"]) * 1000),
+                delayMilliSeconds=deadline_milliseconds,
                 fromOP=me,
             )
 
@@ -55,3 +64,7 @@ def finishDraining(dat):
     if agent.connection_id:
         dat.emit("unregister", data=agent.heartbeat_payload())
         dat.par.active = False
+
+
+def resumeAfterDraining(dat):
+    dat.par.active = True

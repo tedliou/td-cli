@@ -24,6 +24,8 @@ class AgentExt:
 
     CAPABILITIES = (
         "ops.children",
+        "ops.connect",
+        "ops.create",
         "ops.get",
         "parameters.get",
         "parameters.pulse",
@@ -35,10 +37,11 @@ class AgentExt:
         "project.snapshot",
     )
 
-    def __init__(self, owner_comp, operator_lookup=None, project_info=None):
+    def __init__(self, owner_comp, operator_lookup=None, project_info=None, app_info=None):
         self.owner_comp = owner_comp
         self.operator_lookup = operator_lookup or (lambda path: op(path))
         self.project_info = project_info or getattr(builtins, "project", None)
+        self.app_info = app_info or getattr(builtins, "app", None)
         runtime_session_id = builtins._td_cli_runtime_session_id
         state = getattr(builtins, "_td_cli_agent_state", None)
         if state is None or state["runtime_session_id"] != runtime_session_id:
@@ -64,7 +67,8 @@ class AgentExt:
     def registration_payload(self):
         return {
             "instance_id": self.instance_id,
-            "agent_version": "0.1.0.dev0",
+            "agent_version": "0.1.0",
+            "td_build": str(getattr(self.app_info, "build", "2025.32050")),
             "protocol_versions": [1],
             "capabilities": list(self.CAPABILITIES),
             "status": "draining" if self.draining else "online",
@@ -124,6 +128,10 @@ class AgentExt:
             for item in commands:
                 self._preflight(item)
             return {"results": [self.execute_command(item) for item in commands]}
+        if name == "ops.create":
+            return self._create_operator(payload)
+        if name == "ops.connect":
+            return self._connect_operators(payload)
         operator = self.operator_lookup(payload["operator_path"])
         if operator is None:
             raise AgentCommandError("operator_not_found")
@@ -168,6 +176,64 @@ class AgentExt:
                 "pulsed": True,
             }
         raise AgentCommandError("command_unsupported")
+
+    def _create_operator(self, payload):
+        parent = self.operator_lookup(payload["parent_path"])
+        if parent is None:
+            raise AgentCommandError("operator_not_found")
+        if str(parent.family) != "COMP":
+            raise AgentCommandError("operator_parent_invalid")
+        expected_path = str(parent.path).rstrip("/") + "/" + payload["name"]
+        if self.operator_lookup(expected_path) is not None:
+            raise AgentCommandError("operator_already_exists")
+        try:
+            created = parent.create(payload["op_type"], payload["name"])
+            if str(created.path) != expected_path or str(created.name) != payload["name"]:
+                created.destroy()
+                raise AgentCommandError("operator_create_failed")
+            created.nodeX = payload["node_x"]
+            created.nodeY = payload["node_y"]
+        except AgentCommandError:
+            raise
+        except Exception:  # noqa: BLE001 - TouchDesigner raises tdError subclasses
+            raise AgentCommandError("operator_create_failed")
+        return self._operator_result(created)
+
+    def _connect_operators(self, payload):
+        source = self.operator_lookup(payload["source_path"])
+        target = self.operator_lookup(payload["target_path"])
+        if source is None or target is None:
+            raise AgentCommandError("operator_not_found")
+        if str(source.family) != str(target.family):
+            raise AgentCommandError("operator_family_mismatch")
+        output_index = payload["output_index"]
+        input_index = payload["input_index"]
+        if output_index >= len(source.outputConnectors) or input_index >= len(
+            target.inputConnectors
+        ):
+            raise AgentCommandError("connector_not_found")
+        source_connector = source.outputConnectors[output_index]
+        target_connector = target.inputConnectors[input_index]
+        if target_connector.connections:
+            raise AgentCommandError("connector_occupied")
+        try:
+            source_connector.connect(target_connector)
+        except Exception:  # noqa: BLE001 - TouchDesigner raises tdError subclasses
+            raise AgentCommandError("connector_connect_failed")
+        if not any(
+            str(connection.owner.path) == str(source.path)
+            and int(connection.index) == output_index
+            and bool(connection.isOutput)
+            for connection in target_connector.connections
+        ):
+            raise AgentCommandError("connector_connect_failed")
+        return {
+            "source_path": str(source.path),
+            "target_path": str(target.path),
+            "output_index": output_index,
+            "input_index": input_index,
+            "connected": True,
+        }
 
     def _preflight(self, command):
         name = command["name"]
@@ -317,6 +383,9 @@ class AgentExt:
 
     def begin_draining(self):
         self.draining = True
+
+    def end_draining(self):
+        self.draining = False
 
     def refresh_auth(self, table):
         token_path = Path(os.environ["LOCALAPPDATA"]) / "touchdesigner-cli" / "state" / "auth.token"
