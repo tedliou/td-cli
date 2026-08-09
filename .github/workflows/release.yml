@@ -7,7 +7,7 @@ on:
       agent_artifact_digest: { description: "Expected staged artifact SHA-256 digest", required: true, type: string }
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 jobs:
@@ -50,16 +50,10 @@ jobs:
         run: |
           $epoch = git show -s --format=%ct HEAD
           uv run python scripts/build_release.py --agent-stage agent-stage --output release-dist --source-epoch $epoch --source-commit $env:SOURCE_COMMIT
-      - id: app-token
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
-        with:
-          app-id: "${{ secrets.RELEASE_APP_ID }}"
-          private-key: "${{ secrets.RELEASE_APP_PRIVATE_KEY }}"
-          permission-contents: write
       - name: Create or resume draft, verify assets, publish once
         shell: pwsh
         env:
-          GH_TOKEN: "${{ steps.app-token.outputs.token }}"
+          GH_TOKEN: "${{ github.token }}"
           SOURCE_COMMIT: "${{ inputs.source_commit }}"
         run: |
           $version = uv run python -c "from td_cli import __version__; print(__version__)"
