@@ -333,10 +333,11 @@ def create_transport_app(
             or existing["status"] not in {"dispatched", "running", "unknown"}
         ):
             return
+        result = _normalize_command_result(existing.get("command"), data.get("result"))
         snapshot = store.update(
             request_id,
             status="succeeded",
-            result=data.get("result"),
+            result=result,
             error=None,
             completed_at=_now(),
         )
@@ -373,6 +374,47 @@ def create_transport_app(
 
 def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _normalize_command_result(command: object, result: object) -> object:
+    """Restore public nullable fields omitted by locked SocketIO DAT transport."""
+    result = _decode_wire_value(result)
+    if not isinstance(command, dict) or not isinstance(result, dict):
+        return result
+    normalized = dict(result)
+    name = command.get("name")
+    if name == "ops.connect":
+        normalized.setdefault("previous_connection", None)
+    elif name == "parameters.list" and isinstance(normalized.get("parameters"), list):
+        parameters = []
+        for item in normalized["parameters"]:
+            if not isinstance(item, dict):
+                parameters.append(item)
+                continue
+            descriptor = dict(item)
+            descriptor.setdefault("page", None)
+            expression = descriptor.get("expression")
+            if isinstance(expression, dict):
+                descriptor["expression"] = {**expression, "source": expression.get("source")}
+            if descriptor.get("value_kind") == "menu":
+                descriptor.setdefault("menu_names", [])
+                descriptor.setdefault("menu_labels", [])
+            else:
+                descriptor.setdefault("menu_names", None)
+                descriptor.setdefault("menu_labels", None)
+            parameters.append(descriptor)
+        normalized["parameters"] = parameters
+    return normalized
+
+
+def _decode_wire_value(value: object) -> object:
+    if value == {"__td_cli_null__": True}:
+        return None
+    if isinstance(value, dict):
+        return {key: _decode_wire_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_decode_wire_value(item) for item in value]
+    return value
 
 
 def _selector(instance_id: str, all_ids: list[str]) -> str:

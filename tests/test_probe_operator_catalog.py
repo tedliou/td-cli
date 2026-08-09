@@ -81,6 +81,7 @@ def test_probe_records_verified_shape_and_conservative_status() -> None:
     entries = catalog.probe_operator_classes(
         [("noiseTOP", noise_class), ("videodeviceinTOP", video_class), ("brokenSOP", failed_class)],
         container,
+        experimental_build=False,
     )
 
     assert entries[0] == {
@@ -93,7 +94,7 @@ def test_probe_records_verified_shape_and_conservative_status() -> None:
         "builtin_parameters": None,
         "custom_parameters": None,
         "side_effect_class": "pure",
-        "experimental": None,
+        "experimental": False,
         "create_verified": False,
         "notes": ["create failed: RuntimeError: cannot create"],
     }
@@ -111,7 +112,9 @@ def test_probe_rejects_inexact_create_result() -> None:
     inexact = FakeNode("nullTOP", "TOP")
     container = FakeContainer({"noiseTOP": inexact})
 
-    entry = catalog.probe_operator_classes([("noiseTOP", requested)], container)[0]
+    entry = catalog.probe_operator_classes(
+        [("noiseTOP", requested)], container, experimental_build=False
+    )[0]
 
     assert entry["status"] == "unsupported"
     assert entry["create_verified"] is False
@@ -131,12 +134,13 @@ def test_build_manifest_is_sorted_and_serializes_deterministically() -> None:
         }
     )
 
-    manifest = catalog.build_manifest(namespace, container, "2025.32050")
+    manifest = catalog.build_manifest(namespace, container, "2025.32050", experimental_build=False)
     encoded = catalog.serialize_manifest(manifest)
 
     assert manifest["schema_version"] == 1
-    assert manifest["probe_revision"] == 1
+    assert manifest["probe_revision"] == 2
     assert manifest["touchdesigner_build"] == "2025.32050"
+    assert manifest["experimental_build"] is False
     assert manifest["families"] == ["COMP", "TOP", "CHOP", "POP", "DAT", "MAT", "SOP"]
     assert [entry["op_type"] for entry in manifest["operators"]] == ["baseCOMP", "nullTOP"]
     assert encoded.endswith("\n")
@@ -155,6 +159,7 @@ def test_locked_build_candidate_manifest_has_complete_schema_and_seven_families(
     operators = manifest["operators"]
 
     assert manifest["touchdesigner_build"] == "2025.32050"
+    assert manifest["experimental_build"] is False
     assert manifest["families"] == ["COMP", "TOP", "CHOP", "POP", "DAT", "MAT", "SOP"]
     assert len(operators) == 680
     assert [entry["op_type"] for entry in operators] == sorted(
@@ -168,4 +173,4 @@ def test_locked_build_candidate_manifest_has_complete_schema_and_seven_families(
         entry["status"] != "supported" or entry["side_effect_class"] == "pure"
         for entry in operators
     )
-    assert all(entry["experimental"] is None for entry in operators)
+    assert all(entry["experimental"] is False for entry in operators)

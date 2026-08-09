@@ -8,6 +8,7 @@
     "schema_version",
     "probe_revision",
     "touchdesigner_build",
+    "experimental_build",
     "families",
     "operators"
   ],
@@ -15,6 +16,7 @@
     "schema_version": {"const": 1},
     "probe_revision": {"type": "integer", "minimum": 1},
     "touchdesigner_build": {"const": "2025.32050"},
+    "experimental_build": {"const": false},
     "families": {
       "const": ["COMP", "TOP", "CHOP", "POP", "DAT", "MAT", "SOP"]
     },
@@ -53,7 +55,7 @@
         "side_effect_class": {
           "enum": ["pure", "device", "file", "network", "process", "loader", "script"]
         },
-        "experimental": {"type": ["boolean", "null"]},
+        "experimental": {"const": false},
         "create_verified": {"type": "boolean"},
         "notes": {"type": "array", "items": {"type": "string"}}
       }

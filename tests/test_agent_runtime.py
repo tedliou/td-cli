@@ -61,11 +61,15 @@ class FakeOwner:
         self.values[key] = value
 
     def op(self, name: str):
-        if name != "operator_catalog":
-            return None
-        return SimpleNamespace(
-            text=Path("agent/touchdesigner-2025.32050-operators.json").read_text(encoding="utf-8")
-        )
+        if name == "operator_catalog":
+            return SimpleNamespace(
+                text=Path("agent/touchdesigner-2025.32050-operators.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+        if name == "agent_manifest":
+            return SimpleNamespace(text=Path("agent/manifest.json").read_text(encoding="utf-8"))
+        return None
 
 
 class FakeParameter:
@@ -659,7 +663,10 @@ def test_accept_omits_optional_nulls_from_locked_socketio_payload() -> None:
     )
 
     assert event == "request_result"
-    assert payload["result"] == {"required": True, "nested": {"items": [1, 2]}}
+    assert payload["result"] == {
+        "required": True,
+        "nested": {"items": [1, {"__td_cli_null__": True}, 2]},
+    }
 
 
 def test_agent_rejects_invalid_expression_with_typed_error() -> None:
@@ -725,11 +732,12 @@ def test_parameter_list_reports_runtime_names_types_and_expression_capabilities(
     )
     empty_menu = parameter("empty", "Menu", isMenu=True, menuNames=None, menuLabels=None)
     python_value = parameter("payload", "Python", isPython=True)
+    multi_operator = parameter("targets", "OP", value=[root], isOP=True)
     pulse = parameter("reset", "Pulse", isPulse=True)
     hidden = parameter("legacy", "Int", isInt=True, hidden=True)
     custom = parameter("Customvalue", "Str", isString=True, mode="expression")
     custom.expr = "'hello'"
-    root.builtinPars = [gain, menu, empty_menu, python_value, pulse, hidden]
+    root.builtinPars = [gain, menu, empty_menu, python_value, multi_operator, pulse, hidden]
     root.customPars = [custom]
 
     result = make_control(lambda _: root).execute(
@@ -749,6 +757,8 @@ def test_parameter_list_reports_runtime_names_types_and_expression_capabilities(
     assert items["empty"]["menu_labels"] == []
     assert items["payload"]["constant_supported"] is False
     assert items["payload"]["expression_supported"] is False
+    assert items["targets"]["value_kind"] == "unknown"
+    assert items["targets"]["constant_supported"] is False
     assert items["reset"]["pulse_supported"] is True
     assert items["legacy"]["hidden"] is True
     assert items["Customvalue"]["custom"] is True

@@ -8,11 +8,48 @@ import socketio
 import uvicorn
 from aiohttp import ClientSession
 
-from td_cli.daemon.transport import create_transport_app
+from td_cli.daemon.transport import _normalize_command_result, create_transport_app
 
 TOKEN = "b" * 64
 INSTANCE_ID = "8cf81688-b9a4-4c39-9f92-31c77319c761"
 REQUEST_ID = "018f47ec-7f3b-7a34-8f31-2ad70b6f6e2a"
+
+
+def test_locked_socketio_omissions_are_restored_at_the_public_result_boundary() -> None:
+    connected = _normalize_command_result(
+        {"name": "ops.connect"}, {"connected": True, "replaced": False}
+    )
+    listed = _normalize_command_result(
+        {"name": "parameters.list"},
+        {
+            "items": [1, {"__td_cli_null__": True}, 2],
+            "parameters": [
+                {
+                    "name": "gain",
+                    "value_kind": "number",
+                    "expression": {"supported": True},
+                },
+                {
+                    "name": "mode",
+                    "value_kind": "menu",
+                    "expression": {"supported": True},
+                },
+            ],
+        },
+    )
+
+    assert connected["previous_connection"] is None
+    assert listed["parameters"][0] == {
+        "name": "gain",
+        "value_kind": "number",
+        "page": None,
+        "expression": {"supported": True, "source": None},
+        "menu_names": None,
+        "menu_labels": None,
+    }
+    assert listed["parameters"][1]["menu_names"] == []
+    assert listed["parameters"][1]["menu_labels"] == []
+    assert listed["items"] == [1, None, 2]
 
 
 def unused_port() -> int:

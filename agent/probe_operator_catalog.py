@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 
 SCHEMA_VERSION = 1
-PROBE_REVISION = 1
+PROBE_REVISION = 2
 LOCKED_TOUCHDESIGNER_BUILD = "2025.32050"
 FAMILIES = ("COMP", "TOP", "CHOP", "POP", "DAT", "MAT", "SOP")
 
@@ -165,7 +165,7 @@ def side_effect_class(op_type):
     return "pure"
 
 
-def _unprobed_entry(op_type, side_effect, notes):
+def _unprobed_entry(op_type, side_effect, experimental, notes):
     return {
         "op_type": op_type,
         "family": operator_family(op_type),
@@ -176,13 +176,13 @@ def _unprobed_entry(op_type, side_effect, notes):
         "builtin_parameters": None,
         "custom_parameters": None,
         "side_effect_class": side_effect,
-        "experimental": None,
+        "experimental": experimental,
         "create_verified": False,
         "notes": notes,
     }
 
 
-def probe_operator_classes(operator_classes, container):
+def probe_operator_classes(operator_classes, container, *, experimental_build):
     """Create and immediately destroy every supplied Operator class."""
     entries = []
     for index, (op_type, operator_class) in enumerate(operator_classes):
@@ -194,6 +194,7 @@ def probe_operator_classes(operator_classes, container):
                 _unprobed_entry(
                     op_type,
                     effect,
+                    experimental_build,
                     [f"create failed: {type(error).__name__}: {error}"],
                 )
             )
@@ -224,7 +225,7 @@ def probe_operator_classes(operator_classes, container):
                     "builtin_parameters": len(node.builtinPars),
                     "custom_parameters": len(node.customPars),
                     "side_effect_class": effect,
-                    "experimental": None,
+                    "experimental": experimental_build,
                     "create_verified": exact,
                     "notes": notes,
                 }
@@ -234,7 +235,7 @@ def probe_operator_classes(operator_classes, container):
     return sorted(entries, key=lambda entry: entry["op_type"])
 
 
-def build_manifest(td_module, container, touchdesigner_build):
+def build_manifest(td_module, container, touchdesigner_build, *, experimental_build):
     if str(touchdesigner_build) != LOCKED_TOUCHDESIGNER_BUILD:
         raise RuntimeError(
             f"TouchDesigner {LOCKED_TOUCHDESIGNER_BUILD} required; got {touchdesigner_build}"
@@ -243,8 +244,13 @@ def build_manifest(td_module, container, touchdesigner_build):
         "schema_version": SCHEMA_VERSION,
         "probe_revision": PROBE_REVISION,
         "touchdesigner_build": str(touchdesigner_build),
+        "experimental_build": bool(experimental_build),
         "families": list(FAMILIES),
-        "operators": probe_operator_classes(enumerate_operator_classes(td_module), container),
+        "operators": probe_operator_classes(
+            enumerate_operator_classes(td_module),
+            container,
+            experimental_build=bool(experimental_build),
+        ),
     }
 
 
@@ -252,11 +258,16 @@ def serialize_manifest(manifest):
     return json.dumps(manifest, indent=2, sort_keys=True) + "\n"
 
 
-def run_probe(td_module, project_component, touchdesigner_build, output_path):
+def run_probe(td_module, project_component, touchdesigner_build, experimental_build, output_path):
     """Run the full disposable probe and atomically replace the candidate manifest."""
     probe_root = project_component.create(td_module.baseCOMP, "__td_cli_operator_probe")
     try:
-        manifest = build_manifest(td_module, probe_root, touchdesigner_build)
+        manifest = build_manifest(
+            td_module,
+            probe_root,
+            touchdesigner_build,
+            experimental_build=experimental_build,
+        )
     finally:
         probe_root.destroy()
     output = Path(output_path)

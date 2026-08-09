@@ -214,6 +214,17 @@ class OperatorControl:
 
     @staticmethod
     def _parameter_value_kind(parameter):
+        if bool(getattr(parameter, "isSequence", False)):
+            return "sequence"
+        if bool(getattr(parameter, "isPython", False)):
+            return "python"
+        if bool(getattr(parameter, "isOP", False)):
+            try:
+                if isinstance(parameter.eval(), (list, tuple)):
+                    return "unknown"
+            except Exception:  # noqa: BLE001 - TD parameter evaluation can be unavailable
+                return "unknown"
+            return "operator"
         checks = (
             ("isPulse", "pulse"),
             ("isMenu", "menu"),
@@ -222,9 +233,6 @@ class OperatorControl:
             ("isFloat", "number"),
             ("isNumber", "number"),
             ("isString", "string"),
-            ("isOP", "operator"),
-            ("isPython", "python"),
-            ("isSequence", "sequence"),
         )
         return next(
             (kind for attribute, kind in checks if bool(getattr(parameter, attribute, False))),
@@ -278,18 +286,7 @@ class OperatorControl:
             pass
 
     def _connect_operators(self, payload):
-        source = self.operator_lookup(payload["source_path"])
-        target = self.operator_lookup(payload["target_path"])
-        if source is None or target is None:
-            raise AgentCommandError("operator_not_found")
-        if str(source.family) != str(target.family):
-            raise AgentCommandError("operator_family_mismatch")
-        output_index = payload["output_index"]
-        input_index = payload["input_index"]
-        if output_index >= len(source.outputConnectors) or input_index >= len(
-            target.inputConnectors
-        ):
-            raise AgentCommandError("connector_not_found")
+        source, target, output_index, input_index = self._connector_endpoints(payload)
         source_connector = source.outputConnectors[output_index]
         target_connector = target.inputConnectors[input_index]
         replace = payload.get("replace", False)
@@ -496,10 +493,14 @@ class AgentExt:
         self.app_info = app_info or getattr(builtins, "app", None)
         if self.app_info is None or not hasattr(self.app_info, "build"):
             raise RuntimeError("TouchDesigner app build is required")
+        manifest_dat = owner_comp.op("agent_manifest")
         catalog_dat = owner_comp.op("operator_catalog")
-        if catalog_dat is None:
-            raise RuntimeError("Operator catalog DAT is required")
+        if manifest_dat is None or catalog_dat is None:
+            raise RuntimeError("Agent manifest and Operator catalog DATs are required")
         try:
+            manifest = json.loads(manifest_dat.text)
+            self.agent_version = str(manifest["agent_version"])
+            self.protocol_versions = [int(version) for version in manifest["protocol_versions"]]
             operator_catalog = OperatorCatalog(json.loads(catalog_dat.text))
         except (KeyError, TypeError, ValueError) as error:
             raise RuntimeError("Operator catalog DAT is invalid") from error
@@ -531,9 +532,9 @@ class AgentExt:
     def registration_payload(self):
         return {
             "instance_id": self.instance_id,
-            "agent_version": "0.1.0",
+            "agent_version": self.agent_version,
             "td_build": str(self.app_info.build),
-            "protocol_versions": [1],
+            "protocol_versions": self.protocol_versions,
             "capabilities": list(self.CAPABILITIES),
             "status": "draining" if self.draining else "online",
         }
@@ -586,7 +587,10 @@ class AgentExt:
         if isinstance(value, dict):
             return {key: cls._wire_value(item) for key, item in value.items() if item is not None}
         if isinstance(value, list):
-            return [cls._wire_value(item) for item in value if item is not None]
+            return [
+                {"__td_cli_null__": True} if item is None else cls._wire_value(item)
+                for item in value
+            ]
         return value
 
     def execute_command(self, command):
