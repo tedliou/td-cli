@@ -76,6 +76,10 @@ class FakeConnector:
         self.connections = []
 
     def connect(self, target) -> None:
+        if self.isInput:
+            self.connections.clear()
+            self.connections.append(FakeConnector(target.owner, target.index, is_input=False))
+            return
         self.connections.append(target)
         target.connections.append(FakeConnector(self.owner, self.index, is_input=False))
 
@@ -304,6 +308,8 @@ def test_agent_creates_and_connects_a_bounded_basic_network() -> None:
         "output_index": 0,
         "input_index": 0,
         "connected": True,
+        "replaced": False,
+        "previous_connection": None,
     }
     connection = operators["/project1/output"].inputConnectors[0].connections[0]
     assert (connection.owner.path, connection.index, connection.isOutput) == (
@@ -338,6 +344,183 @@ def test_agent_creates_and_connects_a_bounded_basic_network() -> None:
                 },
             }
         )
+
+
+def test_operator_control_renames_exactly_and_rejects_collision() -> None:
+    class RenameOperator(FakeOperator):
+        def __init__(self, path: str) -> None:
+            self._name = path.rsplit("/", 1)[-1]
+            super().__init__(path)
+
+        @property
+        def name(self):
+            return self._name
+
+        @name.setter
+        def name(self, value):
+            self._name = value
+            self.path = self.path.rsplit("/", 1)[0] + "/" + value
+
+    operator = RenameOperator("/project1/source")
+    occupied = RenameOperator("/project1/occupied")
+
+    def lookup(path: str):
+        return next((item for item in (operator, occupied) if item.path == path), None)
+
+    control = OperatorControl(lookup)
+    assert control.execute(
+        {"name": "ops.rename", "input": {"operator_path": operator.path, "new_name": "renamed"}}
+    ) == {
+        "old_path": "/project1/source",
+        "path": "/project1/renamed",
+        "old_name": "source",
+        "name": "renamed",
+        "renamed": True,
+    }
+
+    with pytest.raises(module.AgentCommandError, match="operator_already_exists"):
+        control.execute(
+            {
+                "name": "ops.rename",
+                "input": {"operator_path": operator.path, "new_name": "occupied"},
+            }
+        )
+
+
+def test_rename_failure_rolls_back_or_reports_uncertain_state() -> None:
+    class CorrectingOperator:
+        family = "TOP"
+        OPType = "nullTOP"
+
+        def __init__(self, *, rollback_fails: bool) -> None:
+            self.path = "/project1/source"
+            self._name = "source"
+            self.rollback_fails = rollback_fails
+
+        @property
+        def name(self):
+            return self._name
+
+        @name.setter
+        def name(self, value):
+            if value == "source" and self.rollback_fails:
+                raise RuntimeError("rollback rejected")
+            actual = value if value == "source" else value + "1"
+            self._name = actual
+            self.path = "/project1/" + actual
+
+    restored = CorrectingOperator(rollback_fails=False)
+    with pytest.raises(module.AgentCommandError, match="operator_rename_failed"):
+        OperatorControl(lambda _: restored).execute(
+            {
+                "name": "ops.rename",
+                "input": {"operator_path": restored.path, "new_name": "renamed"},
+            }
+        )
+    assert (restored.path, restored.name) == ("/project1/source", "source")
+
+    uncertain = CorrectingOperator(rollback_fails=True)
+    with pytest.raises(module.AgentCommandError, match="operator_rename_rollback_failed"):
+        OperatorControl(lambda _: uncertain).execute(
+            {
+                "name": "ops.rename",
+                "input": {"operator_path": uncertain.path, "new_name": "renamed"},
+            }
+        )
+
+
+def test_operator_control_disconnects_exactly_and_replaces_input_connection() -> None:
+    first = FakeOperator("/project1/first", family="TOP", outputs=1)
+    second = FakeOperator("/project1/second", family="TOP", outputs=1)
+    target = FakeOperator("/project1/target", family="TOP", inputs=1)
+    operators = {item.path: item for item in (first, second, target)}
+    control = OperatorControl(operators.get)
+    first.outputConnectors[0].connect(target.inputConnectors[0])
+
+    with pytest.raises(module.AgentCommandError, match="connection_not_found"):
+        control.execute(
+            {
+                "name": "ops.disconnect",
+                "input": {
+                    "source_path": second.path,
+                    "target_path": target.path,
+                    "output_index": 0,
+                    "input_index": 0,
+                },
+            }
+        )
+
+    assert (
+        control.execute(
+            {
+                "name": "ops.disconnect",
+                "input": {
+                    "source_path": first.path,
+                    "target_path": target.path,
+                    "output_index": 0,
+                    "input_index": 0,
+                },
+            }
+        )["disconnected"]
+        is True
+    )
+    assert target.inputConnectors[0].connections == []
+
+    first.outputConnectors[0].connect(target.inputConnectors[0])
+    replaced = control.execute(
+        {
+            "name": "ops.connect",
+            "input": {
+                "source_path": second.path,
+                "target_path": target.path,
+                "output_index": 0,
+                "input_index": 0,
+                "replace": True,
+            },
+        }
+    )
+    assert replaced["replaced"] is True
+    assert replaced["previous_connection"] == {
+        "source_path": first.path,
+        "output_index": 0,
+    }
+    connection = target.inputConnectors[0].connections[0]
+    assert (connection.owner.path, connection.index) == (second.path, 0)
+
+
+def test_replace_failure_restores_previous_connection_or_reports_uncertain_state() -> None:
+    first = FakeOperator("/project1/first", family="TOP", outputs=1)
+    second = FakeOperator("/project1/second", family="TOP", outputs=1)
+    target = FakeOperator("/project1/target", family="TOP", inputs=1)
+    operators = {item.path: item for item in (first, second, target)}
+    control = OperatorControl(operators.get)
+    connector = target.inputConnectors[0]
+    first.outputConnectors[0].connect(connector)
+    input_connect = connector.connect
+
+    def reject_second(source_connector) -> None:
+        if source_connector.owner is second:
+            connector.connections.clear()
+            raise RuntimeError("replace rejected")
+        input_connect(source_connector)
+
+    connector.connect = reject_second
+    payload = {
+        "source_path": second.path,
+        "target_path": target.path,
+        "output_index": 0,
+        "input_index": 0,
+        "replace": True,
+    }
+    with pytest.raises(module.AgentCommandError, match="connector_replace_failed"):
+        control.execute({"name": "ops.connect", "input": payload})
+    assert connector.connections[0].owner is first
+
+    first.outputConnectors[0].connect(connector)
+    connector.connect = lambda _: (_ for _ in ()).throw(RuntimeError("all connects rejected"))
+    with pytest.raises(module.AgentCommandError, match="connector_replace_rollback_failed"):
+        control.execute({"name": "ops.connect", "input": payload})
+    assert connector.connections == []
 
 
 def test_network_mutation_failures_roll_back_partial_changes() -> None:
@@ -429,6 +612,88 @@ def test_agent_rejects_invalid_expression_with_typed_error() -> None:
     )
     assert invalid_event == "request_rejected"
     assert invalid["code"] == "expression_invalid"
+
+
+def test_parameter_list_reports_runtime_names_types_and_expression_capabilities() -> None:
+    root = FakeOperator("/project1")
+
+    def parameter(name: str, style: str, **values):
+        item = FakeParameter(values.pop("value", None), mode=values.pop("mode", "constant"))
+        defaults = {
+            "name": name,
+            "label": name.title(),
+            "style": style,
+            "page": SimpleNamespace(name="Test"),
+            "hidden": False,
+            "isPulse": False,
+            "isMenu": False,
+            "isNumber": False,
+            "isFloat": False,
+            "isInt": False,
+            "isOP": False,
+            "isPython": False,
+            "isSequence": False,
+            "isString": False,
+            "isToggle": False,
+            "menuNames": [],
+            "menuLabels": [],
+        }
+        for key, value in {**defaults, **values}.items():
+            setattr(item, key, value)
+        return item
+
+    gain = parameter("gain", "Float", value=0.5, isNumber=True, isFloat=True)
+    gain.expr = "me.time.seconds"
+    menu = parameter(
+        "operation",
+        "Menu",
+        isMenu=True,
+        menuNames=["add", "multiply"],
+        menuLabels=["Add", "Multiply"],
+    )
+    python_value = parameter("payload", "Python", isPython=True)
+    pulse = parameter("reset", "Pulse", isPulse=True)
+    hidden = parameter("legacy", "Int", isInt=True, hidden=True)
+    custom = parameter("Customvalue", "Str", isString=True, mode="expression")
+    custom.expr = "'hello'"
+    root.builtinPars = [gain, menu, python_value, pulse, hidden]
+    root.customPars = [custom]
+
+    result = OperatorControl(lambda _: root).execute(
+        {"name": "parameters.list", "input": {"operator_path": root.path}}
+    )
+    items = {item["name"]: item for item in result["parameters"]}
+    assert result["operator_path"] == root.path
+    assert items["gain"]["value_kind"] == "number"
+    assert items["gain"]["expression"] == {
+        "supported": True,
+        "source": "me.time.seconds",
+    }
+    assert items["operation"]["menu_names"] == ["add", "multiply"]
+    assert items["operation"]["menu_labels"] == ["Add", "Multiply"]
+    assert items["payload"]["constant_supported"] is False
+    assert items["payload"]["expression_supported"] is False
+    assert items["reset"]["pulse_supported"] is True
+    assert items["legacy"]["hidden"] is True
+    assert items["Customvalue"]["custom"] is True
+    assert items["Customvalue"]["mode"] == "expression"
+
+    batch = OperatorControl(lambda _: root)
+    batch.preflight({"name": "parameters.list", "input": {"operator_path": root.path}})
+
+
+@pytest.mark.parametrize("mode", ["export", "bind"])
+def test_parameter_get_reports_non_constant_runtime_modes(mode: str) -> None:
+    root = FakeOperator("/project1")
+    root.par.driven = FakeParameter(2.5, mode=mode)
+    result = OperatorControl(lambda _: root).execute(
+        {
+            "name": "parameters.get",
+            "input": {"operator_path": root.path, "parameter": "driven"},
+        }
+    )
+    assert result["mode"] == mode
+    assert result["value"] == 2.5
 
 
 def test_phase_3_observation_binary_metadata_and_events_are_bounded() -> None:

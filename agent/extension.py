@@ -26,8 +26,11 @@ class OperatorControl:
         "ops.children": "_children",
         "ops.connect": "_connect_operators",
         "ops.create": "_create_operator",
+        "ops.disconnect": "_disconnect_operators",
         "ops.get": "_get_operator",
+        "ops.rename": "_rename_operator",
         "parameters.get": "_get_parameter",
+        "parameters.list": "_list_parameters",
         "parameters.pulse": "_pulse_parameter",
         "parameters.set": "_set_parameter",
     }
@@ -60,6 +63,43 @@ class OperatorControl:
             children = [child for child in children if child["op_type"] == op_type]
         return sorted(children, key=lambda child: child["path"])
 
+    def _rename_operator(self, payload):
+        operator = self._operator(payload)
+        old_path = str(operator.path)
+        if old_path == "/":
+            raise AgentCommandError("operator_rename_forbidden")
+        old_name = str(operator.name)
+        new_name = payload["new_name"]
+        new_path = old_path.rsplit("/", 1)[0] + "/" + new_name
+        collision = self.operator_lookup(new_path)
+        if collision is not None and collision is not operator:
+            raise AgentCommandError("operator_already_exists")
+        try:
+            operator.name = new_name
+            if (
+                str(operator.name) != new_name
+                or str(operator.path) != new_path
+                or self.operator_lookup(new_path) is not operator
+            ):
+                raise AgentCommandError("operator_rename_failed")
+        except Exception as error:
+            try:
+                operator.name = old_name
+                if str(operator.name) != old_name or str(operator.path) != old_path:
+                    raise RuntimeError("rename rollback verification failed")
+            except Exception:  # noqa: BLE001 - preserve the uncertain mutation outcome
+                raise AgentCommandError("operator_rename_rollback_failed") from error
+            if isinstance(error, AgentCommandError):
+                raise
+            raise AgentCommandError("operator_rename_failed") from error
+        return {
+            "old_path": old_path,
+            "path": new_path,
+            "old_name": old_name,
+            "name": new_name,
+            "renamed": True,
+        }
+
     def _parameter_for_payload(self, payload):
         operator = self._operator(payload)
         parameter = self._parameter(operator, payload["parameter"])
@@ -80,13 +120,101 @@ class OperatorControl:
             "pulsed": True,
         }
 
+    def _list_parameters(self, payload):
+        operator = self._operator(payload)
+        builtin = list(getattr(operator, "builtinPars", []))
+        custom = list(getattr(operator, "customPars", []))
+        builtin_ids = {id(parameter) for parameter in builtin}
+        custom_ids = {id(parameter) for parameter in custom}
+        parameters = [
+            self._parameter_metadata(
+                parameter,
+                builtin=id(parameter) in builtin_ids,
+                custom=id(parameter) in custom_ids,
+            )
+            for parameter in builtin + custom
+        ]
+        return {
+            "operator_path": str(operator.path),
+            "parameters": sorted(parameters, key=lambda item: item["name"]),
+        }
+
+    @classmethod
+    def _parameter_metadata(cls, parameter, *, builtin, custom):
+        value_kind = cls._parameter_value_kind(parameter)
+        read_only = bool(getattr(parameter, "readOnly", False))
+        constant_supported = not read_only and value_kind in {
+            "boolean",
+            "integer",
+            "number",
+            "string",
+            "menu",
+            "operator",
+        }
+        expression_supported = constant_supported
+        pulse_supported = not read_only and value_kind == "pulse"
+        page = getattr(parameter, "page", None)
+        menu = value_kind == "menu"
+        return {
+            "name": str(parameter.name),
+            "label": str(parameter.label),
+            "page": str(page.name) if page is not None else None,
+            "style": str(parameter.style),
+            "builtin": bool(builtin),
+            "custom": bool(custom),
+            "hidden": bool(getattr(parameter, "hidden", False)),
+            "read_only": read_only,
+            "mode": cls._parameter_mode(parameter),
+            "value_kind": value_kind,
+            "constant_supported": constant_supported,
+            "expression_supported": expression_supported,
+            "pulse_supported": pulse_supported,
+            "expression": {
+                "supported": expression_supported,
+                "source": str(getattr(parameter, "expr", "")) if expression_supported else None,
+            },
+            "menu_names": [str(value) for value in getattr(parameter, "menuNames", [])]
+            if menu
+            else None,
+            "menu_labels": [str(value) for value in getattr(parameter, "menuLabels", [])]
+            if menu
+            else None,
+        }
+
+    @staticmethod
+    def _parameter_mode(parameter):
+        mode = str(parameter.mode).lower()
+        for known in ("expression", "export", "bind"):
+            if known in mode:
+                return known
+        return "constant"
+
+    @staticmethod
+    def _parameter_value_kind(parameter):
+        checks = (
+            ("isPulse", "pulse"),
+            ("isMenu", "menu"),
+            ("isToggle", "boolean"),
+            ("isInt", "integer"),
+            ("isFloat", "number"),
+            ("isNumber", "number"),
+            ("isString", "string"),
+            ("isOP", "operator"),
+            ("isPython", "python"),
+            ("isSequence", "sequence"),
+        )
+        return next(
+            (kind for attribute, kind in checks if bool(getattr(parameter, attribute, False))),
+            "unknown",
+        )
+
     def preflight(self, command):
         name = command["name"]
         payload = command["input"]
         operator = self.operator_lookup(payload["operator_path"])
         if operator is None:
             raise AgentCommandError("operator_not_found")
-        if name.startswith("parameters."):
+        if name.startswith("parameters.") and "parameter" in payload:
             parameter = self._parameter(operator, payload["parameter"])
             self._preflight_parameter(name, operator, payload, parameter)
 
@@ -138,28 +266,107 @@ class OperatorControl:
             raise AgentCommandError("connector_not_found")
         source_connector = source.outputConnectors[output_index]
         target_connector = target.inputConnectors[input_index]
-        if target_connector.connections:
+        replace = payload.get("replace", False)
+        previous = target_connector.connections[0] if target_connector.connections else None
+        previous_connection = (
+            {"source_path": str(previous.owner.path), "output_index": int(previous.index)}
+            if previous is not None
+            else None
+        )
+        if previous is not None and not replace:
             raise AgentCommandError("connector_occupied")
+        if previous is not None and self._connection_matches(previous, source, output_index):
+            return {
+                "source_path": str(source.path),
+                "target_path": str(target.path),
+                "output_index": output_index,
+                "input_index": input_index,
+                "connected": True,
+                "replaced": False,
+                "previous_connection": previous_connection,
+            }
         try:
-            source_connector.connect(target_connector)
-        except Exception:  # noqa: BLE001 - TouchDesigner raises tdError subclasses
+            if previous is not None:
+                target_connector.connect(source_connector)
+            else:
+                source_connector.connect(target_connector)
+            if not any(
+                self._connection_matches(connection, source, output_index)
+                for connection in target_connector.connections
+            ):
+                raise RuntimeError("connection verification failed")
+        except Exception as error:
             self._disconnect_connector(target_connector)
-            raise AgentCommandError("connector_connect_failed")
-        if not any(
-            str(connection.owner.path) == str(source.path)
-            and int(connection.index) == output_index
-            and bool(connection.isOutput)
-            for connection in target_connector.connections
-        ):
-            self._disconnect_connector(target_connector)
-            raise AgentCommandError("connector_connect_failed")
+            if previous is not None:
+                try:
+                    previous_source = previous.owner.outputConnectors[int(previous.index)]
+                    target_connector.connect(previous_source)
+                    if not any(
+                        self._connection_matches(connection, previous.owner, int(previous.index))
+                        for connection in target_connector.connections
+                    ):
+                        raise RuntimeError("replace rollback verification failed")
+                except Exception:  # noqa: BLE001 - uncertain graph mutation outcome
+                    raise AgentCommandError("connector_replace_rollback_failed") from error
+                raise AgentCommandError("connector_replace_failed") from error
+            raise AgentCommandError("connector_connect_failed") from error
         return {
             "source_path": str(source.path),
             "target_path": str(target.path),
             "output_index": output_index,
             "input_index": input_index,
             "connected": True,
+            "replaced": previous is not None,
+            "previous_connection": previous_connection,
         }
+
+    def _disconnect_operators(self, payload):
+        source, target, output_index, input_index = self._connector_endpoints(payload)
+        target_connector = target.inputConnectors[input_index]
+        if not any(
+            self._connection_matches(connection, source, output_index)
+            for connection in target_connector.connections
+        ):
+            raise AgentCommandError("connection_not_found")
+        try:
+            target_connector.disconnect()
+        except Exception as error:
+            raise AgentCommandError("connector_disconnect_failed") from error
+        if any(
+            self._connection_matches(connection, source, output_index)
+            for connection in target_connector.connections
+        ):
+            raise AgentCommandError("connector_disconnect_failed")
+        return {
+            "source_path": str(source.path),
+            "target_path": str(target.path),
+            "output_index": output_index,
+            "input_index": input_index,
+            "disconnected": True,
+        }
+
+    def _connector_endpoints(self, payload):
+        source = self.operator_lookup(payload["source_path"])
+        target = self.operator_lookup(payload["target_path"])
+        if source is None or target is None:
+            raise AgentCommandError("operator_not_found")
+        if str(source.family) != str(target.family):
+            raise AgentCommandError("operator_family_mismatch")
+        output_index = payload["output_index"]
+        input_index = payload["input_index"]
+        if output_index >= len(source.outputConnectors) or input_index >= len(
+            target.inputConnectors
+        ):
+            raise AgentCommandError("connector_not_found")
+        return source, target, output_index, input_index
+
+    @staticmethod
+    def _connection_matches(connection, source, output_index):
+        return (
+            str(connection.owner.path) == str(source.path)
+            and int(connection.index) == output_index
+            and bool(connection.isOutput)
+        )
 
     @staticmethod
     def _disconnect_connector(connector):
@@ -221,10 +428,9 @@ class OperatorControl:
             raise AgentCommandError("parameter_not_found")
         return parameter
 
-    @staticmethod
-    def _parameter_result(operator, name, parameter):
-        mode_text = str(parameter.mode).lower()
-        mode = "expression" if "expression" in mode_text else "constant"
+    @classmethod
+    def _parameter_result(cls, operator, name, parameter):
+        mode = cls._parameter_mode(parameter)
         value = parameter.expr if mode == "expression" else parameter.eval()
         if type(value) is bool:
             value_type = "boolean"
