@@ -278,7 +278,9 @@ def test_create_conditional_operator_requires_explicit_cli_opt_in(monkeypatch) -
         ),
     ],
 )
-def test_dedicated_cli_commands_reach_public_submission_seam(monkeypatch, argv, expected) -> None:
+def test_project_export_batch_and_events_cli_reach_submission_seam(
+    monkeypatch, argv, expected
+) -> None:
     monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
 
     result = CliRunner().invoke(cli.app, argv)
@@ -525,7 +527,9 @@ def test_dedicated_cli_commands_reach_public_submission_seam(monkeypatch, argv, 
         ),
     ],
 )
-def test_dedicated_cli_commands_reach_submission_seam(monkeypatch, argv, expected) -> None:
+def test_operator_parameter_and_dat_cli_commands_reach_submission_seam(
+    monkeypatch, argv, expected
+) -> None:
     monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
     result = CliRunner().invoke(cli.app, argv)
     assert result.exit_code == 0, result.output
