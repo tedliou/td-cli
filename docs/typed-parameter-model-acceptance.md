@@ -59,5 +59,46 @@ block-local names. Block names, indexes, block size, block count, and unlimited
 - Transport restores nullable source, bounds, unsupported reason, Sequence,
   block-name, and Operator-null fields omitted by the locked Socket.IO DAT.
 
-Source-first Agent artifact identity, packaged CLI smoke, and final Online
-Instance command evidence are recorded after the canonical source commit.
+## Source-first Agent and live evidence
+
+The Agent was rebuilt from the committed canonical source inside TouchDesigner
+2025.32050, inspected independently, and then used for all public-command
+checks.
+
+- Canonical Agent source revision:
+  `a53dff00c3bd51d93749d67e9347af0eadcbb38d21e46968be21afe10b460d83`
+- Local derived artifact SHA-256:
+  `992ec254b0a2acb828f83e6fe7048088c6fc70dede7243db60fc9c1fb5472abf`
+- Online Instance Selector: `0e7e`
+- Advertised capabilities: all 28 public Commands
+- Required eight-Operator artifact topology: passed
+
+Public live commands verified single OP and ordered Multi-OP constants, Int,
+Unicode Str, opaque Python inspection without a value, Pulse, Bind source
+identity, disabled rejection without mutation, and an exact two-block Sequence
+containing a Unicode name, empty name, constant value, and expression source.
+A clamped Sequence write failed with `parameter_sequence_write_failed`; the
+subsequent complete read proved both blocks, names, modes, and values had been
+restored. An Export request without an existing matching channel failed with
+`parameter_export_source_unavailable` and preserved the prior Bind state.
+
+## Automated and packaged gates
+
+- `uv run pytest -q`: `313 passed` at the final source-first build point.
+- `uv run ruff check .`: passed.
+- `uv run mypy src`: passed with 16 source files checked.
+- `git diff --check`: passed.
+- PyInstaller 6.15.0 rebuilt all three one-file executables and both Agent
+  distributions. Packaged `td.exe` reported v0.1.2 and performed live Unicode
+  Parameter and Sequence reads against the Online Instance.
+
+Local acceptance archive SHA-256 values (not immutable Release assets):
+
+- `td-v0.1.2-windows-x86_64.zip`:
+  `9b3ee365c3238936cbcea45ad28e39945375259dbfa0f2f46e2c5498c1a4bcc0`
+- `td-daemon-v0.1.2-windows-x86_64.zip`:
+  `88691b6ec4deecb09011bd516353064756cc8455a6b90e08de1ee8b77ac0f5e5`
+- `td-agent-cli-v0.1.2-windows-x86_64.zip`:
+  `2c20be5dfce6f8c1cf3823c9de64074a2cd63957fcb8ec6cdaa1264b7d36458d`
+- `td-agent-component-v0.1.2-td2025.32050.zip`:
+  `56cbc486d35727d4e57b41cd2a898388dfbc00d91527d9a38ba699580537822f`
