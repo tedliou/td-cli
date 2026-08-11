@@ -63,6 +63,28 @@ def test_ops_get_submits_typed_command_and_emits_protocol_envelope(monkeypatch) 
     }
 
 
+def test_json_output_is_ascii_portable_and_unicode_lossless(monkeypatch) -> None:
+    class UnicodeDaemonClient(FakeDaemonClient):
+        def wait(self, request_id):
+            return {
+                "request_id": request_id,
+                "status": "succeeded",
+                "result": {
+                    "operator_path": "/project1/notes",
+                    "dat_kind": "text",
+                    "text": "繁體 😀",
+                    "utf8_bytes": 11,
+                },
+            }
+
+    monkeypatch.setattr(cli, "DaemonClient", UnicodeDaemonClient)
+    result = CliRunner().invoke(cli.app, ["--json", "dat", "text", "get", "/project1/notes"])
+
+    assert result.exit_code == 0, result.output
+    assert result.stdout.isascii()
+    assert json.loads(result.stdout)["data"]["text"] == "繁體 😀"
+
+
 def test_command_rejects_mixed_input_modes_as_json(monkeypatch) -> None:
     monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
 

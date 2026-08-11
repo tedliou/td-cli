@@ -78,9 +78,9 @@ def _emit(ctx: typer.Context, data: object, *, request: dict[str, Any] | None = 
         envelope: dict[str, object] = {"protocol_version": 1, "data": data}
         if request is not None:
             envelope["request"] = {"request_id": request["request_id"], "status": request["status"]}
-        typer.echo(json.dumps(envelope, separators=(",", ":"), ensure_ascii=False))
+        typer.echo(json.dumps(envelope, separators=(",", ":"), ensure_ascii=True))
     else:
-        typer.echo(json.dumps(data, indent=2, ensure_ascii=False))
+        typer.echo(json.dumps(data, indent=2, ensure_ascii=True))
 
 
 def _fail(ctx: typer.Context, error: ClientError) -> None:
