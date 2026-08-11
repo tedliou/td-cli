@@ -1,6 +1,6 @@
 # COMP hierarchy connection control acceptance
 
-Date: 2026-08-11
+Date: 2026-08-12
 
 Platform: Windows 11, Python 3.11, TouchDesigner 2025.32050 official build
 
@@ -50,9 +50,9 @@ edge from both connector directions.
 ## Source-first Agent and live evidence
 
 - Canonical Agent source revision:
-  `5b3fa4896a6c4eb4af7e336de4f2b282ada9c788ad057c03239d96789e02ae50`
+  `f3957249091987d5a9c371860e28dc9f634e8d3738ddeb49b1eb8b3cc091eab2`
 - Local derived artifact SHA-256:
-  `3c7c619110fefedc9f5c3aff40061cd85263f1e87dfbdd08caaf9dc2667a7f9f`
+  `0c8020bae63f35c9d8b3dfa2ac5d61d156f126e98578fa3ca1834efe10bc7da0`
 - Online Instance Selector: `8023`
 - Advertised capabilities: all 31 public Commands
 - Required eight-Operator artifact topology: passed
@@ -72,7 +72,7 @@ structural guards.
 
 ## Automated and packaged gates
 
-- `uv run pytest -q`: `344 passed` at the final source-first build point.
+- `uv run pytest -q`: `346 passed` at the final source-first build point.
 - `uv run ruff check .`: passed.
 - `uv run ruff format --check .`: passed.
 - `uv run mypy src`: passed with 16 source files checked.
@@ -84,10 +84,10 @@ structural guards.
 Local acceptance archive SHA-256 values (not immutable Release assets):
 
 - `td-v0.1.2-windows-x86_64.zip`:
-  `438cfb3b9a466f92c9a0d885fd73f1822421c263302e9957df16894d9d299c2d`
+  `914fe7deabfda9e2d7803efbb76251033a25109e31cca497afd6d01d53727811`
 - `td-daemon-v0.1.2-windows-x86_64.zip`:
-  `3ae816863d27bff431263fa3ada3acfa11d23e5f9318f94eb00fff863462da90`
+  `fd99493404f2251f9ba43145387ee1e906059923b1cffaada3eb5e80c7459ed9`
 - `td-agent-cli-v0.1.2-windows-x86_64.zip`:
-  `a9896ce87e931240f7fc39a33c4eca1bfe548b1460b7974608f4afe3f980056f`
+  `9d958dd022b0c42cdad900d0577f5a36066a761af23e5f22b81f7bf8c29fe029`
 - `td-agent-component-v0.1.2-td2025.32050.zip`:
-  `7dc6846d91499855799124f0b968e78959bf374e0e475d631328d3c1cd8148c9`
+  `d37146f6fd2fcf6c618321301d46a7ab81f66cba1eca668c94d5c0d177c064c8`
