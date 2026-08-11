@@ -20,6 +20,7 @@ app = typer.Typer(no_args_is_help=True)
 instances_app = typer.Typer()
 requests_app = typer.Typer()
 ops_app = typer.Typer()
+ops_state_app = typer.Typer()
 parameters_app = typer.Typer()
 project_app = typer.Typer()
 binary_app = typer.Typer()
@@ -28,6 +29,7 @@ events_app = typer.Typer()
 app.add_typer(instances_app, name="instances")
 app.add_typer(requests_app, name="requests")
 app.add_typer(ops_app, name="ops")
+ops_app.add_typer(ops_state_app, name="state")
 app.add_typer(parameters_app, name="parameters")
 app.add_typer(project_app, name="project")
 app.add_typer(binary_app, name="binary")
@@ -322,6 +324,65 @@ def ops_get(
         no_wait,
         request_id,
     )
+
+
+@ops_state_app.command("get")
+def ops_state_get(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    _command(
+        ctx,
+        "ops.state.get",
+        {"operator_path": operator_path} if operator_path is not None else None,
+        input,
+        input_file,
+        no_wait,
+        request_id,
+    )
+
+
+@ops_state_app.command("set")
+def ops_state_set(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    node_x: Annotated[int | None, typer.Option("--node-x")] = None,
+    node_y: Annotated[int | None, typer.Option("--node-y")] = None,
+    node_width: Annotated[int | None, typer.Option("--node-width")] = None,
+    node_height: Annotated[int | None, typer.Option("--node-height")] = None,
+    color: Annotated[tuple[float, float, float] | None, typer.Option("--color")] = None,
+    comment: Annotated[str | None, typer.Option("--comment")] = None,
+    bypass: Annotated[bool | None, typer.Option("--bypass/--no-bypass")] = None,
+    lock: Annotated[bool | None, typer.Option("--lock/--no-lock")] = None,
+    viewer: Annotated[bool | None, typer.Option("--viewer/--no-viewer")] = None,
+    expose: Annotated[bool | None, typer.Option("--expose/--no-expose")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    patch = {
+        "node_x": node_x,
+        "node_y": node_y,
+        "node_width": node_width,
+        "node_height": node_height,
+        "color": (
+            {"red": color[0], "green": color[1], "blue": color[2]} if color is not None else None
+        ),
+        "comment": comment,
+        "bypass": bypass,
+        "lock": lock,
+        "viewer": viewer,
+        "expose": expose,
+    }
+    if any(value is not None for value in patch.values()) and operator_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = {"operator_path": operator_path, **patch} if operator_path is not None else None
+    _command(ctx, "ops.state.set", dedicated, input, input_file, no_wait, request_id)
 
 
 @ops_app.command("children")

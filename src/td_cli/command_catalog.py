@@ -41,6 +41,45 @@ class ConnectionsInput(OperatorInput):
     max_connections: int = Field(default=256, ge=1, le=1000)
 
 
+class OperatorColorInput(StrictModel):
+    red: float = Field(ge=0, le=1, allow_inf_nan=False)
+    green: float = Field(ge=0, le=1, allow_inf_nan=False)
+    blue: float = Field(ge=0, le=1, allow_inf_nan=False)
+
+
+class SetOperatorStateInput(OperatorInput):
+    node_x: int | None = Field(default=None, ge=-32768, le=32767)
+    node_y: int | None = Field(default=None, ge=-32768, le=32767)
+    node_width: int | None = Field(default=None, ge=1, le=32767)
+    node_height: int | None = Field(default=None, ge=1, le=32767)
+    color: OperatorColorInput | None = None
+    comment: str | None = Field(default=None, max_length=4096)
+    bypass: bool | None = None
+    lock: bool | None = None
+    viewer: bool | None = None
+    expose: bool | None = None
+
+    @model_validator(mode="after")
+    def patch_is_not_empty(self) -> SetOperatorStateInput:
+        if all(
+            getattr(self, field) is None
+            for field in (
+                "node_x",
+                "node_y",
+                "node_width",
+                "node_height",
+                "color",
+                "comment",
+                "bypass",
+                "lock",
+                "viewer",
+                "expose",
+            )
+        ):
+            raise ValueError("at least one Operator state field is required")
+        return self
+
+
 class CreateOperatorInput(StrictModel):
     parent_path: str
     op_type: str
@@ -226,6 +265,8 @@ COMMAND_CATALOG = CommandCatalog(
         CommandDefinition("ops.get", OperatorInput, batchable=True),
         CommandDefinition("ops.children", ChildrenInput, batchable=True),
         CommandDefinition("ops.connections", ConnectionsInput, batchable=True),
+        CommandDefinition("ops.state.get", OperatorInput, batchable=True),
+        CommandDefinition("ops.state.set", SetOperatorStateInput),
         CommandDefinition("parameters.get", ParameterInput, batchable=True),
         CommandDefinition("parameters.list", OperatorInput, batchable=True),
         CommandDefinition("parameters.set", SetParameterInput, batchable=True),
@@ -250,6 +291,7 @@ CommandInput = (
     OperatorInput
     | ChildrenInput
     | ConnectionsInput
+    | SetOperatorStateInput
     | CreateOperatorInput
     | RenameOperatorInput
     | DestroyOperatorInput

@@ -403,6 +403,12 @@ def _normalize_command_result(command: object, result: object) -> object:
         ]
     elif name == "ops.copy" and "include_docked" in normalized:
         normalized["include_docked"] = bool(normalized["include_docked"])
+    elif name in {"ops.state.get", "ops.state.set"} and isinstance(normalized.get("state"), dict):
+        state = dict(normalized["state"])
+        for field in ("bypass", "lock", "viewer", "expose"):
+            if field in state:
+                state[field] = bool(state[field])
+        normalized["state"] = state
     elif name == "parameters.list" and isinstance(normalized.get("parameters"), list):
         parameters = []
         for item in normalized["parameters"]:

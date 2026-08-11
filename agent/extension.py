@@ -52,6 +52,8 @@ class OperatorControl:
         "ops.get": "_get_operator",
         "ops.move": "_move_operator",
         "ops.rename": "_rename_operator",
+        "ops.state.get": "_get_operator_state",
+        "ops.state.set": "_set_operator_state",
         "parameters.get": "_get_parameter",
         "parameters.list": "_list_parameters",
         "parameters.pulse": "_pulse_parameter",
@@ -79,6 +81,127 @@ class OperatorControl:
 
     def _get_operator(self, payload):
         return self._operator_result(self._operator(payload))
+
+    def _get_operator_state(self, payload):
+        operator = self._operator(payload)
+        try:
+            state = self._operator_state(operator)
+        except Exception as error:
+            raise AgentCommandError("operator_state_unavailable") from error
+        return {"operator_path": str(operator.path), "state": state}
+
+    def _set_operator_state(self, payload):
+        operator = self._operator(payload)
+        path = str(operator.path)
+        self._require_mutable_path(path)
+        try:
+            before = self._operator_state(operator)
+        except Exception as error:
+            raise AgentCommandError("operator_state_unavailable") from error
+        applied_fields = []
+        try:
+            for field in self._operator_state_fields():
+                value = payload.get(field)
+                if value is None:
+                    continue
+                applied_fields.append(field)
+                self._apply_operator_state_field(operator, field, value)
+            state = self._operator_state(operator)
+            if not self._state_matches_patch(state, payload):
+                raise AgentCommandError("operator_state_failed")
+        except Exception as error:
+            if self.operator_lookup(path) is None:
+                raise AgentCommandError("operator_state_outcome_unknown") from error
+            if not self._restore_operator_state(operator, before):
+                raise AgentCommandError("operator_state_rollback_failed") from error
+            if isinstance(error, AgentCommandError):
+                raise
+            raise AgentCommandError("operator_state_failed") from error
+        return {
+            "operator_path": path,
+            "applied_fields": applied_fields,
+            "state": state,
+        }
+
+    @staticmethod
+    def _operator_state_fields():
+        return (
+            "node_x",
+            "node_y",
+            "node_width",
+            "node_height",
+            "color",
+            "comment",
+            "bypass",
+            "viewer",
+            "expose",
+            "lock",
+        )
+
+    @staticmethod
+    def _apply_operator_state_field(operator, field, value):
+        attributes = {
+            "node_x": "nodeX",
+            "node_y": "nodeY",
+            "node_width": "nodeWidth",
+            "node_height": "nodeHeight",
+            "color": "color",
+            "comment": "comment",
+            "bypass": "bypass",
+            "lock": "lock",
+            "viewer": "viewer",
+            "expose": "expose",
+        }
+        if field == "color":
+            value = (value["red"], value["green"], value["blue"])
+        setattr(operator, attributes[field], value)
+
+    def _restore_operator_state(self, operator, state):
+        try:
+            operator.lock = False
+            for field in self._operator_state_fields():
+                if field != "lock":
+                    self._apply_operator_state_field(operator, field, state[field])
+            operator.lock = state["lock"]
+            return self._state_matches_patch(self._operator_state(operator), state)
+        except Exception:  # noqa: BLE001 - locked runtime can raise td-specific errors
+            return False
+
+    @staticmethod
+    def _state_matches_patch(state, payload):
+        for field, expected in payload.items():
+            if field == "operator_path" or expected is None:
+                continue
+            actual = state[field]
+            if field == "color":
+                if any(
+                    abs(actual[channel] - expected[channel]) > 0.000001
+                    for channel in ("red", "green", "blue")
+                ):
+                    return False
+            elif actual != expected:
+                return False
+        return True
+
+    @staticmethod
+    def _operator_state(operator):
+        color = operator.color
+        return {
+            "node_x": int(operator.nodeX),
+            "node_y": int(operator.nodeY),
+            "node_width": int(operator.nodeWidth),
+            "node_height": int(operator.nodeHeight),
+            "color": {
+                "red": float(color[0]),
+                "green": float(color[1]),
+                "blue": float(color[2]),
+            },
+            "comment": str(operator.comment),
+            "bypass": bool(operator.bypass),
+            "lock": bool(operator.lock),
+            "viewer": bool(operator.viewer),
+            "expose": bool(operator.expose),
+        }
 
     def _children(self, payload):
         operator = self._operator(payload)

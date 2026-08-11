@@ -134,6 +134,10 @@ def test_network_mutation_error_remains_typed(tmp_path: Path, monkeypatch) -> No
         "operator_move_failed",
         "operator_move_rollback_failed",
         "operator_move_outcome_unknown",
+        "operator_state_unavailable",
+        "operator_state_failed",
+        "operator_state_rollback_failed",
+        "operator_state_outcome_unknown",
     ],
 )
 def test_execution_errors_remain_typed(tmp_path: Path, monkeypatch, code: str) -> None:

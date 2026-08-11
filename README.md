@@ -140,6 +140,24 @@ error is returned when the requested final state cannot be proven. Neither
 operation promises to rewrite DAT string literals, external systems, or every
 path-bearing expression/reference.
 
+Common Operator state has its own read and atomic partial-update Commands. The
+locked common subset is node position, size, RGB color, comment, and the
+Bypass, Lock, Viewer, and Expose flags. Every requested field is read back;
+TouchDesigner clamping or rejection rolls the whole patch back. Root and Agent
+Component protection is identical to structural mutation:
+
+```powershell
+td --json --instance <selector> ops state get /project1/source
+td --json --instance <selector> ops state set /project1/source --node-x -100 --node-width 140 --color 0.1 0.2 0.3 --comment "source" --bypass --no-expose
+```
+
+The update accepts at most a 4096-character comment, coordinates from -32768
+through 32767, positive dimensions up to 32767, and finite RGB components from
+0 through 1. Family-specific Display, Render, and Allow Cooking semantics,
+transient selection/current-viewer state, storage, arbitrary attributes, and
+Python objects are not exposed by these Commands. Distinct unavailable,
+failed, rollback-failed, and uncertain-outcome errors preserve honest state.
+
 The locked TouchDesigner 2025.32050 catalog covers 680 built-in types across all
 seven Operator families: 478 are supported by default, 165 side-effect or
 environment-dependent types require `ops create --allow-conditional`, 37 are
