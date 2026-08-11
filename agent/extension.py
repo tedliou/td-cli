@@ -469,12 +469,39 @@ class OperatorControl:
 
     def _connections(self, payload):
         operator = self._operator(payload)
-        maximum = payload["max_connections"]
         count = len(self._regular_edges([operator]))
+        return self._connector_inventory(
+            operator,
+            operator.inputConnectors,
+            operator.outputConnectors,
+            count,
+            payload["max_connections"],
+        )
+
+    def _hierarchy_connections(self, payload):
+        operator = self._operator(payload)
+        kind = self._hierarchy_kind(operator)
+        edges = self._hierarchy_edges([operator])
+        input_connectors = getattr(operator, "inputCOMPConnectors", [])
+        for connector in input_connectors:
+            if len(connector.connections) > 1:
+                raise AgentCommandError("hierarchy_connector_state_ambiguous")
+        result = self._connector_inventory(
+            operator,
+            input_connectors,
+            getattr(operator, "outputCOMPConnectors", []),
+            len(edges),
+            payload["max_connections"],
+        )
+        result["hierarchy_kind"] = kind
+        return result
+
+    @staticmethod
+    def _connector_inventory(operator, input_connectors, output_connectors, count, maximum):
         if count > maximum:
             raise AgentCommandError("result_too_large")
         inputs = []
-        for connector in operator.inputConnectors:
+        for connector in input_connectors:
             connection = connector.connections[0] if connector.connections else None
             inputs.append(
                 {
@@ -491,7 +518,7 @@ class OperatorControl:
                 }
             )
         outputs = []
-        for connector in operator.outputConnectors:
+        for connector in output_connectors:
             outputs.append(
                 {
                     "output_index": int(connector.index),
@@ -510,54 +537,6 @@ class OperatorControl:
             "inputs": inputs,
             "outputs": outputs,
             "connection_count": count,
-        }
-
-    def _hierarchy_connections(self, payload):
-        operator = self._operator(payload)
-        kind = self._hierarchy_kind(operator)
-        edges = self._hierarchy_edges([operator])
-        if len(edges) > payload["max_connections"]:
-            raise AgentCommandError("result_too_large")
-        inputs = []
-        for connector in getattr(operator, "inputCOMPConnectors", []):
-            if len(connector.connections) > 1:
-                raise AgentCommandError("hierarchy_connector_state_ambiguous")
-            connection = connector.connections[0] if connector.connections else None
-            inputs.append(
-                {
-                    "input_index": int(connector.index),
-                    "description": str(getattr(connector, "description", "") or ""),
-                    "connection": (
-                        {
-                            "source_path": str(connection.owner.path),
-                            "output_index": int(connection.index),
-                        }
-                        if connection is not None
-                        else None
-                    ),
-                }
-            )
-        outputs = []
-        for connector in getattr(operator, "outputCOMPConnectors", []):
-            outputs.append(
-                {
-                    "output_index": int(connector.index),
-                    "description": str(getattr(connector, "description", "") or ""),
-                    "connections": [
-                        {
-                            "target_path": str(connection.owner.path),
-                            "input_index": int(connection.index),
-                        }
-                        for connection in connector.connections
-                    ],
-                }
-            )
-        return {
-            "operator_path": str(operator.path),
-            "hierarchy_kind": kind,
-            "inputs": inputs,
-            "outputs": outputs,
-            "connection_count": len(edges),
         }
 
     def _rename_operator(self, payload):
@@ -793,52 +772,36 @@ class OperatorControl:
 
     @staticmethod
     def _regular_edges(subtree):
-        edges = set()
-        for operator in subtree:
-            for connector in operator.inputConnectors:
-                for connection in connector.connections:
-                    edges.add(
-                        (
-                            "regular",
-                            str(connection.owner.path),
-                            int(connection.index),
-                            str(operator.path),
-                            int(connector.index),
-                        )
-                    )
-            for connector in operator.outputConnectors:
-                for connection in connector.connections:
-                    edges.add(
-                        (
-                            "regular",
-                            str(operator.path),
-                            int(connector.index),
-                            str(connection.owner.path),
-                            int(connection.index),
-                        )
-                    )
-        return edges
+        return OperatorControl._connector_edges(
+            subtree, "inputConnectors", "outputConnectors", "regular"
+        )
 
     @staticmethod
     def _hierarchy_edges(subtree):
+        return OperatorControl._connector_edges(
+            subtree, "inputCOMPConnectors", "outputCOMPConnectors", "hierarchy"
+        )
+
+    @staticmethod
+    def _connector_edges(subtree, input_attribute, output_attribute, kind):
         edges = set()
         for operator in subtree:
-            for connector in getattr(operator, "inputCOMPConnectors", []):
+            for connector in getattr(operator, input_attribute, []):
                 for connection in connector.connections:
                     edges.add(
                         (
-                            "hierarchy",
+                            kind,
                             str(connection.owner.path),
                             int(connection.index),
                             str(operator.path),
                             int(connector.index),
                         )
                     )
-            for connector in getattr(operator, "outputCOMPConnectors", []):
+            for connector in getattr(operator, output_attribute, []):
                 for connection in connector.connections:
                     edges.add(
                         (
-                            "hierarchy",
+                            kind,
                             str(operator.path),
                             int(connector.index),
                             str(connection.owner.path),
@@ -1380,6 +1343,8 @@ class OperatorControl:
             else None
         )
         if previous is not None and self._connection_matches(previous, source, output_index):
+            if not self._hierarchy_identity_current(source, target):
+                raise AgentCommandError("hierarchy_connector_outcome_unknown")
             if not self._hierarchy_edge_matches(source_connector, target, input_index):
                 raise AgentCommandError("hierarchy_connector_state_ambiguous")
             return {
@@ -1395,26 +1360,27 @@ class OperatorControl:
             raise AgentCommandError("hierarchy_connector_occupied")
         try:
             source_connector.connect(target_connector)
+            if not self._hierarchy_identity_current(source, target):
+                raise AgentCommandError("hierarchy_connector_outcome_unknown")
             if not self._hierarchy_connection_verified(source, target, output_index, input_index):
                 raise RuntimeError("hierarchy connection verification failed")
         except Exception as error:
-            if (
-                self.operator_lookup(str(source.path)) is None
-                or self.operator_lookup(str(target.path)) is None
-            ):
+            if not self._hierarchy_identity_current(source, target):
                 raise AgentCommandError("hierarchy_connector_outcome_unknown") from error
             self._disconnect_connector(target_connector)
             if previous is not None:
                 try:
                     previous_source = self.operator_lookup(str(previous.owner.path))
-                    if previous_source is None:
-                        raise RuntimeError("previous hierarchy source disappeared")
+                    if previous_source is not previous.owner:
+                        raise AgentCommandError("hierarchy_connector_outcome_unknown")
                     previous_output = previous_source.outputCOMPConnectors[int(previous.index)]
                     previous_output.connect(target_connector)
                     if not self._hierarchy_connection_verified(
                         previous_source, target, int(previous.index), input_index
                     ):
                         raise RuntimeError("hierarchy rollback verification failed")
+                except AgentCommandError:
+                    raise
                 except Exception:  # noqa: BLE001 - uncertain hierarchy mutation outcome
                     raise AgentCommandError(
                         "hierarchy_connector_replace_rollback_failed"
@@ -1444,12 +1410,11 @@ class OperatorControl:
         try:
             target_connector.disconnect()
         except Exception as error:
-            if (
-                self.operator_lookup(str(source.path)) is None
-                or self.operator_lookup(str(target.path)) is None
-            ):
+            if not self._hierarchy_identity_current(source, target):
                 raise AgentCommandError("hierarchy_connector_outcome_unknown") from error
             raise AgentCommandError("hierarchy_connector_disconnect_failed") from error
+        if not self._hierarchy_identity_current(source, target):
+            raise AgentCommandError("hierarchy_connector_outcome_unknown")
         if target_connector.connections or self._hierarchy_edge_matches(
             source_connector, target, input_index
         ):
@@ -1510,6 +1475,9 @@ class OperatorControl:
         if bool(getattr(operator, "isPanel", False)):
             return "panel"
         return "unsupported"
+
+    def _hierarchy_identity_current(self, *operators):
+        return all(self.operator_lookup(str(operator.path)) is operator for operator in operators)
 
     @classmethod
     def _hierarchy_connection_verified(cls, source, target, output_index, input_index):

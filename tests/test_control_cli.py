@@ -684,7 +684,7 @@ def test_project_export_batch_and_events_cli_reach_submission_seam(
         ),
     ],
 )
-def test_operator_parameter_and_dat_cli_commands_reach_submission_seam(
+def test_operator_connection_state_parameter_and_dat_cli_commands_reach_submission_seam(
     monkeypatch, argv, expected
 ) -> None:
     monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
