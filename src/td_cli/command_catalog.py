@@ -278,6 +278,13 @@ class ParameterSourceInput(StrictModel):
 
     _operator_path = field_validator("operator_path")(_valid_operator_path)
 
+    @field_validator("parameter")
+    @classmethod
+    def parameter_is_runtime_identifier(cls, value: str | None) -> str | None:
+        if value is not None and re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", value) is None:
+            raise ValueError("parameter must be a TouchDesigner runtime identifier")
+        return value
+
     @model_validator(mode="after")
     def identity_matches_kind(self) -> ParameterSourceInput:
         if self.kind == "export_channel" and (self.channel is None or self.parameter is not None):

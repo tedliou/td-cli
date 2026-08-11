@@ -148,6 +148,23 @@ def test_parameter_sources_and_sequences_are_strict_and_bounded() -> None:
             }
         )
 
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {
+                "name": "parameters.set",
+                "input": {
+                    "operator_path": "/project1/target",
+                    "parameter": "Gain",
+                    "mode": "bind",
+                    "source": {
+                        "kind": "bind_parameter",
+                        "operator_path": "/project1/source",
+                        "parameter": "Gain.__class__",
+                    },
+                },
+            }
+        )
+
     sequence = Command.model_validate(
         {
             "name": "parameters.sequence.replace",

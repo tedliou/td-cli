@@ -1264,7 +1264,7 @@ class OperatorControl:
                     source_operator, source["parameter"]
                 ) is None:
                     raise AgentCommandError("parameter_source_not_found")
-                parameter.bindExpr = "op({!r}).par[{!r}]".format(
+                parameter.bindExpr = "op({!r}).par.{}".format(
                     source["operator_path"], source["parameter"]
                 )
             elif payload["mode"] == "export":
