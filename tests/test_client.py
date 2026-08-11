@@ -134,6 +134,7 @@ def test_network_mutation_error_remains_typed(tmp_path: Path, monkeypatch) -> No
         "hierarchy_connector_replace_rollback_failed",
         "hierarchy_connector_outcome_unknown",
         "hierarchy_cycle",
+        "hierarchy_parent_mismatch",
         "operator_type_unsupported",
         "operator_type_conditional",
         "operator_mutation_forbidden",

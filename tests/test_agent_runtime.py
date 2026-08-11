@@ -230,6 +230,10 @@ class FakeOperator:
         ]
         self.destroyed = False
 
+    def parent(self):
+        parent_path = self.path.rsplit("/", 1)[0] or "/"
+        return SimpleNamespace(path=parent_path)
+
     def create(self, op_type: str, name: str):
         created = FakeOperator(f"{self.path}/{name}", op_type=op_type, family="TOP", outputs=1)
         if op_type != "constantTOP":
@@ -969,7 +973,8 @@ def test_hierarchy_connect_requires_compatible_comps_and_verifies_no_op() -> Non
     child = FakeOperator("/project1/child", hierarchy_kind="object")
     panel = FakeOperator("/project1/panel", hierarchy_kind="panel")
     dat = FakeOperator("/project1/dat", family="DAT")
-    operators = {operator.path: operator for operator in (parent, child, panel, dat)}
+    nested = FakeOperator("/project1/group/nested", hierarchy_kind="object")
+    operators = {operator.path: operator for operator in (parent, child, panel, dat, nested)}
     control = make_control(operators.get)
     payload = {
         "source_path": parent.path,
@@ -981,13 +986,19 @@ def test_hierarchy_connect_requires_compatible_comps_and_verifies_no_op() -> Non
 
     connected = control.execute({"name": "ops.hierarchy.connect", "input": payload})
     assert connected == {
-        **payload,
+        "source_path": parent.path,
+        "target_path": child.path,
+        "output_index": 0,
+        "input_index": 0,
         "connected": True,
         "replaced": False,
         "previous_connection": None,
     }
     assert control.execute({"name": "ops.hierarchy.connect", "input": payload}) == {
-        **payload,
+        "source_path": parent.path,
+        "target_path": child.path,
+        "output_index": 0,
+        "input_index": 0,
         "connected": True,
         "replaced": False,
         "previous_connection": {
@@ -999,6 +1010,11 @@ def test_hierarchy_connect_requires_compatible_comps_and_verifies_no_op() -> Non
     for source, target, error in (
         (parent, panel, "hierarchy_kind_mismatch"),
         (dat, child, "hierarchy_comp_required"),
+        (
+            nested,
+            child,
+            "hierarchy_parent_mismatch",
+        ),
     ):
         with pytest.raises(module.AgentCommandError, match=error):
             control.execute(
@@ -1141,12 +1157,10 @@ def test_hierarchy_replace_distinguishes_rollback_failure_and_unknown_outcome() 
 
 
 def test_hierarchy_disconnect_is_exact_and_structural_guards_include_hierarchy_edges() -> None:
-    group = FakeOperator("/project1/group")
-    parent = FakeOperator("/project1/group/parent", hierarchy_kind="object")
+    group = FakeOperator("/project1/group", hierarchy_kind="object")
     child = FakeOperator("/project1/child", hierarchy_kind="object")
-    group.children = [parent]
-    parent.outputCOMPConnectors[0].connect(child.inputCOMPConnectors[0])
-    operators = {operator.path: operator for operator in (group, parent, child)}
+    group.outputCOMPConnectors[0].connect(child.inputCOMPConnectors[0])
+    operators = {operator.path: operator for operator in (group, child)}
     control = make_control(operators.get)
 
     with pytest.raises(module.AgentCommandError, match="operator_connected"):
@@ -1155,7 +1169,7 @@ def test_hierarchy_disconnect_is_exact_and_structural_guards_include_hierarchy_e
                 "name": "ops.destroy",
                 "input": {
                     "operator_path": group.path,
-                    "recursive": True,
+                    "recursive": False,
                     "allow_connected": False,
                     "max_operators": 4,
                 },
@@ -1166,7 +1180,7 @@ def test_hierarchy_disconnect_is_exact_and_structural_guards_include_hierarchy_e
         {
             "name": "ops.hierarchy.disconnect",
             "input": {
-                "source_path": parent.path,
+                "source_path": group.path,
                 "target_path": child.path,
                 "output_index": 0,
                 "input_index": 0,
@@ -1174,7 +1188,7 @@ def test_hierarchy_disconnect_is_exact_and_structural_guards_include_hierarchy_e
         }
     )
     assert disconnected["disconnected"] is True
-    assert parent.outputCOMPConnectors[0].connections == []
+    assert group.outputCOMPConnectors[0].connections == []
     assert child.inputCOMPConnectors[0].connections == []
 
 

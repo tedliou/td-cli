@@ -202,6 +202,7 @@ class DaemonClient:
             "hierarchy_connector_replace_rollback_failed",
             "hierarchy_connector_outcome_unknown",
             "hierarchy_cycle",
+            "hierarchy_parent_mismatch",
             "result_too_large",
             "parameter_not_found",
             "parameter_read_only",

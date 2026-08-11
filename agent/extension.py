@@ -1383,7 +1383,10 @@ class OperatorControl:
             if not self._hierarchy_edge_matches(source_connector, target, input_index):
                 raise AgentCommandError("hierarchy_connector_state_ambiguous")
             return {
-                **payload,
+                "source_path": str(source.path),
+                "target_path": str(target.path),
+                "output_index": output_index,
+                "input_index": input_index,
                 "connected": True,
                 "replaced": False,
                 "previous_connection": previous_connection,
@@ -1423,7 +1426,10 @@ class OperatorControl:
                 raise AgentCommandError("hierarchy_connector_outcome_unknown") from error
             raise AgentCommandError("hierarchy_connector_connect_failed") from error
         return {
-            **payload,
+            "source_path": str(source.path),
+            "target_path": str(target.path),
+            "output_index": output_index,
+            "input_index": input_index,
             "connected": True,
             "replaced": previous is not None,
             "previous_connection": previous_connection,
@@ -1468,6 +1474,8 @@ class OperatorControl:
             raise AgentCommandError("hierarchy_kind_unsupported")
         if source_kind != target_kind:
             raise AgentCommandError("hierarchy_kind_mismatch")
+        if str(source.parent().path) != str(target.parent().path):
+            raise AgentCommandError("hierarchy_parent_mismatch")
         output_index = payload["output_index"]
         input_index = payload["input_index"]
         if output_index >= len(source.outputCOMPConnectors) or input_index >= len(
