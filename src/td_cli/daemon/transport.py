@@ -396,6 +396,13 @@ def _normalize_command_result(command: object, result: object) -> object:
             ]
     elif name == "ops.connect":
         normalized.setdefault("previous_connection", None)
+    elif name == "ops.connections" and isinstance(normalized.get("inputs"), list):
+        normalized["inputs"] = [
+            {**item, "connection": item.get("connection")} if isinstance(item, dict) else item
+            for item in normalized["inputs"]
+        ]
+    elif name == "ops.copy" and "include_docked" in normalized:
+        normalized["include_docked"] = bool(normalized["include_docked"])
     elif name == "parameters.list" and isinstance(normalized.get("parameters"), list):
         parameters = []
         for item in normalized["parameters"]:

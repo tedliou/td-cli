@@ -51,6 +51,23 @@ def test_locked_socketio_omissions_are_restored_at_the_public_result_boundary() 
     assert listed["parameters"][1]["menu_labels"] == []
     assert listed["items"] == [1, None, 2]
 
+    connections = _normalize_command_result(
+        {"name": "ops.connections"},
+        {
+            "operator_path": "/project1/source",
+            "inputs": [{"input_index": 0, "description": "Input"}],
+            "outputs": [],
+            "connection_count": 0,
+        },
+    )
+    assert connections["inputs"][0]["connection"] is None
+
+    copied = _normalize_command_result(
+        {"name": "ops.copy"},
+        {"path": "/project1/copied", "include_docked": 0},
+    )
+    assert copied["include_docked"] is False
+
     batched = _normalize_command_result(
         {
             "name": "batch.execute",

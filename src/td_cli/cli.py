@@ -308,6 +308,29 @@ def ops_children(
     _command(ctx, "ops.children", dedicated, input, input_file, no_wait, request_id)
 
 
+@ops_app.command("connections")
+def ops_connections(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    max_connections: Annotated[int | None, typer.Option("--max-connections")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    if max_connections is not None and operator_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = (
+        {
+            "operator_path": operator_path,
+            "max_connections": max_connections if max_connections is not None else 256,
+        }
+        if operator_path is not None
+        else None
+    )
+    _command(ctx, "ops.connections", dedicated, input, input_file, no_wait, request_id)
+
+
 @ops_app.command("create")
 def ops_create(
     ctx: typer.Context,
@@ -389,6 +412,109 @@ def ops_rename(
         else None
     )
     _command(ctx, "ops.rename", dedicated, input, input_file, no_wait, request_id)
+
+
+@ops_app.command("destroy")
+def ops_destroy(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    recursive: Annotated[bool, typer.Option("--recursive")] = False,
+    allow_connected: Annotated[bool, typer.Option("--allow-connected")] = False,
+    max_operators: Annotated[int | None, typer.Option("--max-operators")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    if (recursive or allow_connected or max_operators is not None) and operator_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = (
+        {
+            "operator_path": operator_path,
+            "recursive": recursive,
+            "allow_connected": allow_connected,
+            "max_operators": max_operators if max_operators is not None else 256,
+        }
+        if operator_path is not None
+        else None
+    )
+    _command(ctx, "ops.destroy", dedicated, input, input_file, no_wait, request_id)
+
+
+@ops_app.command("copy")
+def ops_copy(
+    ctx: typer.Context,
+    source_path: Annotated[str | None, typer.Argument()] = None,
+    target_parent_path: Annotated[str | None, typer.Argument()] = None,
+    new_name: Annotated[str | None, typer.Argument()] = None,
+    node_x: Annotated[int | None, typer.Option("--node-x")] = None,
+    node_y: Annotated[int | None, typer.Option("--node-y")] = None,
+    include_docked: Annotated[bool, typer.Option("--include-docked")] = False,
+    max_operators: Annotated[int | None, typer.Option("--max-operators")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    identity = (source_path, target_parent_path, new_name)
+    if any(value is not None for value in identity) and not all(
+        value is not None for value in identity
+    ):
+        _fail(ctx, ClientError("invalid_arguments"))
+    if (
+        node_x is not None or node_y is not None or include_docked or max_operators is not None
+    ) and source_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = None
+    if source_path is not None and target_parent_path is not None and new_name is not None:
+        dedicated = {
+            "source_path": source_path,
+            "target_parent_path": target_parent_path,
+            "new_name": new_name,
+            "node_x": node_x,
+            "node_y": node_y,
+            "include_docked": include_docked,
+            "max_operators": max_operators if max_operators is not None else 256,
+        }
+    _command(ctx, "ops.copy", dedicated, input, input_file, no_wait, request_id)
+
+
+@ops_app.command("move")
+def ops_move(
+    ctx: typer.Context,
+    source_path: Annotated[str | None, typer.Argument()] = None,
+    target_parent_path: Annotated[str | None, typer.Argument()] = None,
+    new_name: Annotated[str | None, typer.Argument()] = None,
+    node_x: Annotated[int | None, typer.Option("--node-x")] = None,
+    node_y: Annotated[int | None, typer.Option("--node-y")] = None,
+    allow_connected: Annotated[bool, typer.Option("--allow-connected")] = False,
+    max_operators: Annotated[int | None, typer.Option("--max-operators")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    identity = (source_path, target_parent_path, new_name)
+    if any(value is not None for value in identity) and not all(
+        value is not None for value in identity
+    ):
+        _fail(ctx, ClientError("invalid_arguments"))
+    if (
+        node_x is not None or node_y is not None or allow_connected or max_operators is not None
+    ) and source_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = None
+    if source_path is not None and target_parent_path is not None and new_name is not None:
+        dedicated = {
+            "source_path": source_path,
+            "target_parent_path": target_parent_path,
+            "new_name": new_name,
+            "node_x": node_x,
+            "node_y": node_y,
+            "allow_connected": allow_connected,
+            "max_operators": max_operators if max_operators is not None else 256,
+        }
+    _command(ctx, "ops.move", dedicated, input, input_file, no_wait, request_id)
 
 
 @ops_app.command("disconnect")
