@@ -423,6 +423,80 @@ def test_connections_command_has_a_bounded_read_only_contract() -> None:
         )
 
 
+def test_hierarchy_connection_commands_are_distinct_strict_and_bounded() -> None:
+    inventory = Command.model_validate(
+        {
+            "name": "ops.hierarchy.connections",
+            "input": {"operator_path": "/project1/parent", "max_connections": 12},
+        }
+    )
+    connected = Command.model_validate(
+        {
+            "name": "ops.hierarchy.connect",
+            "input": {
+                "source_path": "/project1/parent",
+                "target_path": "/project1/child",
+                "replace": True,
+            },
+        }
+    )
+    disconnected = Command.model_validate(
+        {
+            "name": "ops.hierarchy.disconnect",
+            "input": {
+                "source_path": "/project1/parent",
+                "target_path": "/project1/child",
+            },
+        }
+    )
+
+    assert inventory.input.model_dump() == {
+        "operator_path": "/project1/parent",
+        "max_connections": 12,
+    }
+    assert connected.input.model_dump() == {
+        "source_path": "/project1/parent",
+        "target_path": "/project1/child",
+        "output_index": 0,
+        "input_index": 0,
+        "replace": True,
+    }
+    assert disconnected.input.model_dump() == {
+        "source_path": "/project1/parent",
+        "target_path": "/project1/child",
+        "output_index": 0,
+        "input_index": 0,
+    }
+    assert "ops.hierarchy.connections" in COMMAND_CATALOG.batch_names
+    assert "ops.hierarchy.connect" not in COMMAND_CATALOG.batch_names
+    assert "ops.hierarchy.disconnect" not in COMMAND_CATALOG.batch_names
+
+    invalid = [
+        {
+            "name": "ops.hierarchy.connections",
+            "input": {"operator_path": "/project1/parent", "max_connections": 1001},
+        },
+        {
+            "name": "ops.hierarchy.connect",
+            "input": {
+                "source_path": "/project1/../parent",
+                "target_path": "/project1/child",
+            },
+        },
+        {
+            "name": "ops.hierarchy.disconnect",
+            "input": {
+                "source_path": "/project1/parent",
+                "target_path": "/project1/child",
+                "input_index": 256,
+            },
+        },
+    ]
+    for payload in invalid:
+        with pytest.raises(ValidationError):
+            Command.model_validate(payload)
+
+
 def test_operator_state_get_is_a_strict_batchable_read_contract() -> None:
     command = Command.model_validate(
         {"name": "ops.state.get", "input": {"operator_path": "/project1/source"}}

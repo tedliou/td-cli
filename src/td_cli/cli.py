@@ -22,6 +22,7 @@ instances_app = typer.Typer()
 requests_app = typer.Typer()
 ops_app = typer.Typer()
 ops_state_app = typer.Typer()
+ops_hierarchy_app = typer.Typer()
 dat_app = typer.Typer()
 dat_text_app = typer.Typer()
 dat_table_app = typer.Typer()
@@ -34,6 +35,7 @@ app.add_typer(instances_app, name="instances")
 app.add_typer(requests_app, name="requests")
 app.add_typer(ops_app, name="ops")
 ops_app.add_typer(ops_state_app, name="state")
+ops_app.add_typer(ops_hierarchy_app, name="hierarchy")
 app.add_typer(dat_app, name="dat")
 dat_app.add_typer(dat_text_app, name="text")
 dat_app.add_typer(dat_table_app, name="table")
@@ -313,6 +315,33 @@ def _structural_destination_input(
     }
 
 
+def _connector_input(
+    ctx: typer.Context,
+    source_path: str | None,
+    target_path: str | None,
+    output_index: int | None,
+    input_index: int | None,
+    replace: bool | None = None,
+) -> dict[str, object] | None:
+    if (source_path is None) != (target_path is None):
+        _fail(ctx, ClientError("invalid_arguments"))
+    if (
+        output_index is not None or input_index is not None or replace is True
+    ) and source_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    if source_path is None or target_path is None:
+        return None
+    result: dict[str, object] = {
+        "source_path": source_path,
+        "target_path": target_path,
+        "output_index": output_index or 0,
+        "input_index": input_index or 0,
+    }
+    if replace is not None:
+        result["replace"] = replace
+    return result
+
+
 def _json_rows(ctx: typer.Context, value: str | None) -> list[list[str]] | None:
     if value is None:
         return None
@@ -583,6 +612,62 @@ def ops_connections(
     _command(ctx, "ops.connections", dedicated, input, input_file, no_wait, request_id)
 
 
+@ops_hierarchy_app.command("connections")
+def ops_hierarchy_connections(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    max_connections: Annotated[int | None, typer.Option("--max-connections")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    if max_connections is not None and operator_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = (
+        {
+            "operator_path": operator_path,
+            "max_connections": max_connections if max_connections is not None else 256,
+        }
+        if operator_path is not None
+        else None
+    )
+    _command(ctx, "ops.hierarchy.connections", dedicated, input, input_file, no_wait, request_id)
+
+
+@ops_hierarchy_app.command("connect")
+def ops_hierarchy_connect(
+    ctx: typer.Context,
+    source_path: Annotated[str | None, typer.Argument()] = None,
+    target_path: Annotated[str | None, typer.Argument()] = None,
+    output_index: Annotated[int | None, typer.Option("--output-index")] = None,
+    input_index: Annotated[int | None, typer.Option("--input-index")] = None,
+    replace: Annotated[bool, typer.Option("--replace")] = False,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    dedicated = _connector_input(ctx, source_path, target_path, output_index, input_index, replace)
+    _command(ctx, "ops.hierarchy.connect", dedicated, input, input_file, no_wait, request_id)
+
+
+@ops_hierarchy_app.command("disconnect")
+def ops_hierarchy_disconnect(
+    ctx: typer.Context,
+    source_path: Annotated[str | None, typer.Argument()] = None,
+    target_path: Annotated[str | None, typer.Argument()] = None,
+    output_index: Annotated[int | None, typer.Option("--output-index")] = None,
+    input_index: Annotated[int | None, typer.Option("--input-index")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    dedicated = _connector_input(ctx, source_path, target_path, output_index, input_index)
+    _command(ctx, "ops.hierarchy.disconnect", dedicated, input, input_file, no_wait, request_id)
+
+
 @ops_app.command("create")
 def ops_create(
     ctx: typer.Context,
@@ -630,19 +715,7 @@ def ops_connect(
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
     request_id: Annotated[str | None, typer.Option("--request-id")] = None,
 ) -> None:
-    if (source_path is None) != (target_path is None):
-        _fail(ctx, ClientError("invalid_arguments"))
-    if (output_index is not None or input_index is not None or replace) and source_path is None:
-        _fail(ctx, ClientError("invalid_arguments"))
-    dedicated = None
-    if source_path is not None and target_path is not None:
-        dedicated = {
-            "source_path": source_path,
-            "target_path": target_path,
-            "output_index": output_index or 0,
-            "input_index": input_index or 0,
-            "replace": replace,
-        }
+    dedicated = _connector_input(ctx, source_path, target_path, output_index, input_index, replace)
     _command(ctx, "ops.connect", dedicated, input, input_file, no_wait, request_id)
 
 
@@ -763,18 +836,7 @@ def ops_disconnect(
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
     request_id: Annotated[str | None, typer.Option("--request-id")] = None,
 ) -> None:
-    if (source_path is None) != (target_path is None):
-        _fail(ctx, ClientError("invalid_arguments"))
-    if (output_index is not None or input_index is not None) and source_path is None:
-        _fail(ctx, ClientError("invalid_arguments"))
-    dedicated = None
-    if source_path is not None and target_path is not None:
-        dedicated = {
-            "source_path": source_path,
-            "target_path": target_path,
-            "output_index": output_index or 0,
-            "input_index": input_index or 0,
-        }
+    dedicated = _connector_input(ctx, source_path, target_path, output_index, input_index)
     _command(ctx, "ops.disconnect", dedicated, input, input_file, no_wait, request_id)
 
 

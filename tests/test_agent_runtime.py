@@ -158,9 +158,41 @@ class FakeConnector:
         self.connections.clear()
 
 
+class FakeHierarchyConnector:
+    def __init__(self, owner, index: int, *, is_input: bool) -> None:
+        self.owner = owner
+        self.index = index
+        self.isInput = is_input
+        self.isOutput = not is_input
+        self.connections = []
+        self.description = f"hierarchy connector {index}"
+
+    def connect(self, target) -> None:
+        if self.isInput:
+            target.connect(self)
+            return
+        if target.connections:
+            target.disconnect()
+        self.connections.append(target)
+        target.connections.append(self)
+
+    def disconnect(self) -> None:
+        for connection in list(self.connections):
+            if self in connection.connections:
+                connection.connections.remove(self)
+        self.connections.clear()
+
+
 class FakeOperator:
     def __init__(
-        self, path: str, *, op_type="base", family="COMP", inputs: int = 0, outputs: int = 0
+        self,
+        path: str,
+        *,
+        op_type="base",
+        family="COMP",
+        inputs: int = 0,
+        outputs: int = 0,
+        hierarchy_kind: str | None = None,
     ) -> None:
         self.path = path
         self.name = path.rsplit("/", 1)[-1]
@@ -185,7 +217,22 @@ class FakeOperator:
         self.outputConnectors = [
             FakeConnector(self, index, is_input=False) for index in range(outputs)
         ]
+        self.isObject = hierarchy_kind == "object"
+        self.isPanel = hierarchy_kind == "panel"
+        hierarchy_connectors = 1 if hierarchy_kind is not None else 0
+        self.inputCOMPConnectors = [
+            FakeHierarchyConnector(self, index, is_input=True)
+            for index in range(hierarchy_connectors)
+        ]
+        self.outputCOMPConnectors = [
+            FakeHierarchyConnector(self, index, is_input=False)
+            for index in range(hierarchy_connectors)
+        ]
         self.destroyed = False
+
+    def parent(self):
+        parent_path = self.path.rsplit("/", 1)[0] or "/"
+        return SimpleNamespace(path=parent_path)
 
     def create(self, op_type: str, name: str):
         created = FakeOperator(f"{self.path}/{name}", op_type=op_type, family="TOP", outputs=1)
@@ -871,6 +918,345 @@ def test_connections_inventory_rejects_an_overflow_instead_of_truncating() -> No
                 "input": {"operator_path": source.path, "max_connections": 1},
             }
         )
+
+
+def test_hierarchy_connections_inventory_is_typed_bounded_and_distinct() -> None:
+    parent = FakeOperator("/project1/parent", hierarchy_kind="object")
+    first = FakeOperator("/project1/first", hierarchy_kind="object")
+    second = FakeOperator("/project1/second", hierarchy_kind="object")
+    parent.outputCOMPConnectors[0].connect(first.inputCOMPConnectors[0])
+    parent.outputCOMPConnectors[0].connect(second.inputCOMPConnectors[0])
+    operators = {operator.path: operator for operator in (parent, first, second)}
+    control = make_control(operators.get)
+
+    result = control.execute(
+        {
+            "name": "ops.hierarchy.connections",
+            "input": {"operator_path": parent.path, "max_connections": 2},
+        }
+    )
+
+    assert result == {
+        "operator_path": "/project1/parent",
+        "hierarchy_kind": "object",
+        "inputs": [
+            {
+                "input_index": 0,
+                "description": "hierarchy connector 0",
+                "connection": None,
+            }
+        ],
+        "outputs": [
+            {
+                "output_index": 0,
+                "description": "hierarchy connector 0",
+                "connections": [
+                    {"target_path": "/project1/first", "input_index": 0},
+                    {"target_path": "/project1/second", "input_index": 0},
+                ],
+            }
+        ],
+        "connection_count": 2,
+    }
+
+    with pytest.raises(module.AgentCommandError, match="result_too_large"):
+        control.execute(
+            {
+                "name": "ops.hierarchy.connections",
+                "input": {"operator_path": parent.path, "max_connections": 1},
+            }
+        )
+
+
+def test_hierarchy_connect_requires_compatible_comps_and_verifies_no_op() -> None:
+    parent = FakeOperator("/project1/parent", hierarchy_kind="object")
+    child = FakeOperator("/project1/child", hierarchy_kind="object")
+    panel = FakeOperator("/project1/panel", hierarchy_kind="panel")
+    dat = FakeOperator("/project1/dat", family="DAT")
+    nested = FakeOperator("/project1/group/nested", hierarchy_kind="object")
+    operators = {operator.path: operator for operator in (parent, child, panel, dat, nested)}
+    control = make_control(operators.get)
+    payload = {
+        "source_path": parent.path,
+        "target_path": child.path,
+        "output_index": 0,
+        "input_index": 0,
+        "replace": False,
+    }
+
+    connected = control.execute({"name": "ops.hierarchy.connect", "input": payload})
+    assert connected == {
+        "source_path": parent.path,
+        "target_path": child.path,
+        "output_index": 0,
+        "input_index": 0,
+        "connected": True,
+        "replaced": False,
+        "previous_connection": None,
+    }
+    assert control.execute({"name": "ops.hierarchy.connect", "input": payload}) == {
+        "source_path": parent.path,
+        "target_path": child.path,
+        "output_index": 0,
+        "input_index": 0,
+        "connected": True,
+        "replaced": False,
+        "previous_connection": {
+            "source_path": "/project1/parent",
+            "output_index": 0,
+        },
+    }
+
+    for source, target, error in (
+        (parent, panel, "hierarchy_kind_mismatch"),
+        (dat, child, "hierarchy_comp_required"),
+        (
+            nested,
+            child,
+            "hierarchy_parent_mismatch",
+        ),
+    ):
+        with pytest.raises(module.AgentCommandError, match=error):
+            control.execute(
+                {
+                    "name": "ops.hierarchy.connect",
+                    "input": {**payload, "source_path": source.path, "target_path": target.path},
+                }
+            )
+
+
+@pytest.mark.parametrize(
+    ("source_path", "target_path"),
+    [
+        ("/", "/project1/child"),
+        ("/project1", "/project1/child"),
+        ("/project1/td_agent", "/project1/child"),
+        ("/project1/td_agent/internal", "/project1/child"),
+    ],
+)
+def test_hierarchy_mutation_protects_root_and_agent_tree(source_path, target_path) -> None:
+    source = FakeOperator(source_path, hierarchy_kind="object")
+    target = FakeOperator(target_path, hierarchy_kind="object")
+    operators = {operator.path: operator for operator in (source, target)}
+    control = OperatorControl(
+        operators.get, RUNTIME_OPERATOR_CATALOG, protected_path="/project1/td_agent"
+    )
+
+    with pytest.raises(module.AgentCommandError, match="operator_mutation_forbidden"):
+        control.execute(
+            {
+                "name": "ops.hierarchy.connect",
+                "input": {
+                    "source_path": source.path,
+                    "target_path": target.path,
+                    "output_index": 0,
+                    "input_index": 0,
+                    "replace": False,
+                },
+            }
+        )
+
+
+def test_hierarchy_replace_restores_exact_prior_connection_after_failure() -> None:
+    first = FakeOperator("/project1/first", hierarchy_kind="object")
+    second = FakeOperator("/project1/second", hierarchy_kind="object")
+    child = FakeOperator("/project1/child", hierarchy_kind="object")
+    operators = {operator.path: operator for operator in (first, second, child)}
+    control = make_control(operators.get)
+    first.outputCOMPConnectors[0].connect(child.inputCOMPConnectors[0])
+    original_connect = second.outputCOMPConnectors[0].connect
+
+    def reject_new_connection(target) -> None:
+        target.disconnect()
+        raise RuntimeError("rejected")
+
+    second.outputCOMPConnectors[0].connect = reject_new_connection
+    with pytest.raises(module.AgentCommandError, match="hierarchy_connector_replace_failed"):
+        control.execute(
+            {
+                "name": "ops.hierarchy.connect",
+                "input": {
+                    "source_path": second.path,
+                    "target_path": child.path,
+                    "output_index": 0,
+                    "input_index": 0,
+                    "replace": True,
+                },
+            }
+        )
+    assert child.inputCOMPConnectors[0].connections[0].owner is first
+    assert first.outputCOMPConnectors[0].connections[0].owner is child
+    second.outputCOMPConnectors[0].connect = original_connect
+
+
+def test_hierarchy_connect_rejects_cycles_before_mutation() -> None:
+    parent = FakeOperator("/project1/parent", hierarchy_kind="object")
+    child = FakeOperator("/project1/child", hierarchy_kind="object")
+    parent.outputCOMPConnectors[0].connect(child.inputCOMPConnectors[0])
+    operators = {operator.path: operator for operator in (parent, child)}
+    control = make_control(operators.get)
+
+    with pytest.raises(module.AgentCommandError, match="hierarchy_cycle"):
+        control.execute(
+            {
+                "name": "ops.hierarchy.connect",
+                "input": {
+                    "source_path": child.path,
+                    "target_path": parent.path,
+                    "output_index": 0,
+                    "input_index": 0,
+                    "replace": False,
+                },
+            }
+        )
+    assert child.inputCOMPConnectors[0].connections[0].owner is parent
+    assert parent.inputCOMPConnectors[0].connections == []
+
+
+def test_hierarchy_replace_distinguishes_rollback_failure_and_unknown_outcome() -> None:
+    first = FakeOperator("/project1/first", hierarchy_kind="object")
+    second = FakeOperator("/project1/second", hierarchy_kind="object")
+    child = FakeOperator("/project1/child", hierarchy_kind="object")
+    operators = {operator.path: operator for operator in (first, second, child)}
+    control = make_control(operators.get)
+    first.outputCOMPConnectors[0].connect(child.inputCOMPConnectors[0])
+    first.outputCOMPConnectors[0].connect = lambda _: (_ for _ in ()).throw(
+        RuntimeError("rollback rejected")
+    )
+
+    def reject_replacement(target) -> None:
+        target.disconnect()
+        raise RuntimeError("replacement rejected")
+
+    second.outputCOMPConnectors[0].connect = reject_replacement
+    payload = {
+        "source_path": second.path,
+        "target_path": child.path,
+        "output_index": 0,
+        "input_index": 0,
+        "replace": True,
+    }
+    with pytest.raises(
+        module.AgentCommandError, match="hierarchy_connector_replace_rollback_failed"
+    ):
+        control.execute({"name": "ops.hierarchy.connect", "input": payload})
+
+    first.outputCOMPConnectors[0].connect = FakeHierarchyConnector.connect.__get__(
+        first.outputCOMPConnectors[0], FakeHierarchyConnector
+    )
+    first.outputCOMPConnectors[0].connect(child.inputCOMPConnectors[0])
+
+    def disappear_during_replacement(target) -> None:
+        target.disconnect()
+        operators.pop(child.path)
+        raise RuntimeError("target disappeared")
+
+    second.outputCOMPConnectors[0].connect = disappear_during_replacement
+    with pytest.raises(module.AgentCommandError, match="hierarchy_connector_outcome_unknown"):
+        control.execute({"name": "ops.hierarchy.connect", "input": payload})
+
+
+def test_hierarchy_success_readback_rechecks_live_endpoint_identity() -> None:
+    source = FakeOperator("/project1/source", hierarchy_kind="object")
+    target = FakeOperator("/project1/target", hierarchy_kind="object")
+    operators = {operator.path: operator for operator in (source, target)}
+    control = make_control(operators.get)
+    source_connect = source.outputCOMPConnectors[0].connect
+
+    def connect_then_remove_target(target_connector) -> None:
+        source_connect(target_connector)
+        operators.pop(target.path)
+
+    source.outputCOMPConnectors[0].connect = connect_then_remove_target
+    payload = {
+        "source_path": source.path,
+        "target_path": target.path,
+        "output_index": 0,
+        "input_index": 0,
+        "replace": False,
+    }
+    with pytest.raises(module.AgentCommandError, match="hierarchy_connector_outcome_unknown"):
+        control.execute({"name": "ops.hierarchy.connect", "input": payload})
+
+    operators[target.path] = target
+    source.outputCOMPConnectors[0].connect = source_connect
+    target.inputCOMPConnectors[0].disconnect()
+    source_connect(target.inputCOMPConnectors[0])
+    target_disconnect = target.inputCOMPConnectors[0].disconnect
+
+    def disconnect_then_remove_source() -> None:
+        target_disconnect()
+        operators.pop(source.path)
+
+    target.inputCOMPConnectors[0].disconnect = disconnect_then_remove_source
+    disconnect_payload = {key: value for key, value in payload.items() if key != "replace"}
+    with pytest.raises(module.AgentCommandError, match="hierarchy_connector_outcome_unknown"):
+        control.execute({"name": "ops.hierarchy.disconnect", "input": disconnect_payload})
+
+
+def test_hierarchy_replace_reports_unknown_when_prior_source_disappears() -> None:
+    first = FakeOperator("/project1/first", hierarchy_kind="object")
+    second = FakeOperator("/project1/second", hierarchy_kind="object")
+    child = FakeOperator("/project1/child", hierarchy_kind="object")
+    operators = {operator.path: operator for operator in (first, second, child)}
+    control = make_control(operators.get)
+    first.outputCOMPConnectors[0].connect(child.inputCOMPConnectors[0])
+
+    def reject_and_remove_prior(target) -> None:
+        target.disconnect()
+        operators.pop(first.path)
+        raise RuntimeError("replacement rejected")
+
+    second.outputCOMPConnectors[0].connect = reject_and_remove_prior
+    with pytest.raises(module.AgentCommandError, match="hierarchy_connector_outcome_unknown"):
+        control.execute(
+            {
+                "name": "ops.hierarchy.connect",
+                "input": {
+                    "source_path": second.path,
+                    "target_path": child.path,
+                    "output_index": 0,
+                    "input_index": 0,
+                    "replace": True,
+                },
+            }
+        )
+
+
+def test_hierarchy_disconnect_is_exact_and_structural_guards_include_hierarchy_edges() -> None:
+    group = FakeOperator("/project1/group", hierarchy_kind="object")
+    child = FakeOperator("/project1/child", hierarchy_kind="object")
+    group.outputCOMPConnectors[0].connect(child.inputCOMPConnectors[0])
+    operators = {operator.path: operator for operator in (group, child)}
+    control = make_control(operators.get)
+
+    with pytest.raises(module.AgentCommandError, match="operator_connected"):
+        control.execute(
+            {
+                "name": "ops.destroy",
+                "input": {
+                    "operator_path": group.path,
+                    "recursive": False,
+                    "allow_connected": False,
+                    "max_operators": 4,
+                },
+            }
+        )
+
+    disconnected = control.execute(
+        {
+            "name": "ops.hierarchy.disconnect",
+            "input": {
+                "source_path": group.path,
+                "target_path": child.path,
+                "output_index": 0,
+                "input_index": 0,
+            },
+        }
+    )
+    assert disconnected["disconnected"] is True
+    assert group.outputCOMPConnectors[0].connections == []
+    assert child.inputCOMPConnectors[0].connections == []
 
 
 def test_destroy_requires_explicit_subtree_and_connection_authorization() -> None:

@@ -395,9 +395,11 @@ def _normalize_command_result(command: object, result: object) -> object:
                     nested_commands, nested_results, strict=False
                 )
             ]
-    elif name == "ops.connect":
+    elif name in {"ops.connect", "ops.hierarchy.connect"}:
         normalized.setdefault("previous_connection", None)
-    elif name == "ops.connections" and isinstance(normalized.get("inputs"), list):
+    elif name in {"ops.connections", "ops.hierarchy.connections"} and isinstance(
+        normalized.get("inputs"), list
+    ):
         normalized["inputs"] = [
             {**item, "connection": item.get("connection")} if isinstance(item, dict) else item
             for item in normalized["inputs"]
