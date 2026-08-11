@@ -158,6 +158,31 @@ transient selection/current-viewer state, storage, arbitrary attributes, and
 Python objects are not exposed by these Commands. Distinct unavailable,
 failed, rollback-failed, and uncertain-outcome errors preserve honest state.
 
+Text DAT and Table DAT contents use separate typed Commands. Text reads and
+whole-content replacement preserve Unicode and empty text. Table reads return
+the total dimensions plus an explicit bounded rectangular window; replacement
+sets the complete table (including dimensions), while patch updates an exact
+rectangle without resizing:
+
+```powershell
+td --json --instance <selector> dat text get /project1/notes
+td --json --instance <selector> dat text set /project1/notes "繁體內容"
+td --json --instance <selector> dat table get /project1/grid --row-offset 0 --column-offset 0 --row-count 16 --column-count 16
+td --json --instance <selector> dat table replace /project1/grid '[["name","value"],["alpha",""]]'
+td --json --instance <selector> dat table patch /project1/grid '[["updated"]]' --row-offset 1 --column-offset 1
+```
+
+Only exact `textDAT` and `tableDAT` Operators are accepted. Mutation rejects a
+non-empty File parameter or enabled Sync File mode, root and Agent Component
+protected paths, non-rectangular/non-string cells, and patches outside current
+dimensions. Content is limited to 32 KiB of UTF-8, with at most 256 rows, 256
+columns, 4096 cells, and 16 KiB per cell. Reads fail instead of truncating when
+their explicit byte limit is exceeded. Every mutation reads back the exact
+complete content and dimensions, then restores and verifies the entire prior
+DAT on failure; distinct unavailable, non-writable, rollback-failed, and
+uncertain-outcome errors preserve honest state. These Commands never execute
+DATs, import modules, evaluate content, or accept filesystem paths.
+
 The locked TouchDesigner 2025.32050 catalog covers 680 built-in types across all
 seven Operator families: 478 are supported by default, 165 side-effect or
 environment-dependent types require `ops create --allow-conditional`, 37 are

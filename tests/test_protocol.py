@@ -408,6 +408,105 @@ def test_operator_state_set_is_a_strict_bounded_non_batchable_patch() -> None:
             Command.model_validate({"name": "ops.state.set", "input": invalid_input})
 
 
+def test_text_dat_commands_are_strict_utf8_bounded_contracts() -> None:
+    read = Command.model_validate(
+        {"name": "dat.text.get", "input": {"operator_path": "/project1/notes", "max_bytes": 128}}
+    )
+    write = Command.model_validate(
+        {"name": "dat.text.set", "input": {"operator_path": "/project1/notes", "text": "繁體\n"}}
+    )
+
+    assert read.input.model_dump() == {"operator_path": "/project1/notes", "max_bytes": 128}
+    assert write.input.model_dump() == {"operator_path": "/project1/notes", "text": "繁體\n"}
+    assert "dat.text.get" in COMMAND_CATALOG.batch_names
+    assert "dat.text.set" not in COMMAND_CATALOG.batch_names
+
+    for payload in (
+        {"operator_path": "/project1/notes", "max_bytes": 0},
+        {"operator_path": "/project1/notes", "text": "界" * 64_854},
+        {"operator_path": "/project1/notes", "text": "ok", "file": "unsafe.txt"},
+    ):
+        with pytest.raises(ValidationError):
+            Command.model_validate(
+                {"name": "dat.text.set" if "text" in payload else "dat.text.get", "input": payload}
+            )
+
+    worst_case = Command.model_validate(
+        {
+            "name": "dat.text.set",
+            "input": {"operator_path": "/project1/notes", "text": "\u0001" * 32_768},
+        }
+    )
+    assert len(worst_case.model_dump_json().encode("utf-8")) < 256 * 1024
+
+
+def test_table_dat_commands_require_bounded_rectangular_string_cells() -> None:
+    read = Command.model_validate(
+        {
+            "name": "dat.table.get",
+            "input": {
+                "operator_path": "/project1/grid",
+                "row_offset": 2,
+                "column_offset": 3,
+                "row_count": 4,
+                "column_count": 5,
+                "max_bytes": 1024,
+            },
+        }
+    )
+    replace = Command.model_validate(
+        {
+            "name": "dat.table.replace",
+            "input": {"operator_path": "/project1/grid", "rows": [["甲", ""], ["1", "2"]]},
+        }
+    )
+    patch = Command.model_validate(
+        {
+            "name": "dat.table.patch",
+            "input": {
+                "operator_path": "/project1/grid",
+                "row_offset": 1,
+                "column_offset": 2,
+                "rows": [["x", "y"]],
+            },
+        }
+    )
+
+    assert read.input.model_dump() == {
+        "operator_path": "/project1/grid",
+        "row_offset": 2,
+        "column_offset": 3,
+        "row_count": 4,
+        "column_count": 5,
+        "max_bytes": 1024,
+    }
+    assert replace.input.model_dump() == {
+        "operator_path": "/project1/grid",
+        "rows": [["甲", ""], ["1", "2"]],
+    }
+    assert patch.input.model_dump() == {
+        "operator_path": "/project1/grid",
+        "row_offset": 1,
+        "column_offset": 2,
+        "rows": [["x", "y"]],
+    }
+    assert "dat.table.get" in COMMAND_CATALOG.batch_names
+    assert "dat.table.replace" not in COMMAND_CATALOG.batch_names
+    assert "dat.table.patch" not in COMMAND_CATALOG.batch_names
+
+    invalid_commands = (
+        ("dat.table.get", {"operator_path": "/project1/grid", "row_count": 65, "column_count": 65}),
+        ("dat.table.replace", {"operator_path": "/project1/grid", "rows": [["a"], ["b", "c"]]}),
+        ("dat.table.replace", {"operator_path": "/project1/grid", "rows": [[1]]}),
+        ("dat.table.replace", {"operator_path": "/project1/grid", "rows": [[]]}),
+        ("dat.table.patch", {"operator_path": "/project1/grid", "rows": []}),
+        ("dat.table.patch", {"operator_path": "/project1/grid", "rows": [["界" * 5_462]]}),
+    )
+    for name, payload in invalid_commands:
+        with pytest.raises(ValidationError):
+            Command.model_validate({"name": name, "input": payload})
+
+
 def test_destroy_command_requires_explicit_bounded_destructive_options() -> None:
     command = Command.model_validate(
         {

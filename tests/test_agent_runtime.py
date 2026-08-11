@@ -7,7 +7,16 @@ from types import SimpleNamespace
 
 import pytest
 
-from td_cli.command_catalog import COMMAND_CATALOG, OPERATOR_STATE_FIELDS, SetOperatorStateInput
+from td_cli.command_catalog import (
+    COMMAND_CATALOG,
+    MAX_DAT_CONTENT_BYTES,
+    MAX_TABLE_CELL_BYTES,
+    MAX_TABLE_CELLS,
+    MAX_TABLE_COLUMNS,
+    MAX_TABLE_ROWS,
+    OPERATOR_STATE_FIELDS,
+    SetOperatorStateInput,
+)
 
 spec = importlib.util.spec_from_file_location("td_agent_extension", Path("agent/extension.py"))
 assert spec is not None and spec.loader is not None
@@ -33,6 +42,14 @@ def test_operator_state_fields_match_between_canonical_and_agent_contracts() -> 
 
     assert model_fields == OPERATOR_STATE_FIELDS
     assert agent_fields == OPERATOR_STATE_FIELDS
+
+
+def test_dat_bounds_match_between_canonical_and_agent_contracts() -> None:
+    assert OperatorControl.MAX_DAT_CONTENT_BYTES == MAX_DAT_CONTENT_BYTES
+    assert OperatorControl.MAX_TABLE_ROWS == MAX_TABLE_ROWS
+    assert OperatorControl.MAX_TABLE_COLUMNS == MAX_TABLE_COLUMNS
+    assert OperatorControl.MAX_TABLE_CELLS == MAX_TABLE_CELLS
+    assert OperatorControl.MAX_TABLE_CELL_BYTES == MAX_TABLE_CELL_BYTES
 
 
 @pytest.fixture(autouse=True)
@@ -167,6 +184,61 @@ class FakeOperator:
         self.destroyed = True
         for child in self.children:
             child.destroy()
+
+
+class FakeDatParameter:
+    def __init__(self, value) -> None:
+        self.value = value
+
+    def eval(self):
+        return self.value
+
+
+class FakeCell:
+    def __init__(self, table, row: int, column: int) -> None:
+        self.table = table
+        self.row = row
+        self.column = column
+
+    @property
+    def val(self):
+        return self.table._rows[self.row][self.column]
+
+    @val.setter
+    def val(self, value):
+        self.table._rows[self.row][self.column] = str(value)
+
+
+class FakeTextDat(FakeOperator):
+    def __init__(self, path: str, text: str = "", *, file="", syncfile=False) -> None:
+        super().__init__(path, op_type="textDAT", family="DAT")
+        self.text = text
+        self.par = SimpleNamespace(file=FakeDatParameter(file), syncfile=FakeDatParameter(syncfile))
+
+
+class FakeTableDat(FakeOperator):
+    def __init__(self, path: str, rows=None, *, file="", syncfile=False) -> None:
+        super().__init__(path, op_type="tableDAT", family="DAT")
+        self._rows = [list(row) for row in (rows or [])]
+        self.par = SimpleNamespace(file=FakeDatParameter(file), syncfile=FakeDatParameter(syncfile))
+
+    @property
+    def numRows(self):
+        return len(self._rows)
+
+    @property
+    def numCols(self):
+        return len(self._rows[0]) if self._rows else 0
+
+    def __getitem__(self, indexes):
+        row, column = indexes
+        return FakeCell(self, row, column)
+
+    def clear(self):
+        self._rows = []
+
+    def setSize(self, rows: int, columns: int):
+        self._rows = [["" for _ in range(columns)] for _ in range(rows)]
 
 
 def test_operator_control_is_the_touchdesigner_graph_interface() -> None:
@@ -394,6 +466,332 @@ def test_operator_state_set_protects_root_and_the_whole_agent_component_tree(pat
                 "input": {"operator_path": path, "comment": "forbidden"},
             }
         )
+
+
+def test_text_dat_get_is_lossless_bounded_and_exactly_typed() -> None:
+    text_dat = FakeTextDat("/project1/notes", "繁體\n")
+    result = make_control({text_dat.path: text_dat}.get).execute(
+        {"name": "dat.text.get", "input": {"operator_path": text_dat.path, "max_bytes": 32}}
+    )
+
+    assert result == {
+        "operator_path": text_dat.path,
+        "dat_kind": "text",
+        "text": "繁體\n",
+        "utf8_bytes": 7,
+    }
+
+    with pytest.raises(module.AgentCommandError, match="result_too_large"):
+        make_control({text_dat.path: text_dat}.get).execute(
+            {"name": "dat.text.get", "input": {"operator_path": text_dat.path, "max_bytes": 6}}
+        )
+    wrong = FakeOperator("/project1/not_text", op_type="executeDAT", family="DAT")
+    with pytest.raises(module.AgentCommandError, match="dat_type_mismatch"):
+        make_control({wrong.path: wrong}.get).execute(
+            {"name": "dat.text.get", "input": {"operator_path": wrong.path, "max_bytes": 32}}
+        )
+
+
+def test_text_dat_set_verifies_and_rolls_back_the_complete_content() -> None:
+    class CorrectingTextDat(FakeTextDat):
+        correct = False
+
+        @property
+        def text(self):
+            return self._text
+
+        @text.setter
+        def text(self, value):
+            self._text = value.upper() if self.correct and value != "before" else value
+
+    text_dat = CorrectingTextDat("/project1/notes", "before")
+    text_dat.correct = True
+
+    with pytest.raises(module.AgentCommandError, match="text_dat_write_failed"):
+        make_control({text_dat.path: text_dat}.get).execute(
+            {"name": "dat.text.set", "input": {"operator_path": text_dat.path, "text": "after"}}
+        )
+    assert text_dat.text == "before"
+
+
+@pytest.mark.parametrize("file,syncfile", [("notes.txt", False), ("", True)])
+def test_text_dat_set_rejects_external_file_modes(file: str, syncfile: bool) -> None:
+    text_dat = FakeTextDat("/project1/notes", "before", file=file, syncfile=syncfile)
+    with pytest.raises(module.AgentCommandError, match="dat_content_not_writable"):
+        make_control({text_dat.path: text_dat}.get).execute(
+            {"name": "dat.text.set", "input": {"operator_path": text_dat.path, "text": "after"}}
+        )
+    assert text_dat.text == "before"
+
+
+def test_text_dat_set_reports_distinct_rollback_and_unknown_outcomes() -> None:
+    class RollbackRejectingTextDat(FakeTextDat):
+        @property
+        def text(self):
+            return self._text
+
+        @text.setter
+        def text(self, value):
+            if getattr(self, "reject_before", False) and value == "before":
+                raise RuntimeError("rollback rejected")
+            self._text = str(value).upper() if getattr(self, "correct", False) else value
+
+    rollback = RollbackRejectingTextDat("/project1/rollback", "before")
+    rollback.correct = True
+    rollback.reject_before = True
+    with pytest.raises(module.AgentCommandError, match="text_dat_rollback_failed"):
+        make_control({rollback.path: rollback}.get).execute(
+            {"name": "dat.text.set", "input": {"operator_path": rollback.path, "text": "after"}}
+        )
+
+    class DisappearingTextDat(FakeTextDat):
+        @property
+        def text(self):
+            return self._text
+
+        @text.setter
+        def text(self, value):
+            self._text = str(value).upper() if getattr(self, "correct", False) else value
+
+    disappearing = DisappearingTextDat("/project1/disappearing", "before")
+    disappearing.correct = True
+    alive = True
+
+    def lookup(path):
+        nonlocal alive
+        if path != disappearing.path or not alive:
+            return None
+        alive = False
+        return disappearing
+
+    with pytest.raises(module.AgentCommandError, match="text_dat_outcome_unknown"):
+        make_control(lookup).execute(
+            {
+                "name": "dat.text.set",
+                "input": {"operator_path": disappearing.path, "text": "after"},
+            }
+        )
+
+
+def test_table_dat_get_returns_an_explicit_bounded_window_and_dimensions() -> None:
+    table = FakeTableDat("/project1/grid", [["a", "b", "c"], ["甲", "", "丙"]])
+    result = make_control({table.path: table}.get).execute(
+        {
+            "name": "dat.table.get",
+            "input": {
+                "operator_path": table.path,
+                "row_offset": 1,
+                "column_offset": 1,
+                "row_count": 4,
+                "column_count": 4,
+                "max_bytes": 32,
+            },
+        }
+    )
+
+    assert result == {
+        "operator_path": table.path,
+        "dat_kind": "table",
+        "total_rows": 2,
+        "total_columns": 3,
+        "row_offset": 1,
+        "column_offset": 1,
+        "rows": [["", "丙"]],
+        "utf8_bytes": 3,
+    }
+
+    oversized_cell = FakeTableDat("/project1/large", [["x" * (MAX_TABLE_CELL_BYTES + 1)]])
+    with pytest.raises(module.AgentCommandError, match="result_too_large"):
+        make_control({oversized_cell.path: oversized_cell}.get).execute(
+            {
+                "name": "dat.table.get",
+                "input": {
+                    "operator_path": oversized_cell.path,
+                    "row_offset": 0,
+                    "column_offset": 0,
+                    "row_count": 1,
+                    "column_count": 1,
+                    "max_bytes": MAX_DAT_CONTENT_BYTES,
+                },
+            }
+        )
+
+
+def test_table_dat_replace_and_patch_return_exact_verified_complete_state() -> None:
+    table = FakeTableDat("/project1/grid", [["old"]])
+    control = make_control({table.path: table}.get)
+
+    replaced = control.execute(
+        {
+            "name": "dat.table.replace",
+            "input": {"operator_path": table.path, "rows": [["a", "b"], ["c", "d"]]},
+        }
+    )
+    patched = control.execute(
+        {
+            "name": "dat.table.patch",
+            "input": {
+                "operator_path": table.path,
+                "row_offset": 0,
+                "column_offset": 1,
+                "rows": [["甲"], [""]],
+            },
+        }
+    )
+
+    assert replaced["rows"] == [["a", "b"], ["c", "d"]]
+    assert patched["rows"] == [["a", "甲"], ["c", ""]]
+    assert patched["total_rows"] == 2
+    assert patched["total_columns"] == 2
+
+    cleared = control.execute(
+        {
+            "name": "dat.table.replace",
+            "input": {"operator_path": table.path, "rows": []},
+        }
+    )
+    assert cleared["rows"] == []
+    assert cleared["total_rows"] == 0
+    assert cleared["total_columns"] == 0
+
+
+@pytest.mark.parametrize(
+    "path", ["/", "/project1", "/project1/td_agent", "/project1/td_agent/internal"]
+)
+def test_dat_mutations_protect_root_and_the_whole_agent_component_tree(path: str) -> None:
+    text_dat = FakeTextDat(path, "before")
+    control = OperatorControl(
+        lambda candidate: text_dat if candidate == path else None,
+        RUNTIME_OPERATOR_CATALOG,
+        protected_path="/project1/td_agent",
+    )
+    with pytest.raises(module.AgentCommandError, match="operator_mutation_forbidden"):
+        control.execute({"name": "dat.text.set", "input": {"operator_path": path, "text": "after"}})
+
+
+def test_table_dat_mutations_reject_external_file_modes() -> None:
+    table = FakeTableDat("/project1/grid", [["before"]], file="grid.csv", syncfile=True)
+    with pytest.raises(module.AgentCommandError, match="dat_content_not_writable"):
+        make_control({table.path: table}.get).execute(
+            {
+                "name": "dat.table.replace",
+                "input": {"operator_path": table.path, "rows": [["after"]]},
+            }
+        )
+    assert table._rows == [["before"]]
+
+
+@pytest.mark.parametrize("mode", ["locked", "replicated", "cloned"])
+def test_dat_mutations_reject_read_only_and_generated_modes(mode: str) -> None:
+    table = FakeTableDat("/project1/generated/grid", [["before"]])
+    if mode == "locked":
+        table.lock = True
+    elif mode == "replicated":
+        table.replicator = object()
+    else:
+        clone_parent = SimpleNamespace(
+            par=SimpleNamespace(clone=FakeDatParameter("/project1/template")),
+            parent=lambda: None,
+        )
+        table.parent = lambda: clone_parent
+    with pytest.raises(module.AgentCommandError, match="dat_content_not_writable"):
+        make_control({table.path: table}.get).execute(
+            {
+                "name": "dat.table.replace",
+                "input": {"operator_path": table.path, "rows": [["after"]]},
+            }
+        )
+    assert table._rows == [["before"]]
+
+
+def test_dat_mutation_reports_unknown_if_operator_disappears_during_rollback() -> None:
+    class VanishingRollbackTextDat(FakeTextDat):
+        @property
+        def text(self):
+            return self._text
+
+        @text.setter
+        def text(self, value):
+            if getattr(self, "restoring", False) and value == "before":
+                self.alive = False
+                raise RuntimeError("operator vanished")
+            self._text = str(value).upper() if getattr(self, "correct", False) else value
+
+    text = VanishingRollbackTextDat("/project1/notes", "before")
+    text.alive = True
+    text.correct = True
+    text.restoring = True
+    lookup = lambda path: text if path == text.path and text.alive else None
+    with pytest.raises(module.AgentCommandError, match="text_dat_outcome_unknown"):
+        make_control(lookup).execute(
+            {"name": "dat.text.set", "input": {"operator_path": text.path, "text": "after"}}
+        )
+
+
+def test_dat_mutations_reject_unbounded_prior_content_before_writing() -> None:
+    text = FakeTextDat("/project1/notes", "x" * (MAX_DAT_CONTENT_BYTES + 1))
+    with pytest.raises(module.AgentCommandError, match="dat_content_too_large"):
+        make_control({text.path: text}.get).execute(
+            {"name": "dat.text.set", "input": {"operator_path": text.path, "text": "small"}}
+        )
+    assert len(text.text) == MAX_DAT_CONTENT_BYTES + 1
+
+    table = FakeTableDat("/project1/grid", [[""] for _ in range(MAX_TABLE_ROWS + 1)])
+    with pytest.raises(module.AgentCommandError, match="dat_content_too_large"):
+        make_control({table.path: table}.get).execute(
+            {
+                "name": "dat.table.replace",
+                "input": {"operator_path": table.path, "rows": [["small"]]},
+            }
+        )
+    assert table.numRows == MAX_TABLE_ROWS + 1
+
+
+def test_table_dat_patch_rejects_resize_and_replace_rolls_back_all_dimensions() -> None:
+    class CorrectingTableDat(FakeTableDat):
+        correct = False
+
+        def __getitem__(self, indexes):
+            cell = super().__getitem__(indexes)
+            if not self.correct:
+                return cell
+
+            class CorrectingCell:
+                @property
+                def val(self):
+                    return cell.val
+
+                @val.setter
+                def val(self, value):
+                    value = str(value)
+                    cell.val = value.upper() if value not in {"old", "state"} else value
+
+            return CorrectingCell()
+
+    table = CorrectingTableDat("/project1/grid", [["old", "state"]])
+    control = make_control({table.path: table}.get)
+    with pytest.raises(module.AgentCommandError, match="table_dat_patch_out_of_bounds"):
+        control.execute(
+            {
+                "name": "dat.table.patch",
+                "input": {
+                    "operator_path": table.path,
+                    "row_offset": 1,
+                    "column_offset": 0,
+                    "rows": [["x"]],
+                },
+            }
+        )
+
+    table.correct = True
+    with pytest.raises(module.AgentCommandError, match="table_dat_write_failed"):
+        control.execute(
+            {
+                "name": "dat.table.replace",
+                "input": {"operator_path": table.path, "rows": [["new"], ["rows"]]},
+            }
+        )
+    assert table._rows == [["old", "state"]]
 
 
 def test_connections_inventory_reports_every_regular_connector_and_exact_endpoint() -> None:

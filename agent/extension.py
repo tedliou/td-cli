@@ -54,6 +54,11 @@ class OperatorControl:
         "ops.rename": "_rename_operator",
         "ops.state.get": "_get_operator_state",
         "ops.state.set": "_set_operator_state",
+        "dat.text.get": "_get_text_dat",
+        "dat.text.set": "_set_text_dat",
+        "dat.table.get": "_get_table_dat",
+        "dat.table.replace": "_replace_table_dat",
+        "dat.table.patch": "_patch_table_dat",
         "parameters.get": "_get_parameter",
         "parameters.list": "_list_parameters",
         "parameters.pulse": "_pulse_parameter",
@@ -71,6 +76,11 @@ class OperatorControl:
         ("expose", "expose", "boolean"),
         ("lock", "lock", "boolean"),
     )
+    MAX_DAT_CONTENT_BYTES = 32_768
+    MAX_TABLE_ROWS = 256
+    MAX_TABLE_COLUMNS = 256
+    MAX_TABLE_CELLS = 4096
+    MAX_TABLE_CELL_BYTES = 16_384
 
     def __init__(self, operator_lookup, operator_catalog, protected_path=None):
         self.operator_lookup = operator_lookup
@@ -93,6 +103,260 @@ class OperatorControl:
 
     def _get_operator(self, payload):
         return self._operator_result(self._operator(payload))
+
+    def _get_text_dat(self, payload):
+        operator = self._require_dat(payload, "textDAT")
+        try:
+            text = str(operator.text)
+            byte_count = len(text.encode("utf-8"))
+        except Exception as error:
+            raise AgentCommandError("dat_content_unavailable") from error
+        if byte_count > payload["max_bytes"]:
+            raise AgentCommandError("result_too_large")
+        return {
+            "operator_path": str(operator.path),
+            "dat_kind": "text",
+            "text": text,
+            "utf8_bytes": byte_count,
+        }
+
+    def _set_text_dat(self, payload):
+        operator = self._require_dat(payload, "textDAT")
+        path = str(operator.path)
+        self._require_dat_mutable(operator)
+        before = self._text_dat_snapshot(operator)
+
+        def apply():
+            operator.text = payload["text"]
+
+        def read():
+            return self._text_dat_snapshot(operator)
+
+        text = self._mutate_dat(
+            path,
+            before,
+            payload["text"],
+            apply,
+            read,
+            lambda snapshot: setattr(operator, "text", snapshot),
+            "text_dat",
+        )
+        return {
+            "operator_path": path,
+            "dat_kind": "text",
+            "text": text,
+            "utf8_bytes": len(text.encode("utf-8")),
+        }
+
+    def _get_table_dat(self, payload):
+        operator = self._require_dat(payload, "tableDAT")
+        try:
+            total_rows = int(operator.numRows)
+            total_columns = int(operator.numCols)
+            row_stop = min(total_rows, payload["row_offset"] + payload["row_count"])
+            column_stop = min(total_columns, payload["column_offset"] + payload["column_count"])
+            rows = self._table_rows(
+                operator,
+                payload["row_offset"],
+                row_stop,
+                payload["column_offset"],
+                column_stop,
+            )
+            byte_count = self._table_byte_count(rows)
+            if any(
+                len(cell.encode("utf-8")) > self.MAX_TABLE_CELL_BYTES
+                for row in rows
+                for cell in row
+            ):
+                raise AgentCommandError("result_too_large")
+        except Exception as error:
+            if isinstance(error, AgentCommandError):
+                raise
+            raise AgentCommandError("dat_content_unavailable") from error
+        if byte_count > payload["max_bytes"]:
+            raise AgentCommandError("result_too_large")
+        return {
+            "operator_path": str(operator.path),
+            "dat_kind": "table",
+            "total_rows": total_rows,
+            "total_columns": total_columns,
+            "row_offset": payload["row_offset"],
+            "column_offset": payload["column_offset"],
+            "rows": rows,
+            "utf8_bytes": byte_count,
+        }
+
+    def _replace_table_dat(self, payload):
+        operator = self._require_dat(payload, "tableDAT")
+        return self._mutate_table_dat(operator, payload["rows"], "table_dat")
+
+    def _patch_table_dat(self, payload):
+        operator = self._require_dat(payload, "tableDAT")
+        rows = payload["rows"]
+        row_offset = payload["row_offset"]
+        column_offset = payload["column_offset"]
+        try:
+            total_rows = int(operator.numRows)
+            total_columns = int(operator.numCols)
+        except Exception as error:
+            raise AgentCommandError("dat_content_unavailable") from error
+        if row_offset + len(rows) > total_rows or column_offset + len(rows[0]) > total_columns:
+            raise AgentCommandError("table_dat_patch_out_of_bounds")
+        path = str(operator.path)
+        self._require_dat_mutable(operator)
+        before = self._table_dat_snapshot(operator)
+        expected = [list(row) for row in before]
+        for row_index, row in enumerate(rows, start=row_offset):
+            for column_index, value in enumerate(row, start=column_offset):
+                expected[row_index][column_index] = value
+
+        def apply():
+            for row_index, row in enumerate(rows, start=row_offset):
+                for column_index, value in enumerate(row, start=column_offset):
+                    operator[row_index, column_index].val = value
+
+        after = self._mutate_dat(
+            path,
+            before,
+            expected,
+            apply,
+            lambda: self._table_dat_snapshot(operator),
+            lambda snapshot: self._write_table_rows(operator, snapshot),
+            "table_dat",
+        )
+        return self._complete_table_result(path, after)
+
+    def _mutate_table_dat(self, operator, rows, error_prefix):
+        path = str(operator.path)
+        self._require_dat_mutable(operator)
+        before = self._table_dat_snapshot(operator)
+        after = self._mutate_dat(
+            path,
+            before,
+            rows,
+            lambda: self._write_table_rows(operator, rows),
+            lambda: self._table_dat_snapshot(operator),
+            lambda snapshot: self._write_table_rows(operator, snapshot),
+            error_prefix,
+        )
+        return self._complete_table_result(path, after)
+
+    def _mutate_dat(self, path, before, expected, apply, read, restore, error_prefix):
+        try:
+            apply()
+            after = read()
+            if after != expected:
+                raise RuntimeError("DAT readback mismatch")
+            return after
+        except Exception as error:
+            if self.operator_lookup(path) is None:
+                raise AgentCommandError(f"{error_prefix}_outcome_unknown") from error
+            try:
+                restore(before)
+                if read() != before:
+                    raise RuntimeError("DAT rollback verification failed")
+            except Exception as rollback_error:
+                if self.operator_lookup(path) is None:
+                    raise AgentCommandError(f"{error_prefix}_outcome_unknown") from rollback_error
+                raise AgentCommandError(f"{error_prefix}_rollback_failed") from rollback_error
+            raise AgentCommandError(f"{error_prefix}_write_failed") from error
+
+    def _require_dat(self, payload, op_type):
+        operator = self._operator(payload)
+        if str(operator.OPType) != op_type:
+            raise AgentCommandError("dat_type_mismatch")
+        return operator
+
+    def _require_dat_mutable(self, operator):
+        self._require_mutable_path(str(operator.path))
+        try:
+            file_parameter = getattr(operator.par, "file", None)
+            sync_parameter = getattr(operator.par, "syncfile", None)
+            file_path = "" if file_parameter is None else str(file_parameter.eval() or "")
+            sync_file = False if sync_parameter is None else bool(sync_parameter.eval())
+            locked = bool(operator.lock)
+            replicated = getattr(operator, "replicator", None) is not None
+            cloned = self._has_clone_ancestor(operator)
+        except Exception as error:
+            raise AgentCommandError("dat_content_unavailable") from error
+        if file_path or sync_file or locked or replicated or cloned:
+            raise AgentCommandError("dat_content_not_writable")
+
+    @staticmethod
+    def _has_clone_ancestor(operator):
+        parent_method = getattr(operator, "parent", None)
+        ancestor = parent_method() if callable(parent_method) else None
+        while ancestor is not None:
+            clone_parameter = getattr(getattr(ancestor, "par", None), "clone", None)
+            if clone_parameter is not None and str(clone_parameter.eval() or ""):
+                return True
+            parent_method = getattr(ancestor, "parent", None)
+            ancestor = parent_method() if callable(parent_method) else None
+        return False
+
+    @classmethod
+    def _text_dat_snapshot(cls, operator):
+        try:
+            text = str(operator.text)
+        except Exception as error:
+            raise AgentCommandError("dat_content_unavailable") from error
+        if len(text.encode("utf-8")) > cls.MAX_DAT_CONTENT_BYTES:
+            raise AgentCommandError("dat_content_too_large")
+        return text
+
+    @classmethod
+    def _table_dat_snapshot(cls, operator):
+        try:
+            row_count = int(operator.numRows)
+            column_count = int(operator.numCols)
+            if (
+                row_count > cls.MAX_TABLE_ROWS
+                or column_count > cls.MAX_TABLE_COLUMNS
+                or row_count * column_count > cls.MAX_TABLE_CELLS
+            ):
+                raise AgentCommandError("dat_content_too_large")
+            rows = cls._table_rows(operator, 0, row_count, 0, column_count)
+        except Exception as error:
+            if isinstance(error, AgentCommandError):
+                raise
+            raise AgentCommandError("dat_content_unavailable") from error
+        if cls._table_byte_count(rows) > cls.MAX_DAT_CONTENT_BYTES or any(
+            len(cell.encode("utf-8")) > cls.MAX_TABLE_CELL_BYTES for row in rows for cell in row
+        ):
+            raise AgentCommandError("dat_content_too_large")
+        return rows
+
+    @staticmethod
+    def _table_rows(operator, row_start, row_stop, column_start, column_stop):
+        return [
+            [str(operator[row, column].val) for column in range(column_start, column_stop)]
+            for row in range(row_start, row_stop)
+        ]
+
+    @staticmethod
+    def _write_table_rows(operator, rows):
+        operator.clear()
+        if not rows:
+            return
+        operator.setSize(len(rows), len(rows[0]))
+        for row_index, row in enumerate(rows):
+            for column_index, value in enumerate(row):
+                operator[row_index, column_index].val = value
+
+    @staticmethod
+    def _table_byte_count(rows):
+        return sum(len(cell.encode("utf-8")) for row in rows for cell in row)
+
+    @classmethod
+    def _complete_table_result(cls, path, rows):
+        return {
+            "operator_path": path,
+            "dat_kind": "table",
+            "total_rows": len(rows),
+            "total_columns": len(rows[0]) if rows else 0,
+            "rows": rows,
+            "utf8_bytes": cls._table_byte_count(rows),
+        }
 
     def _get_operator_state(self, payload):
         operator = self._operator(payload)
