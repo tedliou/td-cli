@@ -39,10 +39,10 @@ the feature branch inside TouchDesigner 2025.32050. Independent artifact
 inspection passed with the required eight-Operator topology.
 
 - Canonical Agent source revision:
-  `3525478402589750c2c9d9ae093d602923138152b2ee40a21618812c24a94f64`
+  `500ad1275df571950e6bfe760f674335ad37ac69fd7e7652eefa647a2466f46e`
 - Local derived artifact SHA-256:
-  `ed0e504ce1c11827a684648e89e8c40dcb00aedc418ef5b7418884ddff36aeb7`
-- Online Instance Selector: `04ee`
+  `0f3eac9e6bba027ed24094dd132403f8b9365daeabdffc5c68809cadc8a77115`
+- Review-rerun Online Instance Selector: `3ef3`
 - Advertised capabilities: all 19 public Commands, including the four new
   structural graph Commands
 
@@ -72,6 +72,11 @@ The public `uv run td --json --instance 04ee` seam proved:
 5. Real negative calls returned `operator_not_empty`, `operator_connected`,
    and `operator_mutation_forbidden` for an unapproved subtree, connected
    source, and `/project1` respectively. No negative call mutated its target.
+6. The post-review rerun created a real externally docked Text DAT. Copy
+   without `--include-docked` failed with typed `operator_docked` and made no
+   copy. Explicit authorization copied both Operators, preserved the dock
+   relation, reported `operator_count=2`, and read back the requested main-copy
+   placement exactly as `(111, 222)`.
 
 The disposable `/project1/tdcli_structural` network was removed after both live
 runs. `/project1/td_agent` and the diagnostic bridge were not targeted by any
@@ -79,8 +84,9 @@ public mutation.
 
 ## Automated and packaged gates
 
-- `uv run pytest -q`: `241 passed` before the live-only boolean normalization;
-  the focused normalization suite subsequently passed `13 passed`.
+- `uv run pytest -q`: `245 passed`, including partial-copy rollback, dock
+  authorization, placement readback, and live-only boolean normalization
+  regressions.
 - `uv run ruff check .`: passed.
 - `uv run ruff format --check .`: passed.
 - `uv run mypy src`: passed with 16 source files checked.
@@ -92,9 +98,9 @@ public mutation.
 
 Local executable SHA-256 values (build evidence, not Release assets):
 
-- `td.exe`: `242411ce4026e6ad4aae475a0ce48de9cb7f9722f1f68d42dbc80505ca983f47`
-- `td-daemon.exe`: `76bfb0da6199edd2a72d6c6058a89d39869c60f3c60f52c0b2b41845b830101a`
-- `td-agent.exe`: `de1bac8870c9b3178fbcb17f6fae75c80f7eb7811769f76529d823302d1f1d96`
+- `td.exe`: `4604a19b20aec880242e948843ffad8b09916952c6f614f803168e7e2f904e01`
+- `td-daemon.exe`: `4de0992334fd0f2bb6ed92eeada19c359da946d9ccb89c6f5e04e876c4902041`
+- `td-agent.exe`: `a5db08e9e7cda95536ef9fb88b7e7ef892a8cb23026054f9e65899ce411efa73`
 
 These hashes are intentionally local and mutable until a later Wayfinder
 ticket selects a Release version and stages an immutable exact-commit Agent
