@@ -10,6 +10,9 @@ import pytest
 from td_cli.command_catalog import (
     COMMAND_CATALOG,
     MAX_DAT_CONTENT_BYTES,
+    MAX_MULTI_OP_PATHS,
+    MAX_SEQUENCE_BLOCKS,
+    MAX_SEQUENCE_PARAMETERS,
     MAX_TABLE_CELL_BYTES,
     MAX_TABLE_CELLS,
     MAX_TABLE_COLUMNS,
@@ -50,6 +53,12 @@ def test_dat_bounds_match_between_canonical_and_agent_contracts() -> None:
     assert OperatorControl.MAX_TABLE_COLUMNS == MAX_TABLE_COLUMNS
     assert OperatorControl.MAX_TABLE_CELLS == MAX_TABLE_CELLS
     assert OperatorControl.MAX_TABLE_CELL_BYTES == MAX_TABLE_CELL_BYTES
+
+
+def test_parameter_bounds_match_between_canonical_and_agent_contracts() -> None:
+    assert OperatorControl.MAX_MULTI_OP_PATHS == MAX_MULTI_OP_PATHS
+    assert OperatorControl.MAX_SEQUENCE_BLOCKS == MAX_SEQUENCE_BLOCKS
+    assert OperatorControl.MAX_SEQUENCE_PARAMETERS == MAX_SEQUENCE_PARAMETERS
 
 
 @pytest.fixture(autouse=True)
@@ -107,6 +116,18 @@ class FakeParameter:
         self.mode = mode
         self.readOnly = read_only
         self.isPulse = pulseable
+        self.isPython = False
+        self.isSequence = False
+        self.isOP = False
+        self.isMenu = False
+        self.isToggle = type(value) is bool
+        self.isInt = type(value) is int
+        self.isFloat = type(value) is float
+        self.isNumber = type(value) in {int, float}
+        self.isString = type(value) is str
+        self.style = "Pulse" if pulseable else type(value).__name__
+        self.enable = True
+        self.hidden = False
         self.pulses = 0
 
     def eval(self):
@@ -1882,8 +1903,8 @@ def test_parameter_list_reports_runtime_names_types_and_expression_capabilities(
     assert items["empty"]["menu_labels"] == []
     assert items["payload"]["constant_supported"] is False
     assert items["payload"]["expression_supported"] is False
-    assert items["targets"]["value_kind"] == "unknown"
-    assert items["targets"]["constant_supported"] is False
+    assert items["targets"]["value_kind"] == "operator"
+    assert items["targets"]["constant_supported"] is True
     assert items["reset"]["pulse_supported"] is True
     assert items["legacy"]["hidden"] is True
     assert items["Customvalue"]["custom"] is True
@@ -1905,6 +1926,306 @@ def test_parameter_get_reports_non_constant_runtime_modes(mode: str) -> None:
     )
     assert result["mode"] == mode
     assert result["value"] == 2.5
+
+
+def test_parameter_descriptor_rejects_disabled_obsolete_and_opaque_writes() -> None:
+    root = FakeOperator("/project1")
+    disabled = FakeParameter(1)
+    disabled.name = "Disabled"
+    disabled.enable = False
+    disabled.hidden = False
+    disabled.readOnly = False
+    disabled.isPython = False
+    disabled.isSequence = False
+    disabled.isOP = False
+    disabled.isPulse = False
+    disabled.isMenu = False
+    disabled.isToggle = False
+    disabled.isInt = True
+    disabled.isFloat = False
+    disabled.isNumber = True
+    disabled.isString = False
+    disabled.style = "Int"
+    root.par.Disabled = disabled
+
+    control = make_control({root.path: root}.get)
+    with pytest.raises(module.AgentCommandError, match="parameter_disabled"):
+        control.execute(
+            {
+                "name": "parameters.set",
+                "input": {
+                    "operator_path": root.path,
+                    "parameter": "Disabled",
+                    "mode": "constant",
+                    "value": 2,
+                },
+            }
+        )
+    assert disabled.val == 1
+
+    opaque = FakeParameter(object())
+    opaque.isPython = True
+    opaque.style = "Python"
+    root.par.Opaque = opaque
+    inspected = control.execute(
+        {
+            "name": "parameters.get",
+            "input": {"operator_path": root.path, "parameter": "Opaque"},
+        }
+    )
+    assert inspected["value"] is None
+    assert inspected["value_type"] == "python"
+    assert inspected["unsupported_reason"] == "opaque_or_structural"
+
+
+def test_parameter_operator_values_use_exact_canonical_paths() -> None:
+    root = FakeOperator("/project1")
+    target = FakeOperator("/project1/target")
+    parameter = FakeParameter(None)
+    parameter.style = "OP"
+    parameter.isOP = True
+    parameter.evalOPs = lambda: [] if parameter.val is None else [parameter.val]
+    root.par.Target = parameter
+    control = make_control({root.path: root, target.path: target}.get)
+
+    result = control.execute(
+        {
+            "name": "parameters.set",
+            "input": {
+                "operator_path": root.path,
+                "parameter": "Target",
+                "mode": "constant",
+                "value": target.path,
+            },
+        }
+    )
+    assert result["value"] == target.path
+    assert result["value_type"] == "operator"
+
+    with pytest.raises(module.AgentCommandError, match="parameter_source_not_found"):
+        control.execute(
+            {
+                "name": "parameters.set",
+                "input": {
+                    "operator_path": root.path,
+                    "parameter": "Target",
+                    "mode": "constant",
+                    "value": "/project1/missing",
+                },
+            }
+        )
+
+
+def test_parameter_sequence_replace_reads_back_complete_ordered_blocks() -> None:
+    root = FakeOperator("/project1")
+
+    def scalar(name: str, value: float):
+        parameter = FakeParameter(value)
+        parameter.name = name
+        parameter.isSamePar = lambda other, item=parameter: other is item
+        setattr(root.par, name, parameter)
+        return parameter
+
+    class Block:
+        def __init__(self, index: int, value: float) -> None:
+            self.index = index
+            self.value_par = scalar(f"Items{index}value", value)
+            self.namePar = scalar(f"Items{index}blockname", f"block-{index}")
+            self.par = {
+                "value": self.value_par,
+                "blockname": self.namePar,
+            }
+
+        @property
+        def name(self):
+            return self.namePar.val
+
+        @name.setter
+        def name(self, value):
+            self.namePar.val = value
+
+        def __iter__(self):
+            return iter(((self.value_par,), (self.namePar,)))
+
+    class Sequence:
+        name = "Items"
+        blockSize = 2
+        maxBlocks = 8
+        owner = root
+
+        def __init__(self) -> None:
+            self.blocks = [Block(0, 1.0), Block(1, 2.0)]
+
+        @property
+        def numBlocks(self):
+            return len(self.blocks)
+
+        @numBlocks.setter
+        def numBlocks(self, value):
+            assert value == len(self.blocks)
+
+    sequence = Sequence()
+    root.seq = {"Items": sequence}
+    control = make_control({root.path: root}.get)
+
+    result = control.execute(
+        {
+            "name": "parameters.sequence.replace",
+            "input": {
+                "operator_path": root.path,
+                "sequence": "Items",
+                "blocks": [
+                    {
+                        "name": "first",
+                        "parameters": [{"parameter": "value", "mode": "constant", "value": 10.0}],
+                    },
+                    {
+                        "name": "second",
+                        "parameters": [{"parameter": "value", "mode": "constant", "value": 20.0}],
+                    },
+                ],
+            },
+        }
+    )
+    assert [block["name"] for block in result["blocks"]] == ["first", "second"]
+    assert [block["parameters"][0]["value"] for block in result["blocks"]] == [10.0, 20.0]
+    with pytest.raises(module.AgentCommandError, match="parameter_sequence_too_large"):
+        control.execute(
+            {
+                "name": "parameters.sequence.get",
+                "input": {
+                    "operator_path": root.path,
+                    "sequence": "Items",
+                    "max_blocks": 1,
+                    "max_parameters": 256,
+                },
+            }
+        )
+
+    sequence.blocks[1].value_par.enable = False
+    before = [(block.name, block.value_par.val) for block in sequence.blocks]
+    with pytest.raises(module.AgentCommandError, match="parameter_disabled"):
+        control.execute(
+            {
+                "name": "parameters.sequence.replace",
+                "input": {
+                    "operator_path": root.path,
+                    "sequence": "Items",
+                    "blocks": [
+                        {
+                            "name": "mutated-first",
+                            "parameters": [
+                                {"parameter": "value", "mode": "constant", "value": 1.0}
+                            ],
+                        },
+                        {
+                            "name": "invalid-second",
+                            "parameters": [
+                                {"parameter": "value", "mode": "constant", "value": 2.0}
+                            ],
+                        },
+                    ],
+                },
+            }
+        )
+    assert [(block.name, block.value_par.val) for block in sequence.blocks] == before
+
+
+def test_parameter_reads_enforce_sequence_and_multi_operator_bounds() -> None:
+    root = FakeOperator("/project1")
+    targets = FakeParameter(None)
+    targets.style = "TOPMulti"
+    targets.isOP = True
+    targets.evalOPs = lambda: [FakeOperator(f"/project1/item{index}") for index in range(257)]
+    root.par.Targets = targets
+    control = make_control({root.path: root}.get)
+
+    with pytest.raises(module.AgentCommandError, match="parameter_value_too_large"):
+        control.execute(
+            {
+                "name": "parameters.get",
+                "input": {"operator_path": root.path, "parameter": "Targets"},
+            }
+        )
+
+
+def test_parameter_rollback_verifies_complete_public_value() -> None:
+    root = FakeOperator("/project1")
+
+    class ClampedParameter(FakeParameter):
+        @property
+        def val(self):
+            return self._value
+
+        @val.setter
+        def val(self, value):
+            self._value = min(float(value), 1.0)
+            self.mode = "constant"
+
+    parameter = ClampedParameter(0.25)
+    root.par.Gain = parameter
+    control = make_control({root.path: root}.get)
+    with pytest.raises(module.AgentCommandError, match="parameter_write_rejected"):
+        control.execute(
+            {
+                "name": "parameters.set",
+                "input": {
+                    "operator_path": root.path,
+                    "parameter": "Gain",
+                    "mode": "constant",
+                    "value": 2.0,
+                },
+            }
+        )
+    assert parameter.val == 0.25
+
+
+def test_bind_write_normalizes_socketio_omitted_nullable_source_fields() -> None:
+    target = FakeOperator("/project1/target")
+    source = FakeOperator("/project1/source")
+    master = FakeParameter(0.5)
+    master.name = "Master"
+    master.owner = source
+    source.par.Master = master
+
+    class BoundParameter(FakeParameter):
+        bindMaster = None
+
+        @property
+        def bindExpr(self):
+            return getattr(self, "_bind_expr", "")
+
+        @bindExpr.setter
+        def bindExpr(self, value):
+            self._bind_expr = value
+            self.mode = "bind"
+            self.bindMaster = master
+
+    bound = BoundParameter(0.25)
+    target.par.Gain = bound
+    control = make_control({target.path: target, source.path: source}.get)
+    result = control.execute(
+        {
+            "name": "parameters.set",
+            "input": {
+                "operator_path": target.path,
+                "parameter": "Gain",
+                "mode": "bind",
+                "source": {
+                    "kind": "bind_parameter",
+                    "operator_path": source.path,
+                    "parameter": "Master",
+                },
+            },
+        }
+    )
+    assert result["mode"] == "bind"
+    assert result["source"] == {
+        "kind": "bind_parameter",
+        "operator_path": source.path,
+        "channel": None,
+        "parameter": "Master",
+    }
 
 
 def test_phase_3_observation_binary_metadata_and_events_are_bounded() -> None:
@@ -2004,8 +2325,13 @@ def test_batch_preflights_unsupported_parameter_value_before_mutation() -> None:
                             },
                         },
                         {
-                            "name": "parameters.get",
-                            "input": {"operator_path": "/project1", "parameter": "unsupported"},
+                            "name": "parameters.set",
+                            "input": {
+                                "operator_path": "/project1",
+                                "parameter": "unsupported",
+                                "mode": "constant",
+                                "value": "opaque",
+                            },
                         },
                     ]
                 },

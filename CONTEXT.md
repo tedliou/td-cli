@@ -49,7 +49,11 @@ The canonical absolute TouchDesigner path of an Operator. Public Commands do not
 _Avoid_: relative OP path, OP shortcut
 
 **Parameter Value**:
-A typed boolean, integer, number, or string constant, or the source text of an expression, read from or written to one Operator Parameter. It is not an arbitrary Python object.
+A typed boolean, integer, number, string, one canonical Operator Path (or null),
+or a bounded ordered list of canonical Operator Paths, read from or written to
+one Operator Parameter. Expression source text is mode-specific. Export and
+Bind use typed source identities rather than Parameter Values. It is not an
+arbitrary Python object.
 _Avoid_: untyped value, serialized object
 
 **Request**:

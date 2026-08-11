@@ -63,6 +63,8 @@ class OperatorControl:
         "parameters.list": "_list_parameters",
         "parameters.pulse": "_pulse_parameter",
         "parameters.set": "_set_parameter",
+        "parameters.sequence.get": "_get_parameter_sequence",
+        "parameters.sequence.replace": "_replace_parameter_sequence",
     }
     STATE_FIELDS: ClassVar[tuple] = (
         ("node_x", "nodeX", "integer"),
@@ -81,6 +83,9 @@ class OperatorControl:
     MAX_TABLE_COLUMNS = 256
     MAX_TABLE_CELLS = 4096
     MAX_TABLE_CELL_BYTES = 16_384
+    MAX_MULTI_OP_PATHS = 256
+    MAX_SEQUENCE_BLOCKS = 128
+    MAX_SEQUENCE_PARAMETERS = 256
 
     def __init__(self, operator_lookup, operator_catalog, protected_path=None):
         self.operator_lookup = operator_lookup
@@ -97,7 +102,7 @@ class OperatorControl:
 
     def _operator(self, payload):
         operator = self.operator_lookup(payload["operator_path"])
-        if operator is None:
+        if operator is None or str(operator.path) != payload["operator_path"]:
             raise AgentCommandError("operator_not_found")
         return operator
 
@@ -809,17 +814,22 @@ class OperatorControl:
     def _parameter_metadata(cls, parameter, *, builtin, custom):
         value_kind = cls._parameter_value_kind(parameter)
         read_only = bool(getattr(parameter, "readOnly", False))
-        constant_supported = not read_only and value_kind in {
+        enabled = bool(getattr(parameter, "enable", True))
+        hidden = bool(getattr(parameter, "hidden", False))
+        page = getattr(parameter, "page", None)
+        internal = hasattr(parameter, "page") and page is None
+        writable = not read_only and enabled and not hidden and not internal
+        constant_supported = writable and value_kind in {
             "boolean",
             "integer",
             "number",
             "string",
             "menu",
             "operator",
+            "multi_operator",
         }
         expression_supported = constant_supported
-        pulse_supported = not read_only and value_kind == "pulse"
-        page = getattr(parameter, "page", None)
+        pulse_supported = writable and value_kind == "pulse"
         menu = value_kind == "menu"
         expression_source = getattr(parameter, "expr", None)
         return {
@@ -829,13 +839,30 @@ class OperatorControl:
             "style": str(parameter.style),
             "builtin": bool(builtin),
             "custom": bool(custom),
-            "hidden": bool(getattr(parameter, "hidden", False)),
+            "hidden": hidden,
+            "enabled": enabled,
             "read_only": read_only,
             "mode": cls._parameter_mode(parameter),
             "value_kind": value_kind,
             "constant_supported": constant_supported,
             "expression_supported": expression_supported,
             "pulse_supported": pulse_supported,
+            "export_supported": writable and value_kind in {"boolean", "integer", "number"},
+            "bind_supported": writable
+            and value_kind not in {"pulse", "python", "sequence", "unknown"},
+            "unsupported_reason": cls._parameter_unsupported_reason(
+                value_kind,
+                read_only=read_only,
+                enabled=enabled,
+                hidden=hidden,
+                internal=internal,
+            ),
+            "sequence": cls._parameter_sequence_identity(parameter),
+            "source": cls._parameter_source(parameter, cls._parameter_mode(parameter)),
+            "bounds": cls._parameter_bounds(parameter, value_kind),
+            "max_operator_paths": cls.MAX_MULTI_OP_PATHS
+            if value_kind == "multi_operator"
+            else None,
             "expression": {
                 "supported": expression_supported,
                 "source": str(expression_source)
@@ -851,6 +878,207 @@ class OperatorControl:
         }
 
     @staticmethod
+    def _parameter_bounds(parameter, value_kind):
+        if value_kind not in {"integer", "number"}:
+            return None
+        return {
+            "minimum": float(getattr(parameter, "min", 0)),
+            "maximum": float(getattr(parameter, "max", 1)),
+            "clamp_min": bool(getattr(parameter, "clampMin", False)),
+            "clamp_max": bool(getattr(parameter, "clampMax", False)),
+            "normal_minimum": float(getattr(parameter, "normMin", 0)),
+            "normal_maximum": float(getattr(parameter, "normMax", 1)),
+        }
+
+    @staticmethod
+    def _parameter_unsupported_reason(value_kind, *, read_only, enabled, hidden, internal):
+        if hidden:
+            return "obsolete"
+        if read_only:
+            return "read_only"
+        if not enabled:
+            return "disabled"
+        if internal:
+            return "internal"
+        if value_kind in {"python", "sequence", "unknown"}:
+            return "opaque_or_structural"
+        return None
+
+    @staticmethod
+    def _parameter_sequence_identity(parameter):
+        sequence = getattr(parameter, "sequence", None)
+        block = getattr(parameter, "sequenceBlock", None)
+        if sequence is None:
+            return None
+        return {
+            "name": str(sequence.name),
+            "block_index": int(block.index) if block is not None else None,
+        }
+
+    def _get_parameter_sequence(self, payload):
+        operator = self._operator(payload)
+        sequence = self._sequence(operator, payload["sequence"])
+        return self._sequence_result(
+            operator,
+            sequence,
+            max_blocks=payload.get("max_blocks", self.MAX_SEQUENCE_BLOCKS),
+            max_parameters=payload.get("max_parameters", self.MAX_SEQUENCE_PARAMETERS),
+        )
+
+    def _replace_parameter_sequence(self, payload):
+        operator = self._operator(payload)
+        operator_path = str(operator.path)
+        sequence = self._sequence(operator, payload["sequence"])
+        before = self._sequence_result(operator, sequence)
+        self._preflight_sequence_replace(operator, sequence, payload["blocks"], before)
+        try:
+            self._apply_sequence_blocks(sequence, payload["blocks"])
+            result = self._sequence_result(operator, sequence)
+            if result["blocks"] != payload["blocks"]:
+                raise RuntimeError("sequence readback mismatch")
+            return result
+        except Exception as error:
+            try:
+                current_operator = self.operator_lookup(operator_path)
+                if current_operator is None:
+                    raise AgentCommandError("parameter_sequence_not_found")
+                current = self._sequence(current_operator, payload["sequence"])
+                self._apply_sequence_blocks(current, before["blocks"])
+                if self._sequence_result(current_operator, current)["blocks"] != before["blocks"]:
+                    raise RuntimeError("sequence rollback mismatch")
+            except AgentCommandError as rollback_error:
+                if rollback_error.code in {"operator_not_found", "parameter_sequence_not_found"}:
+                    raise AgentCommandError("parameter_sequence_outcome_unknown") from error
+                raise AgentCommandError("parameter_sequence_rollback_failed") from rollback_error
+            except Exception as rollback_error:
+                raise AgentCommandError("parameter_sequence_rollback_failed") from rollback_error
+            raise AgentCommandError("parameter_sequence_write_failed") from error
+
+    @staticmethod
+    def _sequence(operator, name):
+        collection = getattr(operator, "seq", None)
+        try:
+            sequence = collection[name] if collection is not None else None
+        except Exception:  # noqa: BLE001 - TD collections may raise tdError subclasses
+            sequence = getattr(collection, name, None)
+        if sequence is None:
+            raise AgentCommandError("parameter_sequence_not_found")
+        return sequence
+
+    @classmethod
+    def _sequence_result(cls, operator, sequence, max_blocks=None, max_parameters=None):
+        max_blocks = cls.MAX_SEQUENCE_BLOCKS if max_blocks is None else max_blocks
+        max_parameters = cls.MAX_SEQUENCE_PARAMETERS if max_parameters is None else max_parameters
+        if len(sequence.blocks) > max_blocks:
+            raise AgentCommandError("parameter_sequence_too_large")
+        blocks = []
+        for block in list(sequence.blocks):
+            parameters = []
+            for group in list(block):
+                for parameter in list(group):
+                    if bool(getattr(parameter, "isSequence", False)):
+                        continue
+                    if getattr(block, "namePar", None) is not None and parameter.isSamePar(
+                        block.namePar
+                    ):
+                        continue
+                    item = cls._parameter_result(operator, str(parameter.name), parameter)
+                    prefix = f"{sequence.name}{int(block.index)}"
+                    local_name = str(parameter.name).removeprefix(prefix)
+                    descriptor = {
+                        "parameter": local_name,
+                        "mode": item["mode"],
+                        "value": item["value"]
+                        if item["mode"] in {"constant", "expression"}
+                        else None,
+                    }
+                    if item["source"] is not None:
+                        descriptor["source"] = item["source"]
+                    parameters.append(descriptor)
+                    if len(parameters) > max_parameters:
+                        raise AgentCommandError("parameter_sequence_too_large")
+            blocks.append(
+                {
+                    "name": str(block.name)
+                    if getattr(block, "namePar", None) is not None
+                    else None,
+                    "parameters": parameters,
+                }
+            )
+        return {
+            "operator_path": str(operator.path),
+            "sequence": str(sequence.name),
+            "block_size": int(sequence.blockSize),
+            "max_blocks": int(sequence.maxBlocks) if sequence.maxBlocks is not None else None,
+            "blocks": blocks,
+        }
+
+    def _preflight_sequence_replace(self, operator, sequence, blocks, before):
+        if len(blocks) > self.MAX_SEQUENCE_BLOCKS:
+            raise AgentCommandError("parameter_sequence_too_large")
+        if sequence.maxBlocks is not None and len(blocks) > int(sequence.maxBlocks):
+            raise AgentCommandError("parameter_sequence_too_large")
+        if blocks and not sequence.blocks:
+            raise AgentCommandError("parameter_sequence_not_writable")
+        template = before["blocks"][0] if before["blocks"] else None
+        expected_names = (
+            [item["parameter"] for item in template["parameters"]] if template is not None else []
+        )
+        for block_index, block_input in enumerate(blocks):
+            template_block = (
+                sequence.blocks[block_index]
+                if block_index < len(sequence.blocks)
+                else sequence.blocks[0]
+            )
+            names = [item["parameter"] for item in block_input["parameters"]]
+            if names != expected_names or len(names) > self.MAX_SEQUENCE_PARAMETERS:
+                raise AgentCommandError("parameter_sequence_shape_invalid")
+            if (
+                block_input.get("name") is not None
+                and getattr(template_block, "namePar", None) is None
+            ):
+                raise AgentCommandError("parameter_sequence_shape_invalid")
+            for item in block_input["parameters"]:
+                try:
+                    parameter = template_block.par[item["parameter"]]
+                except Exception as error:
+                    raise AgentCommandError("parameter_not_found") from error
+                parameter_payload = {
+                    "operator_path": str(operator.path),
+                    "parameter": str(parameter.name),
+                    "mode": item["mode"],
+                    "value": item.get("value"),
+                }
+                if item.get("source") is not None:
+                    parameter_payload["source"] = item["source"]
+                self._preflight_parameter("parameters.set", operator, parameter_payload, parameter)
+
+    def _apply_sequence_blocks(self, sequence, blocks):
+        if len(blocks) > self.MAX_SEQUENCE_BLOCKS:
+            raise AgentCommandError("parameter_sequence_too_large")
+        sequence.numBlocks = len(blocks)
+        if int(sequence.numBlocks) != len(blocks):
+            raise RuntimeError("sequence block count rejected")
+        for index, block_input in enumerate(blocks):
+            block = sequence.blocks[index]
+            if block_input.get("name") is not None:
+                block.name = block_input["name"]
+            for item in block_input["parameters"]:
+                try:
+                    parameter = block.par[item["parameter"]]
+                except Exception as error:
+                    raise AgentCommandError("parameter_not_found") from error
+                payload = {
+                    "operator_path": str(sequence.owner.path),
+                    "parameter": str(parameter.name),
+                    "mode": item["mode"],
+                    "value": item.get("value"),
+                }
+                if item.get("source") is not None:
+                    payload["source"] = item["source"]
+                self._set_parameter(payload)
+
+    @staticmethod
     def _parameter_mode(parameter):
         mode = str(parameter.mode).lower()
         for known in ("expression", "export", "bind"):
@@ -860,20 +1088,50 @@ class OperatorControl:
 
     @staticmethod
     def _parameter_value_kind(parameter):
+        style = str(getattr(parameter, "style", "")).lower()
         if bool(getattr(parameter, "isSequence", False)):
             return "sequence"
         if bool(getattr(parameter, "isPython", False)):
             return "python"
         if bool(getattr(parameter, "isOP", False)):
-            try:
-                if isinstance(parameter.eval(), (list, tuple)):
-                    return "unknown"
-            except Exception:  # noqa: BLE001 - TD parameter evaluation can be unavailable
-                return "unknown"
-            return "operator"
+            return "multi_operator" if "multi" in style else "operator"
+        style_kinds = {
+            "str": "string",
+            "file": "string",
+            "filesave": "string",
+            "folder": "string",
+            "header": "string",
+            "float": "number",
+            "rgba": "number",
+            "uvw": "number",
+            "wh": "number",
+            "xyzw": "number",
+            "int": "integer",
+            "toggle": "boolean",
+            "momentary": "boolean",
+            "pulse": "pulse",
+            "menu": "menu",
+            "strmenu": "menu",
+            "python": "python",
+            "sequence": "sequence",
+            "object": "operator",
+            "sop": "operator",
+            "pop": "operator",
+            "mat": "operator",
+            "chop": "operator",
+            "top": "operator",
+            "dat": "operator",
+            "panelcomp": "operator",
+            "comp": "operator",
+            "op": "operator",
+            "topmulti": "multi_operator",
+        }
+        if style in style_kinds:
+            return style_kinds[style]
         checks = (
             ("isPulse", "pulse"),
             ("isMenu", "menu"),
+            ("isMomentary", "boolean"),
             ("isToggle", "boolean"),
             ("isInt", "integer"),
             ("isFloat", "number"),
@@ -889,11 +1147,13 @@ class OperatorControl:
         name = command["name"]
         payload = command["input"]
         operator = self.operator_lookup(payload["operator_path"])
-        if operator is None:
+        if operator is None or str(operator.path) != payload["operator_path"]:
             raise AgentCommandError("operator_not_found")
         if name.startswith("parameters.") and "parameter" in payload:
             parameter = self._parameter(operator, payload["parameter"])
             self._preflight_parameter(name, operator, payload, parameter)
+        if name == "parameters.sequence.get":
+            self._get_parameter_sequence(payload)
 
     def _create_operator(self, payload):
         catalog_status = self.operator_catalog.require_creatable(
@@ -1048,8 +1308,8 @@ class OperatorControl:
         if name in {"parameters.get", "parameters.set"}:
             self._parameter_result(operator, payload["parameter"], parameter)
         if name == "parameters.set":
-            if getattr(parameter, "readOnly", False):
-                raise AgentCommandError("parameter_read_only")
+            self._require_parameter_writable(parameter)
+            self._validate_parameter_write(parameter, payload)
             if payload["mode"] == "expression":
                 try:
                     compile(payload["value"], "<parameter-expression>", "eval")
@@ -1057,26 +1317,195 @@ class OperatorControl:
                     raise AgentCommandError("expression_invalid")
         if name == "parameters.pulse" and not getattr(parameter, "isPulse", False):
             raise AgentCommandError("parameter_not_pulseable")
+        if name == "parameters.pulse":
+            self._require_parameter_writable(parameter)
+
+    @staticmethod
+    def _require_parameter_writable(parameter):
+        if getattr(parameter, "readOnly", False):
+            raise AgentCommandError("parameter_read_only")
+        if not bool(getattr(parameter, "enable", True)):
+            raise AgentCommandError("parameter_disabled")
+        if bool(getattr(parameter, "hidden", False)):
+            raise AgentCommandError("parameter_obsolete")
+        if hasattr(parameter, "page") and getattr(parameter, "page", None) is None:
+            raise AgentCommandError("parameter_type_unsupported")
+
+    def _validate_parameter_write(self, parameter, payload):
+        kind = self._parameter_value_kind(parameter)
+        mode = payload["mode"]
+        if kind in {"pulse", "python", "sequence", "unknown"}:
+            raise AgentCommandError("parameter_type_unsupported")
+        if mode == "export" and kind not in {"boolean", "integer", "number"}:
+            raise AgentCommandError("parameter_type_unsupported")
+        value = payload.get("value")
+        if mode == "bind":
+            source = payload["source"]
+            source_operator = self.operator_lookup(source["operator_path"])
+            if source_operator is None or str(source_operator.path) != source["operator_path"]:
+                raise AgentCommandError("parameter_source_not_found")
+            self._parameter(source_operator, source["parameter"])
+        if mode == "export":
+            self._require_existing_export_source(parameter, payload["source"])
+        if mode == "constant" and kind in {"operator", "multi_operator"}:
+            self._parameter_constant_for_write(parameter, value)
+        if mode != "constant":
+            return
+        expected = {
+            "boolean": bool,
+            "integer": int,
+            "number": (int, float),
+            "string": str,
+            "menu": str,
+        }.get(kind)
+        if expected is not None and (
+            not isinstance(value, expected) or kind == "integer" and type(value) is bool
+        ):
+            raise AgentCommandError("parameter_value_invalid")
+        if kind == "menu" and value not in list(getattr(parameter, "menuNames", []) or []):
+            raise AgentCommandError("parameter_value_invalid")
 
     def _set_parameter(self, payload):
         operator, parameter = self._parameter_for_payload(payload)
+        operator_path = str(operator.path)
         self._preflight_parameter("parameters.set", operator, payload, parameter)
+        before = self._parameter_snapshot(parameter)
+        before_result = self._parameter_result(operator, payload["parameter"], parameter)
         try:
             if payload["mode"] == "expression":
                 parameter.expr = payload["value"]
+            elif payload["mode"] == "bind":
+                source = payload["source"]
+                source_operator = self.operator_lookup(source["operator_path"])
+                if (
+                    source_operator is None
+                    or self._parameter(source_operator, source["parameter"]) is None
+                ):
+                    raise AgentCommandError("parameter_source_not_found")
+                parameter.bindExpr = "op({!r}).par.{}".format(
+                    source["operator_path"], source["parameter"]
+                )
+            elif payload["mode"] == "export":
+                self._activate_parameter_export(parameter, payload["source"])
             else:
-                parameter.val = payload["value"]
-        except Exception:  # noqa: BLE001 - TouchDesigner raises tdError subclasses
+                parameter.val = self._parameter_constant_for_write(parameter, payload["value"])
+        except AgentCommandError:
+            raise
+        except Exception as error:
             code = (
                 "expression_invalid"
                 if payload["mode"] == "expression"
                 else "parameter_write_rejected"
             )
-            raise AgentCommandError(code)
-        result = self._parameter_result(operator, payload["parameter"], parameter)
-        if result["mode"] != payload["mode"] or result["value"] != payload["value"]:
-            raise AgentCommandError("parameter_write_rejected")
+            self._rollback_parameter(
+                operator_path, payload["parameter"], before, before_result, error
+            )
+            raise AgentCommandError(code) from error
+        try:
+            result = self._parameter_result(operator, payload["parameter"], parameter)
+            expected = (
+                self._canonical_parameter_source(payload.get("source"))
+                if payload["mode"] in {"export", "bind"}
+                else payload["value"]
+            )
+            actual = (
+                result.get("source") if payload["mode"] in {"export", "bind"} else result["value"]
+            )
+            if result["mode"] != payload["mode"] or actual != expected:
+                raise RuntimeError("parameter readback mismatch")
+        except Exception as error:
+            self._rollback_parameter(
+                operator_path, payload["parameter"], before, before_result, error
+            )
+            raise AgentCommandError("parameter_write_rejected") from error
         return result
+
+    @staticmethod
+    def _canonical_parameter_source(source):
+        if source is None:
+            return None
+        return {
+            "kind": source["kind"],
+            "operator_path": source["operator_path"],
+            "channel": source.get("channel"),
+            "parameter": source.get("parameter"),
+        }
+
+    def _parameter_constant_for_write(self, parameter, value):
+        kind = self._parameter_value_kind(parameter)
+        if kind not in {"operator", "multi_operator"}:
+            return value
+        paths = value if isinstance(value, list) else ([] if value is None else [value])
+        if kind == "operator" and len(paths) > 1:
+            raise AgentCommandError("parameter_value_invalid")
+        operators = []
+        for path in paths:
+            target = self.operator_lookup(path)
+            if target is None or str(target.path) != path:
+                raise AgentCommandError("parameter_source_not_found")
+            operators.append(target)
+        if kind == "multi_operator":
+            return operators
+        return operators[0] if operators else None
+
+    def _activate_parameter_export(self, parameter, source):
+        self._require_existing_export_source(parameter, source)
+        parameter.mode = getattr(getattr(builtins, "ParMode", None), "EXPORT", "export")
+
+    def _require_existing_export_source(self, parameter, source):
+        source_operator = self.operator_lookup(source["operator_path"])
+        if source_operator is None or str(source_operator.path) != source["operator_path"]:
+            raise AgentCommandError("parameter_source_not_found")
+        try:
+            channel = source_operator[source["channel"]]
+        except Exception as error:
+            raise AgentCommandError("parameter_source_not_found") from error
+        if channel is None:
+            raise AgentCommandError("parameter_source_not_found")
+        current = getattr(parameter, "exportSource", None)
+        current_owner = getattr(current, "owner", None)
+        if (
+            current is None
+            or current_owner is None
+            or str(current_owner.path) != source["operator_path"]
+            or str(current.name) != source["channel"]
+        ):
+            raise AgentCommandError("parameter_export_source_unavailable")
+
+    @classmethod
+    def _parameter_snapshot(cls, parameter):
+        return {
+            "mode": cls._parameter_mode(parameter),
+            "raw_mode": getattr(parameter, "mode", None),
+            "val": getattr(parameter, "val", None),
+            "expr": getattr(parameter, "expr", ""),
+            "bind_expr": getattr(parameter, "bindExpr", ""),
+        }
+
+    def _rollback_parameter(self, operator_path, name, before, before_result, cause):
+        try:
+            operator = self.operator_lookup(operator_path)
+            if operator is None or str(operator.path) != operator_path:
+                raise AgentCommandError("parameter_not_found")
+            parameter = self._parameter(operator, name)
+            mode = before["mode"]
+            if mode == "expression":
+                parameter.expr = before["expr"]
+            elif mode == "bind":
+                parameter.bindExpr = before["bind_expr"]
+            elif mode == "export":
+                parameter.mode = before["raw_mode"]
+            else:
+                parameter.val = before["val"]
+            restored = self._parameter_result(operator, name, parameter)
+            if restored != before_result:
+                raise RuntimeError("rollback readback mismatch")
+        except AgentCommandError as error:
+            if error.code == "parameter_not_found":
+                raise AgentCommandError("parameter_outcome_unknown") from cause
+            raise
+        except Exception as error:
+            raise AgentCommandError("parameter_rollback_failed") from error
 
     @staticmethod
     def _operator_result(operator):
@@ -1100,8 +1529,30 @@ class OperatorControl:
     @classmethod
     def _parameter_result(cls, operator, name, parameter):
         mode = cls._parameter_mode(parameter)
-        value = parameter.expr if mode == "expression" else parameter.eval()
-        if type(value) is bool:
+        kind = cls._parameter_value_kind(parameter)
+        source = cls._parameter_source(parameter, mode)
+        if kind in {"python", "sequence", "unknown"}:
+            value = None
+        elif mode == "expression":
+            value = parameter.expr
+        elif kind in {"operator", "multi_operator"}:
+            try:
+                operators = list(parameter.evalOPs())
+            except Exception as error:
+                raise AgentCommandError("parameter_type_unsupported") from error
+            paths = [str(item.path) for item in operators]
+            if len(paths) > cls.MAX_MULTI_OP_PATHS:
+                raise AgentCommandError("parameter_value_too_large")
+            value = paths if kind == "multi_operator" else (paths[0] if paths else None)
+        else:
+            value = parameter.eval()
+        if kind in {"python", "sequence", "unknown"} and value is None:
+            value_type = kind
+        elif kind == "operator" and (value is None or type(value) is str):
+            value_type = "operator"
+        elif kind == "multi_operator" and isinstance(value, list):
+            value_type = "multi_operator"
+        elif type(value) is bool:
             value_type = "boolean"
         elif type(value) is int:
             value_type = "integer"
@@ -1117,7 +1568,37 @@ class OperatorControl:
             "mode": mode,
             "value": value,
             "value_type": value_type,
+            "source": source,
+            "unsupported_reason": "opaque_or_structural"
+            if kind in {"python", "sequence", "unknown"}
+            else None,
         }
+
+    @staticmethod
+    def _parameter_source(parameter, mode):
+        if mode == "export":
+            source = getattr(parameter, "exportSource", None)
+            owner = getattr(source, "owner", None)
+            if source is None or owner is None:
+                return None
+            return {
+                "kind": "export_channel",
+                "operator_path": str(owner.path),
+                "channel": str(source.name),
+                "parameter": None,
+            }
+        if mode == "bind":
+            master = getattr(parameter, "bindMaster", None)
+            owner = getattr(master, "owner", None)
+            if master is None or owner is None:
+                return None
+            return {
+                "kind": "bind_parameter",
+                "operator_path": str(owner.path),
+                "channel": None,
+                "parameter": str(master.name),
+            }
+        return None
 
 
 class AgentExt:

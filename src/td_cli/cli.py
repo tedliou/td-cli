@@ -325,6 +325,18 @@ def _json_rows(ctx: typer.Context, value: str | None) -> list[list[str]] | None:
     return decoded
 
 
+def _json_blocks(ctx: typer.Context, value: str | None) -> list[dict[str, Any]] | None:
+    if value is None:
+        return None
+    try:
+        decoded = json.loads(value)
+    except json.JSONDecodeError:
+        _fail(ctx, ClientError("invalid_arguments"))
+    if not isinstance(decoded, list) or any(not isinstance(item, dict) for item in decoded):
+        _fail(ctx, ClientError("invalid_arguments"))
+    return decoded
+
+
 @ops_app.command("get")
 def ops_get(
     ctx: typer.Context,
@@ -835,23 +847,84 @@ def parameters_set(
     integer: Annotated[int | None, typer.Option("--integer")] = None,
     number: Annotated[float | None, typer.Option("--number")] = None,
     string: Annotated[str | None, typer.Option("--string")] = None,
+    operator_value: Annotated[str | None, typer.Option("--operator")] = None,
+    operators_json: Annotated[str | None, typer.Option("--operators-json")] = None,
     expression: Annotated[str | None, typer.Option("--expression")] = None,
+    export_source_operator: Annotated[str | None, typer.Option("--export-source-operator")] = None,
+    export_channel: Annotated[str | None, typer.Option("--export-channel")] = None,
+    bind_source_operator: Annotated[str | None, typer.Option("--bind-source-operator")] = None,
+    bind_parameter: Annotated[str | None, typer.Option("--bind-parameter")] = None,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
     request_id: Annotated[str | None, typer.Option("--request-id")] = None,
 ) -> None:
     any_value_option = any(
-        value is not None for value in (bool_value, integer, number, string, expression)
+        value is not None
+        for value in (
+            bool_value,
+            integer,
+            number,
+            string,
+            operator_value,
+            operators_json,
+            expression,
+            export_source_operator,
+            export_channel,
+            bind_source_operator,
+            bind_parameter,
+        )
     )
     any_dedicated = operator_path is not None or parameter is not None or any_value_option
-    values = [("constant", value) for value in (integer, number, string) if value is not None]
+    values: list[tuple[str, Any]] = [
+        ("constant", value) for value in (integer, number, string) if value is not None
+    ]
     if bool_value is not None:
         if bool_value not in {"true", "false"}:
             _fail(ctx, ClientError("invalid_arguments"))
         values.append(("constant", bool_value == "true"))
     if expression is not None:
         values.append(("expression", expression))
+    if operator_value is not None:
+        values.append(("constant", operator_value))
+    if operators_json is not None:
+        try:
+            operator_values = json.loads(operators_json)
+        except json.JSONDecodeError:
+            _fail(ctx, ClientError("invalid_arguments"))
+        if not isinstance(operator_values, list) or any(
+            not isinstance(value, str) for value in operator_values
+        ):
+            _fail(ctx, ClientError("invalid_arguments"))
+        values.append(("constant", operator_values))
+    export_requested = export_source_operator is not None or export_channel is not None
+    bind_requested = bind_source_operator is not None or bind_parameter is not None
+    if export_requested:
+        if export_source_operator is None or export_channel is None:
+            _fail(ctx, ClientError("invalid_arguments"))
+        values.append(
+            (
+                "export",
+                {
+                    "kind": "export_channel",
+                    "operator_path": export_source_operator,
+                    "channel": export_channel,
+                },
+            )
+        )
+    if bind_requested:
+        if bind_source_operator is None or bind_parameter is None:
+            _fail(ctx, ClientError("invalid_arguments"))
+        values.append(
+            (
+                "bind",
+                {
+                    "kind": "bind_parameter",
+                    "operator_path": bind_source_operator,
+                    "parameter": bind_parameter,
+                },
+            )
+        )
     if any_dedicated and (operator_path is None or parameter is None or len(values) != 1):
         _fail(ctx, ClientError("invalid_arguments"))
     dedicated = None
@@ -861,9 +934,59 @@ def parameters_set(
             "operator_path": operator_path,
             "parameter": parameter,
             "mode": mode,
-            "value": value,
+            **({"source": value} if mode in {"export", "bind"} else {"value": value}),
         }
     _command(ctx, "parameters.set", dedicated, input, input_file, no_wait, request_id)
+
+
+@parameters_app.command("sequence-get")
+def parameters_sequence_get(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    sequence: Annotated[str | None, typer.Argument()] = None,
+    max_blocks: Annotated[int, typer.Option("--max-blocks", min=1, max=128)] = 128,
+    max_parameters: Annotated[int, typer.Option("--max-parameters", min=1, max=256)] = 256,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    if (operator_path is None) != (sequence is None):
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = (
+        {
+            "operator_path": operator_path,
+            "sequence": sequence,
+            "max_blocks": max_blocks,
+            "max_parameters": max_parameters,
+        }
+        if operator_path is not None and sequence is not None
+        else None
+    )
+    _command(ctx, "parameters.sequence.get", dedicated, input, input_file, no_wait, request_id)
+
+
+@parameters_app.command("sequence-replace")
+def parameters_sequence_replace(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    sequence: Annotated[str | None, typer.Argument()] = None,
+    blocks_json: Annotated[str | None, typer.Option("--blocks-json")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    blocks = _json_blocks(ctx, blocks_json)
+    any_dedicated = operator_path is not None or sequence is not None or blocks is not None
+    if any_dedicated and (operator_path is None or sequence is None or blocks is None):
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = (
+        {"operator_path": operator_path, "sequence": sequence, "blocks": blocks}
+        if operator_path is not None and sequence is not None and blocks is not None
+        else None
+    )
+    _command(ctx, "parameters.sequence.replace", dedicated, input, input_file, no_wait, request_id)
 
 
 @project_app.command("metadata")

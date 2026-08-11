@@ -112,6 +112,30 @@ td --json --instance <selector> ops children /project1 --op-type constantTOP
 td --json --instance <selector> parameters get /project1/source colorr
 ```
 
+Parameter inspection is style-driven and distinguishes booleans, integers,
+numbers, strings, menus, single-OP references, bounded ordered Multi-OP
+references, Pulse, Sequence headers, and opaque Python values. OP writes accept
+only exact canonical paths (or `null`); Multi-OP writes accept at most 256 exact
+paths. Python values are reported as explicitly unsupported without serializing
+the object. Disabled, read-only, hidden/obsolete, mismatched, and clamped writes
+are rejected before success is reported.
+
+```powershell
+td --json --instance <selector> parameters set /project1/target Targetop --operator /project1/source
+td --json --instance <selector> parameters set /project1/target Targets --operators-json '["/project1/a","/project1/b"]'
+td --json --instance <selector> parameters set /project1/target Gain --bind-source-operator /project1/source --bind-parameter Gain
+td --json --instance <selector> parameters sequence-get /project1/target Items
+td --json --instance <selector> parameters sequence-replace /project1/target Items --blocks-json '[{"name":"first","parameters":[{"parameter":"value","mode":"constant","value":1.5}]}]'
+```
+
+Bind sources are generated solely from a typed Operator/Parameter identity.
+Export mode accepts a typed CHOP Operator/channel identity only when that exact
+export already exists in TouchDesigner; Protocol v1 does not synthesize CHOP
+export tables or emulate an export with an expression. Sequence replacement is
+bounded to 128 blocks and 256 Parameters per block, reads back the complete
+ordered state, and restores the prior block count, order, names, modes, values,
+and sources if any mutation is rejected.
+
 Inspect every regular input and output connector before changing a graph. The
 inventory is bounded and fails rather than returning a truncated topology:
 
