@@ -80,32 +80,25 @@ class DestroyOperatorInput(OperatorInput):
     max_operators: int = Field(default=256, ge=1, le=1000)
 
 
-class CopyOperatorInput(StrictModel):
+class StructuralDestinationInput(StrictModel):
     source_path: str
     target_parent_path: str
     new_name: str
     node_x: int | None = Field(default=None, ge=-32768, le=32767)
     node_y: int | None = Field(default=None, ge=-32768, le=32767)
+    max_operators: int = Field(default=256, ge=1, le=1000)
+
+    _source_path = field_validator("source_path")(_valid_operator_path)
+    _target_parent_path = field_validator("target_parent_path")(_valid_operator_path)
+    _new_name = field_validator("new_name")(_valid_operator_name)
+
+
+class CopyOperatorInput(StructuralDestinationInput):
     include_docked: bool = False
-    max_operators: int = Field(default=256, ge=1, le=1000)
-
-    _source_path = field_validator("source_path")(_valid_operator_path)
-    _target_parent_path = field_validator("target_parent_path")(_valid_operator_path)
-    _new_name = field_validator("new_name")(_valid_operator_name)
 
 
-class MoveOperatorInput(StrictModel):
-    source_path: str
-    target_parent_path: str
-    new_name: str
-    node_x: int | None = Field(default=None, ge=-32768, le=32767)
-    node_y: int | None = Field(default=None, ge=-32768, le=32767)
+class MoveOperatorInput(StructuralDestinationInput):
     allow_connected: bool = False
-    max_operators: int = Field(default=256, ge=1, le=1000)
-
-    _source_path = field_validator("source_path")(_valid_operator_path)
-    _target_parent_path = field_validator("target_parent_path")(_valid_operator_path)
-    _new_name = field_validator("new_name")(_valid_operator_name)
 
 
 class ConnectOperatorsInput(StrictModel):

@@ -119,6 +119,7 @@ class FakeOperator:
         self.OPType = op_type
         self.family = family
         self.children = []
+        self.docked = []
         self.par = SimpleNamespace()
         self.nodeX = 0
         self.nodeY = 0
@@ -368,6 +369,138 @@ def test_copy_uses_an_exact_name_and_reports_unreplicated_boundary_connections()
     }
     assert operators["/project1/group/copy"].nodeX == 10
     assert operators["/project1/group/copy"].nodeY == 20
+
+
+def test_copy_rolls_back_a_child_created_before_touchdesigner_raises() -> None:
+    source = FakeOperator("/project1/source", family="TOP")
+    target_parent = FakeOperator("/project1/group")
+    operators = {item.path: item for item in (source, target_parent)}
+
+    def copy(*_, **__):
+        partial = FakeOperator("/project1/group/copy", family="TOP")
+        operators[partial.path] = partial
+        target_parent.children.append(partial)
+        raise RuntimeError("TouchDesigner raised after creating the copy")
+
+    target_parent.copy = copy
+    lookup = lambda path: (
+        operators.get(path)
+        if operators.get(path) is not None and not operators[path].destroyed
+        else None
+    )
+
+    with pytest.raises(module.AgentCommandError, match="operator_copy_failed"):
+        OperatorControl(
+            lookup, RUNTIME_OPERATOR_CATALOG, protected_path="/project1/td_agent"
+        ).execute(
+            {
+                "name": "ops.copy",
+                "input": {
+                    "source_path": source.path,
+                    "target_parent_path": target_parent.path,
+                    "new_name": "copy",
+                    "node_x": None,
+                    "node_y": None,
+                    "include_docked": False,
+                    "max_operators": 10,
+                },
+            }
+        )
+
+    assert lookup("/project1/group/copy") is None
+
+
+def test_copy_rejects_unverified_placement_and_rolls_back() -> None:
+    source = FakeOperator("/project1/source", family="TOP")
+    target_parent = FakeOperator("/project1/group")
+    operators = {item.path: item for item in (source, target_parent)}
+
+    class PlacementIgnoringOperator(FakeOperator):
+        @property
+        def nodeX(self):
+            return 0
+
+        @nodeX.setter
+        def nodeX(self, value):
+            del value
+
+    def copy(source_operator, *, name, includeDocked):
+        del includeDocked
+        created = PlacementIgnoringOperator(
+            f"{target_parent.path}/{name}",
+            op_type=source_operator.OPType,
+            family=source_operator.family,
+        )
+        operators[created.path] = created
+        target_parent.children.append(created)
+        return created
+
+    target_parent.copy = copy
+    lookup = lambda path: (
+        operators.get(path)
+        if operators.get(path) is not None and not operators[path].destroyed
+        else None
+    )
+
+    with pytest.raises(module.AgentCommandError, match="operator_copy_failed"):
+        OperatorControl(
+            lookup, RUNTIME_OPERATOR_CATALOG, protected_path="/project1/td_agent"
+        ).execute(
+            {
+                "name": "ops.copy",
+                "input": {
+                    "source_path": source.path,
+                    "target_parent_path": target_parent.path,
+                    "new_name": "copy",
+                    "node_x": 10,
+                    "node_y": None,
+                    "include_docked": False,
+                    "max_operators": 10,
+                },
+            }
+        )
+
+    assert lookup("/project1/group/copy") is None
+
+
+def test_copy_requires_explicit_authorization_for_externally_docked_operators() -> None:
+    source = FakeOperator("/project1/source", family="TOP")
+    source.docked = [FakeOperator("/project1/source_callbacks", family="DAT")]
+    target_parent = FakeOperator("/project1/group")
+    operators = {item.path: item for item in (source, target_parent)}
+
+    def copy(source_operator, *, name, includeDocked):
+        assert includeDocked is True
+        created = FakeOperator(
+            f"{target_parent.path}/{name}",
+            op_type=source_operator.OPType,
+            family=source_operator.family,
+        )
+        operators[created.path] = created
+        target_parent.children.append(created)
+        return created
+
+    target_parent.copy = copy
+    control = OperatorControl(
+        operators.get, RUNTIME_OPERATOR_CATALOG, protected_path="/project1/td_agent"
+    )
+    payload = {
+        "source_path": source.path,
+        "target_parent_path": target_parent.path,
+        "new_name": "copy",
+        "node_x": None,
+        "node_y": None,
+        "include_docked": False,
+        "max_operators": 10,
+    }
+
+    with pytest.raises(module.AgentCommandError, match="operator_docked"):
+        control.execute({"name": "ops.copy", "input": payload})
+
+    payload["include_docked"] = True
+    assert control.execute({"name": "ops.copy", "input": payload})["path"] == (
+        "/project1/group/copy"
+    )
 
 
 def test_move_copies_then_destroys_and_reports_detached_boundary_connections() -> None:

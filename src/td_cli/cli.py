@@ -270,6 +270,40 @@ def _command(
     )
 
 
+def _structural_destination_input(
+    ctx: typer.Context,
+    source_path: str | None,
+    target_parent_path: str | None,
+    new_name: str | None,
+    node_x: int | None,
+    node_y: int | None,
+    max_operators: int | None,
+    *,
+    specific_requested: bool,
+    specific_input: dict[str, Any],
+) -> dict[str, Any] | None:
+    identity = (source_path, target_parent_path, new_name)
+    if any(value is not None for value in identity) and not all(
+        value is not None for value in identity
+    ):
+        _fail(ctx, ClientError("invalid_arguments"))
+    if (
+        node_x is not None or node_y is not None or specific_requested or max_operators is not None
+    ) and source_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    if source_path is None or target_parent_path is None or new_name is None:
+        return None
+    return {
+        "source_path": source_path,
+        "target_parent_path": target_parent_path,
+        "new_name": new_name,
+        "node_x": node_x,
+        "node_y": node_y,
+        "max_operators": max_operators if max_operators is not None else 256,
+        **specific_input,
+    }
+
+
 @ops_app.command("get")
 def ops_get(
     ctx: typer.Context,
@@ -456,26 +490,17 @@ def ops_copy(
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
     request_id: Annotated[str | None, typer.Option("--request-id")] = None,
 ) -> None:
-    identity = (source_path, target_parent_path, new_name)
-    if any(value is not None for value in identity) and not all(
-        value is not None for value in identity
-    ):
-        _fail(ctx, ClientError("invalid_arguments"))
-    if (
-        node_x is not None or node_y is not None or include_docked or max_operators is not None
-    ) and source_path is None:
-        _fail(ctx, ClientError("invalid_arguments"))
-    dedicated = None
-    if source_path is not None and target_parent_path is not None and new_name is not None:
-        dedicated = {
-            "source_path": source_path,
-            "target_parent_path": target_parent_path,
-            "new_name": new_name,
-            "node_x": node_x,
-            "node_y": node_y,
-            "include_docked": include_docked,
-            "max_operators": max_operators if max_operators is not None else 256,
-        }
+    dedicated = _structural_destination_input(
+        ctx,
+        source_path,
+        target_parent_path,
+        new_name,
+        node_x,
+        node_y,
+        max_operators,
+        specific_requested=include_docked,
+        specific_input={"include_docked": include_docked},
+    )
     _command(ctx, "ops.copy", dedicated, input, input_file, no_wait, request_id)
 
 
@@ -494,26 +519,17 @@ def ops_move(
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
     request_id: Annotated[str | None, typer.Option("--request-id")] = None,
 ) -> None:
-    identity = (source_path, target_parent_path, new_name)
-    if any(value is not None for value in identity) and not all(
-        value is not None for value in identity
-    ):
-        _fail(ctx, ClientError("invalid_arguments"))
-    if (
-        node_x is not None or node_y is not None or allow_connected or max_operators is not None
-    ) and source_path is None:
-        _fail(ctx, ClientError("invalid_arguments"))
-    dedicated = None
-    if source_path is not None and target_parent_path is not None and new_name is not None:
-        dedicated = {
-            "source_path": source_path,
-            "target_parent_path": target_parent_path,
-            "new_name": new_name,
-            "node_x": node_x,
-            "node_y": node_y,
-            "allow_connected": allow_connected,
-            "max_operators": max_operators if max_operators is not None else 256,
-        }
+    dedicated = _structural_destination_input(
+        ctx,
+        source_path,
+        target_parent_path,
+        new_name,
+        node_x,
+        node_y,
+        max_operators,
+        specific_requested=allow_connected,
+        specific_input={"allow_connected": allow_connected},
+    )
     _command(ctx, "ops.move", dedicated, input, input_file, no_wait, request_id)
 
 

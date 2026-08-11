@@ -208,6 +208,8 @@ class OperatorControl:
         if self.operator_lookup(expected_path) is not None:
             raise AgentCommandError("operator_already_exists")
         source_subtree = self._bounded_subtree(source, payload["max_operators"])
+        if source.docked and not payload["include_docked"]:
+            raise AgentCommandError("operator_docked")
         unreplicated = self._boundary_connections(source_subtree)
         before = {str(child.path) for child in target_parent.children}
         created = None
@@ -233,11 +235,18 @@ class OperatorControl:
                 raise AgentCommandError("operator_copy_failed")
             if payload.get("node_x") is not None:
                 created.nodeX = payload["node_x"]
+                if int(created.nodeX) != payload["node_x"]:
+                    raise AgentCommandError("operator_copy_failed")
             if payload.get("node_y") is not None:
                 created.nodeY = payload["node_y"]
+                if int(created.nodeY) != payload["node_y"]:
+                    raise AgentCommandError("operator_copy_failed")
         except Exception as error:
-            if created is not None and not created_roots:
-                created_roots = [created]
+            created_roots = [
+                child for child in target_parent.children if str(child.path) not in before
+            ]
+            if created is not None and created not in created_roots:
+                created_roots.append(created)
             if not self._rollback_created(created_roots):
                 raise AgentCommandError("operator_copy_rollback_failed") from error
             if isinstance(error, AgentCommandError):

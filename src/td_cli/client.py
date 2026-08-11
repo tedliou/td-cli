@@ -162,6 +162,7 @@ class DaemonClient:
             "operator_destroy_outcome_unknown",
             "operator_copy_failed",
             "operator_copy_rollback_failed",
+            "operator_docked",
             "operator_move_failed",
             "operator_move_rollback_failed",
             "operator_move_outcome_unknown",
