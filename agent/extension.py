@@ -52,11 +52,25 @@ class OperatorControl:
         "ops.get": "_get_operator",
         "ops.move": "_move_operator",
         "ops.rename": "_rename_operator",
+        "ops.state.get": "_get_operator_state",
+        "ops.state.set": "_set_operator_state",
         "parameters.get": "_get_parameter",
         "parameters.list": "_list_parameters",
         "parameters.pulse": "_pulse_parameter",
         "parameters.set": "_set_parameter",
     }
+    STATE_FIELDS: ClassVar[tuple] = (
+        ("node_x", "nodeX", "integer"),
+        ("node_y", "nodeY", "integer"),
+        ("node_width", "nodeWidth", "integer"),
+        ("node_height", "nodeHeight", "integer"),
+        ("color", "color", "color"),
+        ("comment", "comment", "string"),
+        ("bypass", "bypass", "boolean"),
+        ("viewer", "viewer", "boolean"),
+        ("expose", "expose", "boolean"),
+        ("lock", "lock", "boolean"),
+    )
 
     def __init__(self, operator_lookup, operator_catalog, protected_path=None):
         self.operator_lookup = operator_lookup
@@ -79,6 +93,98 @@ class OperatorControl:
 
     def _get_operator(self, payload):
         return self._operator_result(self._operator(payload))
+
+    def _get_operator_state(self, payload):
+        operator = self._operator(payload)
+        try:
+            state = self._operator_state(operator)
+        except Exception as error:
+            raise AgentCommandError("operator_state_unavailable") from error
+        return {"operator_path": str(operator.path), "state": state}
+
+    def _set_operator_state(self, payload):
+        operator = self._operator(payload)
+        path = str(operator.path)
+        self._require_mutable_path(path)
+        try:
+            before = self._operator_state(operator)
+        except Exception as error:
+            raise AgentCommandError("operator_state_unavailable") from error
+        applied_fields = []
+        try:
+            for field, _, _ in self.STATE_FIELDS:
+                value = payload.get(field)
+                if value is None:
+                    continue
+                applied_fields.append(field)
+                self._apply_operator_state_field(operator, field, value)
+            state = self._operator_state(operator)
+            if not self._state_matches_patch(state, payload):
+                raise AgentCommandError("operator_state_failed")
+        except Exception as error:
+            if self.operator_lookup(path) is None:
+                raise AgentCommandError("operator_state_outcome_unknown") from error
+            if not self._restore_operator_state(operator, before):
+                raise AgentCommandError("operator_state_rollback_failed") from error
+            if isinstance(error, AgentCommandError):
+                raise
+            raise AgentCommandError("operator_state_failed") from error
+        return {
+            "operator_path": path,
+            "applied_fields": applied_fields,
+            "state": state,
+        }
+
+    def _apply_operator_state_field(self, operator, field, value):
+        descriptor = next(item for item in self.STATE_FIELDS if item[0] == field)
+        _, attribute, kind = descriptor
+        if kind == "color":
+            value = (value["red"], value["green"], value["blue"])
+        setattr(operator, attribute, value)
+
+    def _restore_operator_state(self, operator, state):
+        try:
+            operator.lock = False
+            for field, _, _ in self.STATE_FIELDS:
+                if field != "lock":
+                    self._apply_operator_state_field(operator, field, state[field])
+            operator.lock = state["lock"]
+            return self._state_matches_patch(self._operator_state(operator), state)
+        except Exception:  # noqa: BLE001 - locked runtime can raise td-specific errors
+            return False
+
+    @staticmethod
+    def _state_matches_patch(state, payload):
+        for field, expected in payload.items():
+            if field == "operator_path" or expected is None:
+                continue
+            actual = state[field]
+            if field == "color":
+                if any(
+                    abs(actual[channel] - expected[channel]) > 0.000001
+                    for channel in ("red", "green", "blue")
+                ):
+                    return False
+            elif actual != expected:
+                return False
+        return True
+
+    @classmethod
+    def _operator_state(cls, operator):
+        state = {}
+        converters = {"integer": int, "string": str, "boolean": bool}
+        for field, attribute, kind in cls.STATE_FIELDS:
+            value = getattr(operator, attribute)
+            if kind == "color":
+                value = {
+                    "red": float(value[0]),
+                    "green": float(value[1]),
+                    "blue": float(value[2]),
+                }
+            else:
+                value = converters[kind](value)
+            state[field] = value
+        return state
 
     def _children(self, payload):
         operator = self._operator(payload)
@@ -313,7 +419,11 @@ class OperatorControl:
         if path == "/":
             raise AgentCommandError("operator_mutation_forbidden")
         protected = self.protected_path
-        if protected is not None and (protected == path or protected.startswith(path + "/")):
+        if protected is not None and (
+            protected == path
+            or protected.startswith(path + "/")
+            or path.startswith(protected + "/")
+        ):
             raise AgentCommandError("operator_mutation_forbidden")
 
     def _require_mutable_destination(self, path):

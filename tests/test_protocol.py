@@ -339,6 +339,75 @@ def test_connections_command_has_a_bounded_read_only_contract() -> None:
         )
 
 
+def test_operator_state_get_is_a_strict_batchable_read_contract() -> None:
+    command = Command.model_validate(
+        {"name": "ops.state.get", "input": {"operator_path": "/project1/source"}}
+    )
+
+    assert command.input.model_dump() == {"operator_path": "/project1/source"}
+    assert "ops.state.get" in COMMAND_CATALOG.batch_names
+
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {
+                "name": "ops.state.get",
+                "input": {"operator_path": "/project1/source", "attribute": "storage"},
+            }
+        )
+
+
+def test_operator_state_set_is_a_strict_bounded_non_batchable_patch() -> None:
+    command = Command.model_validate(
+        {
+            "name": "ops.state.set",
+            "input": {
+                "operator_path": "/project1/source",
+                "node_x": -100,
+                "node_y": 200,
+                "node_width": 140,
+                "node_height": 80,
+                "color": {"red": 0.1, "green": 0.2, "blue": 0.3},
+                "comment": "source node",
+                "bypass": True,
+                "lock": False,
+                "viewer": True,
+                "expose": False,
+            },
+        }
+    )
+
+    assert command.input.model_dump(exclude_none=True) == {
+        "operator_path": "/project1/source",
+        "node_x": -100,
+        "node_y": 200,
+        "node_width": 140,
+        "node_height": 80,
+        "color": {"red": 0.1, "green": 0.2, "blue": 0.3},
+        "comment": "source node",
+        "bypass": True,
+        "lock": False,
+        "viewer": True,
+        "expose": False,
+    }
+    assert "ops.state.set" not in COMMAND_CATALOG.batch_names
+
+    invalid_inputs = [
+        {"operator_path": "/project1/source"},
+        {"operator_path": "/project1/source", "node_width": 0},
+        {"operator_path": "/project1/source", "comment": "x" * 4097},
+        {"operator_path": "/project1/source", "bypass": 1},
+        {"operator_path": "/project1/source", "color": {"red": 0.1, "green": 0.2}},
+        {
+            "operator_path": "/project1/source",
+            "color": {"red": 0.1, "green": float("nan"), "blue": 0.3},
+        },
+        {"operator_path": "/project1/source", "storage": {"unsafe": True}},
+    ]
+    for invalid_input in invalid_inputs:
+        with pytest.raises(ValidationError):
+            Command.model_validate({"name": "ops.state.set", "input": invalid_input})
+
+
 def test_destroy_command_requires_explicit_bounded_destructive_options() -> None:
     command = Command.model_validate(
         {

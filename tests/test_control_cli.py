@@ -334,6 +334,47 @@ def test_phase_3_commands_reach_public_submission_seam(monkeypatch, argv, expect
             },
         ),
         (
+            ["--json", "ops", "state", "get", "/project1/a"],
+            {"name": "ops.state.get", "input": {"operator_path": "/project1/a"}},
+        ),
+        (
+            [
+                "--json",
+                "ops",
+                "state",
+                "set",
+                "/project1/a",
+                "--node-x",
+                "-10",
+                "--node-width",
+                "140",
+                "--color",
+                "0.1",
+                "0.2",
+                "0.3",
+                "--comment",
+                "source node",
+                "--bypass",
+                "--no-expose",
+            ],
+            {
+                "name": "ops.state.set",
+                "input": {
+                    "operator_path": "/project1/a",
+                    "node_x": -10,
+                    "node_y": None,
+                    "node_width": 140,
+                    "node_height": None,
+                    "color": {"red": 0.1, "green": 0.2, "blue": 0.3},
+                    "comment": "source node",
+                    "bypass": True,
+                    "lock": None,
+                    "viewer": None,
+                    "expose": False,
+                },
+            },
+        ),
+        (
             [
                 "--json",
                 "ops",
@@ -460,6 +501,23 @@ def test_v011_cli_rejects_incomplete_dedicated_modes(monkeypatch, argv) -> None:
     ],
 )
 def test_structural_commands_reject_zero_bounds(monkeypatch, argv) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+    result = CliRunner().invoke(cli.app, argv)
+    assert result.exit_code == 2
+    assert json.loads(result.stdout)["error"]["code"] == "invalid_arguments"
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--json", "ops", "state", "set", "/project1/a"],
+        ["--json", "ops", "state", "set", "--node-x", "10"],
+        ["--json", "ops", "state", "set", "/project1/a", "--node-width", "0"],
+    ],
+)
+def test_operator_state_cli_rejects_empty_incomplete_and_out_of_bounds_patches(
+    monkeypatch, argv
+) -> None:
     monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
     result = CliRunner().invoke(cli.app, argv)
     assert result.exit_code == 2

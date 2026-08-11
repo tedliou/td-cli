@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from td_cli.command_catalog import COMMAND_CATALOG
+from td_cli.command_catalog import COMMAND_CATALOG, OPERATOR_STATE_FIELDS, SetOperatorStateInput
 
 spec = importlib.util.spec_from_file_location("td_agent_extension", Path("agent/extension.py"))
 assert spec is not None and spec.loader is not None
@@ -23,6 +23,16 @@ RUNTIME_OPERATOR_CATALOG = OperatorCatalog(
 
 def make_control(operator_lookup):
     return OperatorControl(operator_lookup, RUNTIME_OPERATOR_CATALOG)
+
+
+def test_operator_state_fields_match_between_canonical_and_agent_contracts() -> None:
+    model_fields = tuple(
+        field for field in SetOperatorStateInput.model_fields if field != "operator_path"
+    )
+    agent_fields = tuple(field for field, _, _ in OperatorControl.STATE_FIELDS)
+
+    assert model_fields == OPERATOR_STATE_FIELDS
+    assert agent_fields == OPERATOR_STATE_FIELDS
 
 
 @pytest.fixture(autouse=True)
@@ -123,6 +133,14 @@ class FakeOperator:
         self.par = SimpleNamespace()
         self.nodeX = 0
         self.nodeY = 0
+        self.nodeWidth = 130
+        self.nodeHeight = 90
+        self.color = (0.67, 0.67, 0.67)
+        self.comment = ""
+        self.bypass = False
+        self.lock = False
+        self.viewer = False
+        self.expose = True
         self.inputConnectors = [
             FakeConnector(self, index, is_input=True) for index in range(inputs)
         ]
@@ -163,6 +181,219 @@ def test_operator_control_is_the_touchdesigner_graph_interface() -> None:
     }
     with pytest.raises(module.AgentCommandError, match="operator_not_found"):
         control.execute({"name": "ops.get", "input": {"operator_path": "/missing"}})
+
+
+def test_operator_state_get_returns_only_the_locked_common_state_contract() -> None:
+    operator = FakeOperator("/project1/source", family="TOP")
+    operator.nodeX = -10
+    operator.nodeY = 20
+    operator.nodeWidth = 140
+    operator.nodeHeight = 80
+    operator.color = (0.1, 0.2, 0.3)
+    operator.comment = "source node"
+    operator.bypass = True
+    operator.viewer = True
+
+    assert make_control({operator.path: operator}.get).execute(
+        {"name": "ops.state.get", "input": {"operator_path": operator.path}}
+    ) == {
+        "operator_path": "/project1/source",
+        "state": {
+            "node_x": -10,
+            "node_y": 20,
+            "node_width": 140,
+            "node_height": 80,
+            "color": {"red": 0.1, "green": 0.2, "blue": 0.3},
+            "comment": "source node",
+            "bypass": True,
+            "lock": False,
+            "viewer": True,
+            "expose": True,
+        },
+    }
+
+
+def test_operator_state_commands_distinguish_temporarily_unavailable_state() -> None:
+    class UnavailableStateOperator(FakeOperator):
+        @property
+        def color(self):
+            raise RuntimeError("state is temporarily unavailable")
+
+        @color.setter
+        def color(self, value):
+            del value
+
+    operator = UnavailableStateOperator("/project1/source", family="TOP")
+    control = make_control({operator.path: operator}.get)
+
+    with pytest.raises(module.AgentCommandError, match="operator_state_unavailable"):
+        control.execute({"name": "ops.state.get", "input": {"operator_path": operator.path}})
+    with pytest.raises(module.AgentCommandError, match="operator_state_unavailable"):
+        control.execute(
+            {
+                "name": "ops.state.set",
+                "input": {"operator_path": operator.path, "comment": "safe patch"},
+            }
+        )
+
+
+def test_operator_state_set_applies_and_returns_the_exact_verified_patch() -> None:
+    operator = FakeOperator("/project1/source", family="TOP")
+    control = make_control({operator.path: operator}.get)
+
+    result = control.execute(
+        {
+            "name": "ops.state.set",
+            "input": {
+                "operator_path": operator.path,
+                "node_x": -10,
+                "node_y": 20,
+                "node_width": 140,
+                "node_height": 80,
+                "color": {"red": 0.1, "green": 0.2, "blue": 0.3},
+                "comment": "source node",
+                "bypass": True,
+                "lock": True,
+                "viewer": True,
+                "expose": False,
+            },
+        }
+    )
+
+    assert result == {
+        "operator_path": "/project1/source",
+        "applied_fields": [
+            "node_x",
+            "node_y",
+            "node_width",
+            "node_height",
+            "color",
+            "comment",
+            "bypass",
+            "viewer",
+            "expose",
+            "lock",
+        ],
+        "state": {
+            "node_x": -10,
+            "node_y": 20,
+            "node_width": 140,
+            "node_height": 80,
+            "color": {"red": 0.1, "green": 0.2, "blue": 0.3},
+            "comment": "source node",
+            "bypass": True,
+            "lock": True,
+            "viewer": True,
+            "expose": False,
+        },
+    }
+
+
+def test_operator_state_set_rolls_back_the_whole_patch_when_touchdesigner_clamps() -> None:
+    class WidthClampingOperator(FakeOperator):
+        @property
+        def nodeWidth(self):
+            return self._node_width
+
+        @nodeWidth.setter
+        def nodeWidth(self, value):
+            self._node_width = max(54, value)
+
+    operator = WidthClampingOperator("/project1/source", family="TOP")
+    control = make_control({operator.path: operator}.get)
+
+    with pytest.raises(module.AgentCommandError, match="operator_state_failed"):
+        control.execute(
+            {
+                "name": "ops.state.set",
+                "input": {
+                    "operator_path": operator.path,
+                    "node_x": 123,
+                    "node_width": 1,
+                },
+            }
+        )
+
+    assert operator.nodeX == 0
+    assert operator.nodeWidth == 130
+
+
+def test_operator_state_set_reports_a_distinct_rollback_failure() -> None:
+    class RollbackRejectingOperator(FakeOperator):
+        reject_comment = False
+
+        @property
+        def comment(self):
+            return self._comment
+
+        @comment.setter
+        def comment(self, value):
+            if self.reject_comment:
+                raise RuntimeError("comment write rejected")
+            self._comment = value
+
+    operator = RollbackRejectingOperator("/project1/source", family="TOP")
+    operator.reject_comment = True
+
+    with pytest.raises(module.AgentCommandError, match="operator_state_rollback_failed"):
+        make_control({operator.path: operator}.get).execute(
+            {
+                "name": "ops.state.set",
+                "input": {
+                    "operator_path": operator.path,
+                    "node_x": 123,
+                    "comment": "cannot apply",
+                },
+            }
+        )
+
+
+def test_operator_state_set_reports_unknown_when_the_operator_disappears() -> None:
+    class DisappearingOperator(FakeOperator):
+        disappear_on_node_x = False
+
+        @property
+        def nodeX(self):
+            return self._node_x
+
+        @nodeX.setter
+        def nodeX(self, value):
+            if self.disappear_on_node_x:
+                self.destroyed = True
+                raise RuntimeError("operator disappeared")
+            self._node_x = value
+
+    operator = DisappearingOperator("/project1/source", family="TOP")
+    operator.disappear_on_node_x = True
+    lookup = lambda path: operator if path == operator.path and not operator.destroyed else None
+
+    with pytest.raises(module.AgentCommandError, match="operator_state_outcome_unknown"):
+        make_control(lookup).execute(
+            {
+                "name": "ops.state.set",
+                "input": {"operator_path": operator.path, "node_x": 123},
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    "path", ["/", "/project1", "/project1/td_agent", "/project1/td_agent/internal"]
+)
+def test_operator_state_set_protects_root_and_the_whole_agent_component_tree(path: str) -> None:
+    operator = FakeOperator(path)
+    control = OperatorControl(
+        lambda candidate: operator if candidate == path else None,
+        RUNTIME_OPERATOR_CATALOG,
+        protected_path="/project1/td_agent",
+    )
+
+    with pytest.raises(module.AgentCommandError, match="operator_mutation_forbidden"):
+        control.execute(
+            {
+                "name": "ops.state.set",
+                "input": {"operator_path": path, "comment": "forbidden"},
+            }
+        )
 
 
 def test_connections_inventory_reports_every_regular_connector_and_exact_endpoint() -> None:

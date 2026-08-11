@@ -68,6 +68,24 @@ def test_locked_socketio_omissions_are_restored_at_the_public_result_boundary() 
     )
     assert copied["include_docked"] is False
 
+    state = _normalize_command_result(
+        {"name": "ops.state.get"},
+        {
+            "operator_path": "/project1/source",
+            "state": {"bypass": 1, "lock": 0, "viewer": 1, "expose": 0},
+        },
+    )
+    assert state["state"] == {
+        "bypass": True,
+        "lock": False,
+        "viewer": True,
+        "expose": False,
+    }
+    assert state["state"]["bypass"] is True
+    assert state["state"]["lock"] is False
+    assert state["state"]["viewer"] is True
+    assert state["state"]["expose"] is False
+
     batched = _normalize_command_result(
         {
             "name": "batch.execute",
