@@ -99,6 +99,75 @@ def test_protocol_v1_typed_commands_validate_and_canonicalize(
     assert Command.model_validate(payload).canonical_json() == canonical
 
 
+def test_parameter_sources_and_sequences_are_strict_and_bounded() -> None:
+    bind = Command.model_validate(
+        {
+            "name": "parameters.set",
+            "input": {
+                "operator_path": "/project1/target",
+                "parameter": "Gain",
+                "mode": "bind",
+                "source": {
+                    "kind": "bind_parameter",
+                    "operator_path": "/project1/source",
+                    "parameter": "Gain",
+                },
+            },
+        }
+    )
+    assert bind.input.source.parameter == "Gain"
+
+    multi = Command.model_validate(
+        {
+            "name": "parameters.set",
+            "input": {
+                "operator_path": "/project1/target",
+                "parameter": "Targets",
+                "mode": "constant",
+                "value": ["/project1/a", "/project1/b"],
+            },
+        }
+    )
+    assert multi.input.value == ["/project1/a", "/project1/b"]
+
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {
+                "name": "parameters.set",
+                "input": {
+                    "operator_path": "/project1/target",
+                    "parameter": "Gain",
+                    "mode": "bind",
+                    "source": {
+                        "kind": "bind_parameter",
+                        "operator_path": "/project1/source",
+                        "parameter": "Gain",
+                        "channel": "chan1",
+                    },
+                },
+            }
+        )
+
+    sequence = Command.model_validate(
+        {
+            "name": "parameters.sequence.replace",
+            "input": {
+                "operator_path": "/project1/target",
+                "sequence": "Items",
+                "blocks": [
+                    {
+                        "name": "first",
+                        "parameters": [
+                            {"parameter": "Value", "mode": "constant", "value": 1.5}
+                        ],
+                    }
+                ],
+            },
+        }
+    )
+    assert sequence.input.blocks[0].parameters[0].value == 1.5
+
+
 @pytest.mark.parametrize(
     "payload",
     [

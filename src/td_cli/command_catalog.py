@@ -262,12 +262,35 @@ class ParameterInput(OperatorInput):
         return value
 
 
-ParameterValue = bool | int | float | str
+MAX_PARAMETER_SOURCE_BYTES = 16_384
+MAX_MULTI_OP_PATHS = 256
+MAX_SEQUENCE_BLOCKS = 128
+MAX_SEQUENCE_PARAMETERS = 256
+
+ParameterValue = bool | int | float | str | None | list[str]
+
+
+class ParameterSourceInput(StrictModel):
+    kind: Literal["export_channel", "bind_parameter"]
+    operator_path: str
+    channel: str | None = Field(default=None, min_length=1, max_length=256)
+    parameter: str | None = Field(default=None, min_length=1, max_length=256)
+
+    _operator_path = field_validator("operator_path")(_valid_operator_path)
+
+    @model_validator(mode="after")
+    def identity_matches_kind(self) -> ParameterSourceInput:
+        if self.kind == "export_channel" and (self.channel is None or self.parameter is not None):
+            raise ValueError("export_channel requires only channel")
+        if self.kind == "bind_parameter" and (self.parameter is None or self.channel is not None):
+            raise ValueError("bind_parameter requires only parameter")
+        return self
 
 
 class SetParameterInput(ParameterInput):
-    mode: Literal["constant", "expression"]
-    value: ParameterValue
+    mode: Literal["constant", "expression", "export", "bind"]
+    value: ParameterValue = None
+    source: ParameterSourceInput | None = Field(default=None, exclude_if=lambda value: value is None)
 
     @model_validator(mode="after")
     def value_matches_protocol_limits(self) -> SetParameterInput:
@@ -276,9 +299,59 @@ class SetParameterInput(ParameterInput):
             raise ValueError("integer is outside the JavaScript safe-integer range")
         if type(value) is float and not math.isfinite(value):
             raise ValueError("number must be finite")
+        if isinstance(value, list) and len(value) > MAX_MULTI_OP_PATHS:
+            raise ValueError("too many Operator paths")
+        if isinstance(value, list):
+            for path in value:
+                _valid_operator_path(path)
         if self.mode == "expression" and type(value) is not str:
             raise ValueError("expression value must be source text")
+        if isinstance(value, str) and len(value.encode("utf-8")) > MAX_PARAMETER_SOURCE_BYTES:
+            raise ValueError("expression source is too large")
+        if self.mode in {"export", "bind"}:
+            expected = "export_channel" if self.mode == "export" else "bind_parameter"
+            if self.source is None or self.source.kind != expected or value is not None:
+                raise ValueError(f"{self.mode} requires a matching typed source")
+        elif self.source is not None:
+            raise ValueError("constant and expression modes do not accept source")
         return self
+
+
+class SequenceInput(OperatorInput):
+    sequence: str = Field(min_length=1, max_length=256)
+
+
+class SequenceParameterWrite(StrictModel):
+    parameter: str = Field(min_length=1, max_length=256)
+    mode: Literal["constant", "expression", "export", "bind"]
+    value: ParameterValue = None
+    source: ParameterSourceInput | None = Field(default=None, exclude_if=lambda value: value is None)
+
+    @model_validator(mode="after")
+    def value_matches_protocol_limits(self) -> SequenceParameterWrite:
+        validated = SetParameterInput.model_validate(
+            {
+                "operator_path": "/",
+                "parameter": self.parameter,
+                "mode": self.mode,
+                "value": self.value,
+                "source": self.source,
+            }
+        )
+        self.value = validated.value
+        self.source = validated.source
+        return self
+
+
+class SequenceBlockWrite(StrictModel):
+    name: str | None = Field(default=None, max_length=256)
+    parameters: list[SequenceParameterWrite] = Field(
+        min_length=1, max_length=MAX_SEQUENCE_PARAMETERS
+    )
+
+
+class ReplaceSequenceInput(SequenceInput):
+    blocks: list[SequenceBlockWrite] = Field(max_length=MAX_SEQUENCE_BLOCKS)
 
 
 class SnapshotInput(OperatorInput):
@@ -366,6 +439,8 @@ COMMAND_CATALOG = CommandCatalog(
         CommandDefinition("parameters.list", OperatorInput, batchable=True),
         CommandDefinition("parameters.set", SetParameterInput, batchable=True),
         CommandDefinition("parameters.pulse", ParameterInput, batchable=True),
+        CommandDefinition("parameters.sequence.get", SequenceInput, batchable=True),
+        CommandDefinition("parameters.sequence.replace", ReplaceSequenceInput),
         CommandDefinition("ops.create", CreateOperatorInput),
         CommandDefinition("ops.rename", RenameOperatorInput),
         CommandDefinition("ops.destroy", DestroyOperatorInput),
@@ -401,6 +476,8 @@ CommandInput = (
     | DisconnectOperatorsInput
     | ParameterInput
     | SetParameterInput
+    | SequenceInput
+    | ReplaceSequenceInput
     | SnapshotInput
     | ProjectMetadataInput
     | BinaryExportInput

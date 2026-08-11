@@ -418,6 +418,11 @@ def _normalize_command_result(command: object, result: object) -> object:
                 continue
             descriptor = dict(item)
             descriptor.setdefault("page", None)
+            descriptor.setdefault("unsupported_reason", None)
+            descriptor.setdefault("sequence", None)
+            descriptor.setdefault("source", None)
+            descriptor.setdefault("bounds", None)
+            descriptor.setdefault("max_operator_paths", None)
             expression = descriptor.get("expression")
             if isinstance(expression, dict):
                 descriptor["expression"] = {**expression, "source": expression.get("source")}
@@ -429,6 +434,20 @@ def _normalize_command_result(command: object, result: object) -> object:
                 descriptor.setdefault("menu_labels", None)
             parameters.append(descriptor)
         normalized["parameters"] = parameters
+    elif name in {"parameters.get", "parameters.set"}:
+        normalized.setdefault("source", None)
+        normalized.setdefault("unsupported_reason", None)
+        if normalized.get("value_type") in {"operator", "python", "sequence", "unknown"}:
+            normalized.setdefault("value", None)
+    elif name in {"parameters.sequence.get", "parameters.sequence.replace"}:
+        normalized.setdefault("max_blocks", None)
+        for block in normalized.get("blocks", []):
+            if not isinstance(block, dict):
+                continue
+            block.setdefault("name", None)
+            for parameter in block.get("parameters", []):
+                if isinstance(parameter, dict):
+                    parameter.setdefault("value", None)
     return normalized
 
 

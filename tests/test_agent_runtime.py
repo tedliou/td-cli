@@ -107,6 +107,18 @@ class FakeParameter:
         self.mode = mode
         self.readOnly = read_only
         self.isPulse = pulseable
+        self.isPython = False
+        self.isSequence = False
+        self.isOP = False
+        self.isMenu = False
+        self.isToggle = type(value) is bool
+        self.isInt = type(value) is int
+        self.isFloat = type(value) is float
+        self.isNumber = type(value) in {int, float}
+        self.isString = type(value) is str
+        self.style = "Pulse" if pulseable else type(value).__name__
+        self.enable = True
+        self.hidden = False
         self.pulses = 0
 
     def eval(self):
@@ -1882,8 +1894,8 @@ def test_parameter_list_reports_runtime_names_types_and_expression_capabilities(
     assert items["empty"]["menu_labels"] == []
     assert items["payload"]["constant_supported"] is False
     assert items["payload"]["expression_supported"] is False
-    assert items["targets"]["value_kind"] == "unknown"
-    assert items["targets"]["constant_supported"] is False
+    assert items["targets"]["value_kind"] == "operator"
+    assert items["targets"]["constant_supported"] is True
     assert items["reset"]["pulse_supported"] is True
     assert items["legacy"]["hidden"] is True
     assert items["Customvalue"]["custom"] is True
@@ -1905,6 +1917,173 @@ def test_parameter_get_reports_non_constant_runtime_modes(mode: str) -> None:
     )
     assert result["mode"] == mode
     assert result["value"] == 2.5
+
+
+def test_parameter_descriptor_rejects_disabled_obsolete_and_opaque_writes() -> None:
+    root = FakeOperator("/project1")
+    disabled = FakeParameter(1)
+    disabled.name = "Disabled"
+    disabled.enable = False
+    disabled.hidden = False
+    disabled.readOnly = False
+    disabled.isPython = False
+    disabled.isSequence = False
+    disabled.isOP = False
+    disabled.isPulse = False
+    disabled.isMenu = False
+    disabled.isToggle = False
+    disabled.isInt = True
+    disabled.isFloat = False
+    disabled.isNumber = True
+    disabled.isString = False
+    disabled.style = "Int"
+    root.par.Disabled = disabled
+
+    control = make_control({root.path: root}.get)
+    with pytest.raises(module.AgentCommandError, match="parameter_disabled"):
+        control.execute(
+            {
+                "name": "parameters.set",
+                "input": {
+                    "operator_path": root.path,
+                    "parameter": "Disabled",
+                    "mode": "constant",
+                    "value": 2,
+                },
+            }
+        )
+    assert disabled.val == 1
+
+    opaque = FakeParameter(object())
+    opaque.isPython = True
+    opaque.style = "Python"
+    root.par.Opaque = opaque
+    inspected = control.execute(
+        {
+            "name": "parameters.get",
+            "input": {"operator_path": root.path, "parameter": "Opaque"},
+        }
+    )
+    assert inspected["value"] is None
+    assert inspected["value_type"] == "python"
+    assert inspected["unsupported_reason"] == "opaque_or_structural"
+
+
+def test_parameter_operator_values_use_exact_canonical_paths() -> None:
+    root = FakeOperator("/project1")
+    target = FakeOperator("/project1/target")
+    parameter = FakeParameter(None)
+    parameter.style = "OP"
+    parameter.isOP = True
+    parameter.evalOPs = lambda: [] if parameter.val is None else [parameter.val]
+    root.par.Target = parameter
+    control = make_control({root.path: root, target.path: target}.get)
+
+    result = control.execute(
+        {
+            "name": "parameters.set",
+            "input": {
+                "operator_path": root.path,
+                "parameter": "Target",
+                "mode": "constant",
+                "value": target.path,
+            },
+        }
+    )
+    assert result["value"] == target.path
+    assert result["value_type"] == "operator"
+
+    with pytest.raises(module.AgentCommandError, match="parameter_source_not_found"):
+        control.execute(
+            {
+                "name": "parameters.set",
+                "input": {
+                    "operator_path": root.path,
+                    "parameter": "Target",
+                    "mode": "constant",
+                    "value": "/project1/missing",
+                },
+            }
+        )
+
+
+def test_parameter_sequence_replace_reads_back_complete_ordered_blocks() -> None:
+    root = FakeOperator("/project1")
+
+    def scalar(name: str, value: float):
+        parameter = FakeParameter(value)
+        parameter.name = name
+        parameter.isSamePar = lambda other, item=parameter: other is item
+        setattr(root.par, name, parameter)
+        return parameter
+
+    class Block:
+        def __init__(self, index: int, value: float) -> None:
+            self.index = index
+            self.value_par = scalar(f"Items{index}value", value)
+            self.namePar = scalar(f"Items{index}blockname", f"block-{index}")
+            self.par = {
+                "value": self.value_par,
+                "blockname": self.namePar,
+            }
+
+        @property
+        def name(self):
+            return self.namePar.val
+
+        @name.setter
+        def name(self, value):
+            self.namePar.val = value
+
+        def __iter__(self):
+            return iter(((self.value_par,), (self.namePar,)))
+
+    class Sequence:
+        name = "Items"
+        blockSize = 2
+        maxBlocks = 8
+        owner = root
+
+        def __init__(self) -> None:
+            self.blocks = [Block(0, 1.0), Block(1, 2.0)]
+
+        @property
+        def numBlocks(self):
+            return len(self.blocks)
+
+        @numBlocks.setter
+        def numBlocks(self, value):
+            assert value == len(self.blocks)
+
+    sequence = Sequence()
+    root.seq = {"Items": sequence}
+    control = make_control({root.path: root}.get)
+
+    result = control.execute(
+        {
+            "name": "parameters.sequence.replace",
+            "input": {
+                "operator_path": root.path,
+                "sequence": "Items",
+                "blocks": [
+                    {
+                        "name": "first",
+                        "parameters": [
+                            {"parameter": "value", "mode": "constant", "value": 10.0}
+                        ],
+                    },
+                    {
+                        "name": "second",
+                        "parameters": [
+                            {"parameter": "value", "mode": "constant", "value": 20.0}
+                        ],
+                    },
+                ],
+            },
+        }
+    )
+    assert [block["name"] for block in result["blocks"]] == ["first", "second"]
+    assert [block["parameters"][0]["value"] for block in result["blocks"]] == [10.0, 20.0]
 
 
 def test_phase_3_observation_binary_metadata_and_events_are_bounded() -> None:
@@ -2004,8 +2183,13 @@ def test_batch_preflights_unsupported_parameter_value_before_mutation() -> None:
                             },
                         },
                         {
-                            "name": "parameters.get",
-                            "input": {"operator_path": "/project1", "parameter": "unsupported"},
+                            "name": "parameters.set",
+                            "input": {
+                                "operator_path": "/project1",
+                                "parameter": "unsupported",
+                                "mode": "constant",
+                                "value": "opaque",
+                            },
                         },
                     ]
                 },

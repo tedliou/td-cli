@@ -195,6 +195,18 @@ class DaemonClient:
             "parameter_not_pulseable",
             "parameter_type_unsupported",
             "parameter_write_rejected",
+            "parameter_disabled",
+            "parameter_obsolete",
+            "parameter_value_invalid",
+            "parameter_source_not_found",
+            "parameter_export_source_unavailable",
+            "parameter_rollback_failed",
+            "parameter_outcome_unknown",
+            "parameter_sequence_not_found",
+            "parameter_sequence_too_large",
+            "parameter_sequence_write_failed",
+            "parameter_sequence_rollback_failed",
+            "parameter_sequence_outcome_unknown",
             "expression_invalid",
             "wait_timeout",
             "daemon_shutdown",
@@ -209,7 +221,11 @@ class DaemonClient:
             and isinstance(result, dict)
             and (
                 result.get("mode") not in {"constant", "expression", "export", "bind"}
-                or result.get("value_type") not in {"boolean", "integer", "number", "string"}
+                or result.get("value_type")
+                not in {
+                    "boolean", "integer", "number", "string", "operator", "multi_operator",
+                    "python", "sequence", "unknown",
+                }
             )
         ):
             raise ClientError("protocol_incompatible")
@@ -218,8 +234,9 @@ class DaemonClient:
             and command.get("name") == "parameters.set"
             and isinstance(result, dict)
             and (
-                result.get("mode") not in {"constant", "expression"}
-                or result.get("value_type") not in {"boolean", "integer", "number", "string"}
+                result.get("mode") not in {"constant", "expression", "export", "bind"}
+                or result.get("value_type")
+                not in {"boolean", "integer", "number", "string", "operator", "multi_operator"}
             )
         ):
             raise ClientError("protocol_incompatible")
@@ -240,6 +257,7 @@ class DaemonClient:
                     "string",
                     "menu",
                     "operator",
+                    "multi_operator",
                     "pulse",
                     "python",
                     "sequence",
@@ -248,6 +266,14 @@ class DaemonClient:
                 for parameter in parameters
             ):
                 raise ClientError("protocol_incompatible")
+        if (
+            isinstance(command, dict)
+            and command.get("name")
+            in {"parameters.sequence.get", "parameters.sequence.replace"}
+            and isinstance(result, dict)
+            and not isinstance(result.get("blocks"), list)
+        ):
+            raise ClientError("protocol_incompatible")
         return snapshot
 
     def wait(self, request_id: str) -> dict[str, Any]:
