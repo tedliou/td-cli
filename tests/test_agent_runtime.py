@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from td_cli.command_catalog import COMMAND_CATALOG
+from td_cli.command_catalog import COMMAND_CATALOG, OPERATOR_STATE_FIELDS, SetOperatorStateInput
 
 spec = importlib.util.spec_from_file_location("td_agent_extension", Path("agent/extension.py"))
 assert spec is not None and spec.loader is not None
@@ -23,6 +23,16 @@ RUNTIME_OPERATOR_CATALOG = OperatorCatalog(
 
 def make_control(operator_lookup):
     return OperatorControl(operator_lookup, RUNTIME_OPERATOR_CATALOG)
+
+
+def test_operator_state_fields_match_between_canonical_and_agent_contracts() -> None:
+    model_fields = tuple(
+        field for field in SetOperatorStateInput.model_fields if field != "operator_path"
+    )
+    agent_fields = tuple(field for field, _, _ in OperatorControl.STATE_FIELDS)
+
+    assert model_fields == OPERATOR_STATE_FIELDS
+    assert agent_fields == OPERATOR_STATE_FIELDS
 
 
 @pytest.fixture(autouse=True)
@@ -366,8 +376,10 @@ def test_operator_state_set_reports_unknown_when_the_operator_disappears() -> No
         )
 
 
-@pytest.mark.parametrize("path", ["/", "/project1", "/project1/td_agent"])
-def test_operator_state_set_protects_root_agent_component_and_ancestors(path: str) -> None:
+@pytest.mark.parametrize(
+    "path", ["/", "/project1", "/project1/td_agent", "/project1/td_agent/internal"]
+)
+def test_operator_state_set_protects_root_and_the_whole_agent_component_tree(path: str) -> None:
     operator = FakeOperator(path)
     control = OperatorControl(
         lambda candidate: operator if candidate == path else None,

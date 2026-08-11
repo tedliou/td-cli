@@ -14,6 +14,7 @@ from pathlib import Path
 import socketio
 from fastapi import HTTPException
 
+from td_cli.command_catalog import OPERATOR_STATE_BOOLEAN_FIELDS
 from td_cli.daemon.app import SubmitRequest, create_app
 from td_cli.release import LOCKED_TOUCHDESIGNER_VERSION
 
@@ -405,7 +406,7 @@ def _normalize_command_result(command: object, result: object) -> object:
         normalized["include_docked"] = bool(normalized["include_docked"])
     elif name in {"ops.state.get", "ops.state.set"} and isinstance(normalized.get("state"), dict):
         state = dict(normalized["state"])
-        for field in ("bypass", "lock", "viewer", "expose"):
+        for field in OPERATOR_STATE_BOOLEAN_FIELDS:
             if field in state:
                 state[field] = bool(state[field])
         normalized["state"] = state

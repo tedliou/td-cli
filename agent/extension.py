@@ -59,6 +59,18 @@ class OperatorControl:
         "parameters.pulse": "_pulse_parameter",
         "parameters.set": "_set_parameter",
     }
+    STATE_FIELDS: ClassVar[tuple] = (
+        ("node_x", "nodeX", "integer"),
+        ("node_y", "nodeY", "integer"),
+        ("node_width", "nodeWidth", "integer"),
+        ("node_height", "nodeHeight", "integer"),
+        ("color", "color", "color"),
+        ("comment", "comment", "string"),
+        ("bypass", "bypass", "boolean"),
+        ("viewer", "viewer", "boolean"),
+        ("expose", "expose", "boolean"),
+        ("lock", "lock", "boolean"),
+    )
 
     def __init__(self, operator_lookup, operator_catalog, protected_path=None):
         self.operator_lookup = operator_lookup
@@ -100,7 +112,7 @@ class OperatorControl:
             raise AgentCommandError("operator_state_unavailable") from error
         applied_fields = []
         try:
-            for field in self._operator_state_fields():
+            for field, _, _ in self.STATE_FIELDS:
                 value = payload.get(field)
                 if value is None:
                     continue
@@ -123,43 +135,17 @@ class OperatorControl:
             "state": state,
         }
 
-    @staticmethod
-    def _operator_state_fields():
-        return (
-            "node_x",
-            "node_y",
-            "node_width",
-            "node_height",
-            "color",
-            "comment",
-            "bypass",
-            "viewer",
-            "expose",
-            "lock",
-        )
-
-    @staticmethod
-    def _apply_operator_state_field(operator, field, value):
-        attributes = {
-            "node_x": "nodeX",
-            "node_y": "nodeY",
-            "node_width": "nodeWidth",
-            "node_height": "nodeHeight",
-            "color": "color",
-            "comment": "comment",
-            "bypass": "bypass",
-            "lock": "lock",
-            "viewer": "viewer",
-            "expose": "expose",
-        }
-        if field == "color":
+    def _apply_operator_state_field(self, operator, field, value):
+        descriptor = next(item for item in self.STATE_FIELDS if item[0] == field)
+        _, attribute, kind = descriptor
+        if kind == "color":
             value = (value["red"], value["green"], value["blue"])
-        setattr(operator, attributes[field], value)
+        setattr(operator, attribute, value)
 
     def _restore_operator_state(self, operator, state):
         try:
             operator.lock = False
-            for field in self._operator_state_fields():
+            for field, _, _ in self.STATE_FIELDS:
                 if field != "lock":
                     self._apply_operator_state_field(operator, field, state[field])
             operator.lock = state["lock"]
@@ -183,25 +169,22 @@ class OperatorControl:
                 return False
         return True
 
-    @staticmethod
-    def _operator_state(operator):
-        color = operator.color
-        return {
-            "node_x": int(operator.nodeX),
-            "node_y": int(operator.nodeY),
-            "node_width": int(operator.nodeWidth),
-            "node_height": int(operator.nodeHeight),
-            "color": {
-                "red": float(color[0]),
-                "green": float(color[1]),
-                "blue": float(color[2]),
-            },
-            "comment": str(operator.comment),
-            "bypass": bool(operator.bypass),
-            "lock": bool(operator.lock),
-            "viewer": bool(operator.viewer),
-            "expose": bool(operator.expose),
-        }
+    @classmethod
+    def _operator_state(cls, operator):
+        state = {}
+        converters = {"integer": int, "string": str, "boolean": bool}
+        for field, attribute, kind in cls.STATE_FIELDS:
+            value = getattr(operator, attribute)
+            if kind == "color":
+                value = {
+                    "red": float(value[0]),
+                    "green": float(value[1]),
+                    "blue": float(value[2]),
+                }
+            else:
+                value = converters[kind](value)
+            state[field] = value
+        return state
 
     def _children(self, payload):
         operator = self._operator(payload)
@@ -436,7 +419,11 @@ class OperatorControl:
         if path == "/":
             raise AgentCommandError("operator_mutation_forbidden")
         protected = self.protected_path
-        if protected is not None and (protected == path or protected.startswith(path + "/")):
+        if protected is not None and (
+            protected == path
+            or protected.startswith(path + "/")
+            or path.startswith(protected + "/")
+        ):
             raise AgentCommandError("operator_mutation_forbidden")
 
     def _require_mutable_destination(self, path):

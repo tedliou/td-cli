@@ -47,6 +47,21 @@ class OperatorColorInput(StrictModel):
     blue: float = Field(ge=0, le=1, allow_inf_nan=False)
 
 
+OPERATOR_STATE_FIELDS = (
+    "node_x",
+    "node_y",
+    "node_width",
+    "node_height",
+    "color",
+    "comment",
+    "bypass",
+    "viewer",
+    "expose",
+    "lock",
+)
+OPERATOR_STATE_BOOLEAN_FIELDS = ("bypass", "viewer", "expose", "lock")
+
+
 class SetOperatorStateInput(OperatorInput):
     node_x: int | None = Field(default=None, ge=-32768, le=32767)
     node_y: int | None = Field(default=None, ge=-32768, le=32767)
@@ -55,27 +70,13 @@ class SetOperatorStateInput(OperatorInput):
     color: OperatorColorInput | None = None
     comment: str | None = Field(default=None, max_length=4096)
     bypass: bool | None = None
-    lock: bool | None = None
     viewer: bool | None = None
     expose: bool | None = None
+    lock: bool | None = None
 
     @model_validator(mode="after")
     def patch_is_not_empty(self) -> SetOperatorStateInput:
-        if all(
-            getattr(self, field) is None
-            for field in (
-                "node_x",
-                "node_y",
-                "node_width",
-                "node_height",
-                "color",
-                "comment",
-                "bypass",
-                "lock",
-                "viewer",
-                "expose",
-            )
-        ):
+        if all(getattr(self, field) is None for field in OPERATOR_STATE_FIELDS):
             raise ValueError("at least one Operator state field is required")
         return self
 
