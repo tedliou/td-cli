@@ -17,8 +17,8 @@ payload, protection, packaging, and lifecycle invariants:
   same common fields, requires at least one field, applies explicit numeric and
   text bounds, reads every requested value back, and returns the verified full
   common state plus the ordered `applied_fields` list.
-- Root, the Agent Component, and every ancestor of the Agent Component remain
-  protected. A failed update restores and verifies the entire prior common
+- Root, the whole Agent Component tree, and every ancestor of the Agent
+  Component remain protected. A failed update restores and verifies the entire prior common
   state or reports distinct `operator_state_rollback_failed` or
   `operator_state_outcome_unknown` errors. Temporarily unreadable state reports
   `operator_state_unavailable` rather than fabricated defaults.
@@ -57,10 +57,10 @@ feature branch inside TouchDesigner 2025.32050. Independent artifact
 inspection passed with the required eight-Operator topology.
 
 - Canonical Agent source revision:
-  `3bc86e967582754c6bd6b866543610afc0021600160d76a1d4a752b1b35cd642`
+  `bf8fff8be3eb27fbf306b52c2cf5391169015990d6016ca69feeb3a923da3a04`
 - Local derived artifact SHA-256:
-  `b3e645200503709c03893f4f42c5402c437f41cafa044589b441b895384daca9`
-- Online Instance Selector: `8bbf`
+  `48849946612fbdb055276cd5f2ec496f843ca2dc62caeb3807b34be2e07a0933`
+- Final review-rerun Online Instance Selector: `ebb3`
 - Advertised capabilities: all 21 public Commands, including
   `ops.state.get` and `ops.state.set`
 
@@ -70,7 +70,7 @@ source project was never modified.
 
 ## Locked-runtime behavior
 
-The public `uv run td --json --instance 8bbf` seam proved:
+The public CLI seam proved:
 
 1. Base COMP, Constant TOP, Constant CHOP, Text DAT, and Box SOP returned the
    same typed state shape. SocketIO integer flags were normalized to real JSON
@@ -85,8 +85,13 @@ The public `uv run td --json --instance 8bbf` seam proved:
    change it.
 5. Packaged `td.exe` independently read the same live state through the public
    Daemon interface.
+6. The final post-review Agent rejected mutation of
+   `/project1/td_agent/agent_extension` with `operator_mutation_forbidden`,
+   proving that protection covers the entire Agent Component tree rather than
+   only its root.
 
-The six-Operator disposable acceptance network was removed with public
+Both the six-Operator inventory network and final two-Operator review network
+were removed with public
 `ops.destroy --recursive --allow-connected`; the following `ops.get` returned
 `operator_not_found`. The diagnostic bridge was shut down and the unsaved
 temporary project was closed. Temporary directories were sent to the Windows
@@ -94,7 +99,7 @@ Recycle Bin.
 
 ## Automated and packaged gates
 
-- `uv run pytest -q`: `265 passed`.
+- `uv run pytest -q`: `267 passed`.
 - `uv run ruff check .`: passed.
 - `uv run ruff format --check .`: passed.
 - `uv run mypy src`: passed with 16 source files checked.
@@ -106,9 +111,9 @@ Recycle Bin.
 
 Local executable SHA-256 values (build evidence, not Release assets):
 
-- `td.exe`: `fb48b793d60e0fd6eee0df3b7604b04e7a0175adf32be4b8adfb1bb3f85e8d9a`
-- `td-daemon.exe`: `f3b26346c929dea949fb29b26d3c3300d0952d6fd653e8fa8a41c04b4073d5ec`
-- `td-agent.exe`: `be1d75576e30c6b3b14e1b915ba570a5b1082eaa8ac621dc16a70c9043447a9a`
+- `td.exe`: `a54f9af0f5e84aec744336c28a04cca0731f92c8d300e3b10758844ab548eaf0`
+- `td-daemon.exe`: `f9c5da9cbf8ca9bf7d640cba1b51601e0c5da0d9f55c40916d96f7be63b5d51d`
+- `td-agent.exe`: `35982dd00c8395b0a1a2b607da604f880c1fadbbdd46608e82cdab8dc4f66065`
 
 These hashes are intentionally local and mutable until a later Wayfinder
 ticket selects a Release version and stages immutable exact-commit artifacts.
