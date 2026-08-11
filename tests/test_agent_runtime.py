@@ -2086,6 +2086,54 @@ def test_parameter_sequence_replace_reads_back_complete_ordered_blocks() -> None
     assert [block["parameters"][0]["value"] for block in result["blocks"]] == [10.0, 20.0]
 
 
+def test_bind_write_normalizes_socketio_omitted_nullable_source_fields() -> None:
+    target = FakeOperator("/project1/target")
+    source = FakeOperator("/project1/source")
+    master = FakeParameter(0.5)
+    master.name = "Master"
+    master.owner = source
+    source.par.Master = master
+
+    class BoundParameter(FakeParameter):
+        bindMaster = None
+
+        @property
+        def bindExpr(self):
+            return getattr(self, "_bind_expr", "")
+
+        @bindExpr.setter
+        def bindExpr(self, value):
+            self._bind_expr = value
+            self.mode = "bind"
+            self.bindMaster = master
+
+    bound = BoundParameter(0.25)
+    target.par.Gain = bound
+    control = make_control({target.path: target, source.path: source}.get)
+    result = control.execute(
+        {
+            "name": "parameters.set",
+            "input": {
+                "operator_path": target.path,
+                "parameter": "Gain",
+                "mode": "bind",
+                "source": {
+                    "kind": "bind_parameter",
+                    "operator_path": source.path,
+                    "parameter": "Master",
+                },
+            },
+        }
+    )
+    assert result["mode"] == "bind"
+    assert result["source"] == {
+        "kind": "bind_parameter",
+        "operator_path": source.path,
+        "channel": None,
+        "parameter": "Master",
+    }
+
+
 def test_phase_3_observation_binary_metadata_and_events_are_bounded() -> None:
     root = FakeOperator("/", family="COMP")
     project1 = FakeOperator("/project1", family="COMP")

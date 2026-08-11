@@ -1283,7 +1283,11 @@ class OperatorControl:
             raise AgentCommandError(code) from error
         try:
             result = self._parameter_result(operator, payload["parameter"], parameter)
-            expected = payload.get("source") if payload["mode"] in {"export", "bind"} else payload["value"]
+            expected = (
+                self._canonical_parameter_source(payload.get("source"))
+                if payload["mode"] in {"export", "bind"}
+                else payload["value"]
+            )
             actual = result.get("source") if payload["mode"] in {"export", "bind"} else result["value"]
             if result["mode"] != payload["mode"] or actual != expected:
                 raise RuntimeError("parameter readback mismatch")
@@ -1291,6 +1295,17 @@ class OperatorControl:
             self._rollback_parameter(operator, payload["parameter"], before, error)
             raise AgentCommandError("parameter_write_rejected") from error
         return result
+
+    @staticmethod
+    def _canonical_parameter_source(source):
+        if source is None:
+            return None
+        return {
+            "kind": source["kind"],
+            "operator_path": source["operator_path"],
+            "channel": source.get("channel"),
+            "parameter": source.get("parameter"),
+        }
 
     def _parameter_constant_for_write(self, parameter, value):
         kind = self._parameter_value_kind(parameter)
