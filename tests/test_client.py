@@ -138,6 +138,17 @@ def test_network_mutation_error_remains_typed(tmp_path: Path, monkeypatch) -> No
         "operator_state_failed",
         "operator_state_rollback_failed",
         "operator_state_outcome_unknown",
+        "dat_type_mismatch",
+        "dat_content_unavailable",
+        "dat_content_not_writable",
+        "dat_content_too_large",
+        "text_dat_write_failed",
+        "text_dat_rollback_failed",
+        "text_dat_outcome_unknown",
+        "table_dat_patch_out_of_bounds",
+        "table_dat_write_failed",
+        "table_dat_rollback_failed",
+        "table_dat_outcome_unknown",
     ],
 )
 def test_execution_errors_remain_typed(tmp_path: Path, monkeypatch, code: str) -> None:

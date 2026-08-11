@@ -60,6 +60,11 @@ OPERATOR_STATE_FIELDS = (
     "lock",
 )
 OPERATOR_STATE_BOOLEAN_FIELDS = ("bypass", "viewer", "expose", "lock")
+MAX_DAT_CONTENT_BYTES = 32_768
+MAX_TABLE_ROWS = 256
+MAX_TABLE_COLUMNS = 256
+MAX_TABLE_CELLS = 4096
+MAX_TABLE_CELL_BYTES = 16_384
 
 
 class SetOperatorStateInput(OperatorInput):
@@ -78,6 +83,90 @@ class SetOperatorStateInput(OperatorInput):
     def patch_is_not_empty(self) -> SetOperatorStateInput:
         if all(getattr(self, field) is None for field in OPERATOR_STATE_FIELDS):
             raise ValueError("at least one Operator state field is required")
+        return self
+
+
+class TextDatReadInput(OperatorInput):
+    max_bytes: int = Field(default=MAX_DAT_CONTENT_BYTES, ge=1, le=MAX_DAT_CONTENT_BYTES)
+
+
+class TextDatSetInput(OperatorInput):
+    text: str
+
+    @field_validator("text")
+    @classmethod
+    def text_fits_content_limit(cls, value: str) -> str:
+        if len(value.encode("utf-8")) > MAX_DAT_CONTENT_BYTES:
+            raise ValueError("text exceeds the UTF-8 content limit")
+        return value
+
+
+class TableDatReadInput(OperatorInput):
+    row_offset: int = Field(default=0, ge=0, le=MAX_TABLE_ROWS - 1)
+    column_offset: int = Field(default=0, ge=0, le=MAX_TABLE_COLUMNS - 1)
+    row_count: int = Field(default=64, ge=1, le=MAX_TABLE_ROWS)
+    column_count: int = Field(default=64, ge=1, le=MAX_TABLE_COLUMNS)
+    max_bytes: int = Field(default=MAX_DAT_CONTENT_BYTES, ge=1, le=MAX_DAT_CONTENT_BYTES)
+
+    @model_validator(mode="after")
+    def window_fits_cell_limit(self) -> TableDatReadInput:
+        if self.row_count * self.column_count > MAX_TABLE_CELLS:
+            raise ValueError("table window exceeds the cell limit")
+        return self
+
+
+def _validate_table_rows(rows: list[list[str]], *, allow_empty: bool) -> list[list[str]]:
+    if not rows:
+        if allow_empty:
+            return rows
+        raise ValueError("table patch must contain at least one row")
+    column_count = len(rows[0])
+    if column_count == 0:
+        raise ValueError("table rows must contain at least one cell")
+    if len(rows) > MAX_TABLE_ROWS or column_count > MAX_TABLE_COLUMNS:
+        raise ValueError("table dimensions exceed the limit")
+    if len(rows) * column_count > MAX_TABLE_CELLS:
+        raise ValueError("table content exceeds the cell limit")
+    total_bytes = 0
+    for row in rows:
+        if len(row) != column_count:
+            raise ValueError("table rows must be rectangular")
+        for cell in row:
+            cell_bytes = len(cell.encode("utf-8"))
+            if cell_bytes > MAX_TABLE_CELL_BYTES:
+                raise ValueError("table cell exceeds the UTF-8 byte limit")
+            total_bytes += cell_bytes
+    if total_bytes > MAX_DAT_CONTENT_BYTES:
+        raise ValueError("table content exceeds the UTF-8 byte limit")
+    return rows
+
+
+class TableDatReplaceInput(OperatorInput):
+    rows: list[list[str]]
+
+    @field_validator("rows")
+    @classmethod
+    def rows_are_bounded_and_rectangular(cls, value: list[list[str]]) -> list[list[str]]:
+        return _validate_table_rows(value, allow_empty=True)
+
+
+class TableDatPatchInput(OperatorInput):
+    row_offset: int = Field(default=0, ge=0, le=MAX_TABLE_ROWS - 1)
+    column_offset: int = Field(default=0, ge=0, le=MAX_TABLE_COLUMNS - 1)
+    rows: list[list[str]]
+
+    @field_validator("rows")
+    @classmethod
+    def rows_are_bounded_and_rectangular(cls, value: list[list[str]]) -> list[list[str]]:
+        return _validate_table_rows(value, allow_empty=False)
+
+    @model_validator(mode="after")
+    def patch_bounds_fit_protocol_dimensions(self) -> TableDatPatchInput:
+        if (
+            self.row_offset + len(self.rows) > MAX_TABLE_ROWS
+            or self.column_offset + len(self.rows[0]) > MAX_TABLE_COLUMNS
+        ):
+            raise ValueError("table patch exceeds the dimension limit")
         return self
 
 
@@ -268,6 +357,11 @@ COMMAND_CATALOG = CommandCatalog(
         CommandDefinition("ops.connections", ConnectionsInput, batchable=True),
         CommandDefinition("ops.state.get", OperatorInput, batchable=True),
         CommandDefinition("ops.state.set", SetOperatorStateInput),
+        CommandDefinition("dat.text.get", TextDatReadInput, batchable=True),
+        CommandDefinition("dat.text.set", TextDatSetInput),
+        CommandDefinition("dat.table.get", TableDatReadInput, batchable=True),
+        CommandDefinition("dat.table.replace", TableDatReplaceInput),
+        CommandDefinition("dat.table.patch", TableDatPatchInput),
         CommandDefinition("parameters.get", ParameterInput, batchable=True),
         CommandDefinition("parameters.list", OperatorInput, batchable=True),
         CommandDefinition("parameters.set", SetParameterInput, batchable=True),
@@ -293,6 +387,11 @@ CommandInput = (
     | ChildrenInput
     | ConnectionsInput
     | SetOperatorStateInput
+    | TextDatReadInput
+    | TextDatSetInput
+    | TableDatReadInput
+    | TableDatReplaceInput
+    | TableDatPatchInput
     | CreateOperatorInput
     | RenameOperatorInput
     | DestroyOperatorInput

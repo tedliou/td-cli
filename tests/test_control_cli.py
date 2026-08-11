@@ -338,6 +338,80 @@ def test_phase_3_commands_reach_public_submission_seam(monkeypatch, argv, expect
             {"name": "ops.state.get", "input": {"operator_path": "/project1/a"}},
         ),
         (
+            ["--json", "dat", "text", "get", "/project1/notes", "--max-bytes", "128"],
+            {
+                "name": "dat.text.get",
+                "input": {"operator_path": "/project1/notes", "max_bytes": 128},
+            },
+        ),
+        (
+            ["--json", "dat", "text", "set", "/project1/notes", "繁體\n"],
+            {
+                "name": "dat.text.set",
+                "input": {"operator_path": "/project1/notes", "text": "繁體\n"},
+            },
+        ),
+        (
+            [
+                "--json",
+                "dat",
+                "table",
+                "get",
+                "/project1/grid",
+                "--row-offset",
+                "1",
+                "--column-offset",
+                "2",
+                "--row-count",
+                "3",
+                "--column-count",
+                "4",
+                "--max-bytes",
+                "1024",
+            ],
+            {
+                "name": "dat.table.get",
+                "input": {
+                    "operator_path": "/project1/grid",
+                    "row_offset": 1,
+                    "column_offset": 2,
+                    "row_count": 3,
+                    "column_count": 4,
+                    "max_bytes": 1024,
+                },
+            },
+        ),
+        (
+            ["--json", "dat", "table", "replace", "/project1/grid", '[["a","b"],["c",""]]'],
+            {
+                "name": "dat.table.replace",
+                "input": {"operator_path": "/project1/grid", "rows": [["a", "b"], ["c", ""]]},
+            },
+        ),
+        (
+            [
+                "--json",
+                "dat",
+                "table",
+                "patch",
+                "/project1/grid",
+                '[["x"]]',
+                "--row-offset",
+                "1",
+                "--column-offset",
+                "2",
+            ],
+            {
+                "name": "dat.table.patch",
+                "input": {
+                    "operator_path": "/project1/grid",
+                    "row_offset": 1,
+                    "column_offset": 2,
+                    "rows": [["x"]],
+                },
+            },
+        ),
+        (
             [
                 "--json",
                 "ops",

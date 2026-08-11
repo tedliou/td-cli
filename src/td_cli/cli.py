@@ -14,6 +14,7 @@ from typer._click.exceptions import ClickException, UsageError
 
 from td_cli import __version__
 from td_cli.client import ClientError, DaemonClient
+from td_cli.command_catalog import MAX_DAT_CONTENT_BYTES
 from td_cli.protocol import Command
 
 app = typer.Typer(no_args_is_help=True)
@@ -21,6 +22,9 @@ instances_app = typer.Typer()
 requests_app = typer.Typer()
 ops_app = typer.Typer()
 ops_state_app = typer.Typer()
+dat_app = typer.Typer()
+dat_text_app = typer.Typer()
+dat_table_app = typer.Typer()
 parameters_app = typer.Typer()
 project_app = typer.Typer()
 binary_app = typer.Typer()
@@ -30,6 +34,9 @@ app.add_typer(instances_app, name="instances")
 app.add_typer(requests_app, name="requests")
 app.add_typer(ops_app, name="ops")
 ops_app.add_typer(ops_state_app, name="state")
+app.add_typer(dat_app, name="dat")
+dat_app.add_typer(dat_text_app, name="text")
+dat_app.add_typer(dat_table_app, name="table")
 app.add_typer(parameters_app, name="parameters")
 app.add_typer(project_app, name="project")
 app.add_typer(binary_app, name="binary")
@@ -306,6 +313,18 @@ def _structural_destination_input(
     }
 
 
+def _json_rows(ctx: typer.Context, value: str | None) -> list[list[str]] | None:
+    if value is None:
+        return None
+    try:
+        decoded = json.loads(value)
+    except json.JSONDecodeError:
+        _fail(ctx, ClientError("invalid_arguments"))
+    if not isinstance(decoded, list):
+        _fail(ctx, ClientError("invalid_arguments"))
+    return decoded
+
+
 @ops_app.command("get")
 def ops_get(
     ctx: typer.Context,
@@ -383,6 +402,132 @@ def ops_state_set(
         _fail(ctx, ClientError("invalid_arguments"))
     dedicated = {"operator_path": operator_path, **patch} if operator_path is not None else None
     _command(ctx, "ops.state.set", dedicated, input, input_file, no_wait, request_id)
+
+
+@dat_text_app.command("get")
+def dat_text_get(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    max_bytes: Annotated[int | None, typer.Option("--max-bytes")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    if max_bytes is not None and operator_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = (
+        {
+            "operator_path": operator_path,
+            "max_bytes": max_bytes if max_bytes is not None else MAX_DAT_CONTENT_BYTES,
+        }
+        if operator_path is not None
+        else None
+    )
+    _command(ctx, "dat.text.get", dedicated, input, input_file, no_wait, request_id)
+
+
+@dat_text_app.command("set")
+def dat_text_set(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    text: Annotated[str | None, typer.Argument()] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    if (operator_path is None) != (text is None):
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = (
+        {"operator_path": operator_path, "text": text} if operator_path is not None else None
+    )
+    _command(ctx, "dat.text.set", dedicated, input, input_file, no_wait, request_id)
+
+
+@dat_table_app.command("get")
+def dat_table_get(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    row_offset: Annotated[int | None, typer.Option("--row-offset")] = None,
+    column_offset: Annotated[int | None, typer.Option("--column-offset")] = None,
+    row_count: Annotated[int | None, typer.Option("--row-count")] = None,
+    column_count: Annotated[int | None, typer.Option("--column-count")] = None,
+    max_bytes: Annotated[int | None, typer.Option("--max-bytes")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    options = (row_offset, column_offset, row_count, column_count, max_bytes)
+    if any(value is not None for value in options) and operator_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = (
+        {
+            "operator_path": operator_path,
+            "row_offset": row_offset if row_offset is not None else 0,
+            "column_offset": column_offset if column_offset is not None else 0,
+            "row_count": row_count if row_count is not None else 64,
+            "column_count": column_count if column_count is not None else 64,
+            "max_bytes": max_bytes if max_bytes is not None else MAX_DAT_CONTENT_BYTES,
+        }
+        if operator_path is not None
+        else None
+    )
+    _command(ctx, "dat.table.get", dedicated, input, input_file, no_wait, request_id)
+
+
+@dat_table_app.command("replace")
+def dat_table_replace(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    rows: Annotated[str | None, typer.Argument()] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    if (operator_path is None) != (rows is None):
+        _fail(ctx, ClientError("invalid_arguments"))
+    decoded_rows = _json_rows(ctx, rows)
+    dedicated = (
+        {"operator_path": operator_path, "rows": decoded_rows}
+        if operator_path is not None
+        else None
+    )
+    _command(ctx, "dat.table.replace", dedicated, input, input_file, no_wait, request_id)
+
+
+@dat_table_app.command("patch")
+def dat_table_patch(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    rows: Annotated[str | None, typer.Argument()] = None,
+    row_offset: Annotated[int | None, typer.Option("--row-offset")] = None,
+    column_offset: Annotated[int | None, typer.Option("--column-offset")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    if (
+        (operator_path is None) != (rows is None)
+        or (row_offset is not None or column_offset is not None)
+        and operator_path is None
+    ):
+        _fail(ctx, ClientError("invalid_arguments"))
+    decoded_rows = _json_rows(ctx, rows)
+    dedicated = (
+        {
+            "operator_path": operator_path,
+            "row_offset": row_offset if row_offset is not None else 0,
+            "column_offset": column_offset if column_offset is not None else 0,
+            "rows": decoded_rows,
+        }
+        if operator_path is not None
+        else None
+    )
+    _command(ctx, "dat.table.patch", dedicated, input, input_file, no_wait, request_id)
 
 
 @ops_app.command("children")
