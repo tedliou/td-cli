@@ -326,9 +326,91 @@ def test_phase_3_commands_reach_public_submission_seam(monkeypatch, argv, expect
             ["--json", "parameters", "list", "/project1/a"],
             {"name": "parameters.list", "input": {"operator_path": "/project1/a"}},
         ),
+        (
+            ["--json", "ops", "connections", "/project1/a", "--max-connections", "12"],
+            {
+                "name": "ops.connections",
+                "input": {"operator_path": "/project1/a", "max_connections": 12},
+            },
+        ),
+        (
+            [
+                "--json",
+                "ops",
+                "destroy",
+                "/project1/old",
+                "--recursive",
+                "--allow-connected",
+                "--max-operators",
+                "20",
+            ],
+            {
+                "name": "ops.destroy",
+                "input": {
+                    "operator_path": "/project1/old",
+                    "recursive": True,
+                    "allow_connected": True,
+                    "max_operators": 20,
+                },
+            },
+        ),
+        (
+            [
+                "--json",
+                "ops",
+                "move",
+                "/project1/source",
+                "/project1/group",
+                "moved",
+                "--allow-connected",
+                "--max-operators",
+                "30",
+            ],
+            {
+                "name": "ops.move",
+                "input": {
+                    "source_path": "/project1/source",
+                    "target_parent_path": "/project1/group",
+                    "new_name": "moved",
+                    "node_x": None,
+                    "node_y": None,
+                    "allow_connected": True,
+                    "max_operators": 30,
+                },
+            },
+        ),
+        (
+            [
+                "--json",
+                "ops",
+                "copy",
+                "/project1/source",
+                "/project1/group",
+                "copy",
+                "--node-x",
+                "-20",
+                "--node-y",
+                "40",
+                "--include-docked",
+                "--max-operators",
+                "20",
+            ],
+            {
+                "name": "ops.copy",
+                "input": {
+                    "source_path": "/project1/source",
+                    "target_parent_path": "/project1/group",
+                    "new_name": "copy",
+                    "node_x": -20,
+                    "node_y": 40,
+                    "include_docked": True,
+                    "max_operators": 20,
+                },
+            },
+        ),
     ],
 )
-def test_v011_dedicated_cli_commands_reach_submission_seam(monkeypatch, argv, expected) -> None:
+def test_dedicated_cli_commands_reach_submission_seam(monkeypatch, argv, expected) -> None:
     monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
     result = CliRunner().invoke(cli.app, argv)
     assert result.exit_code == 0, result.output
@@ -344,6 +426,40 @@ def test_v011_dedicated_cli_commands_reach_submission_seam(monkeypatch, argv, ex
     ],
 )
 def test_v011_cli_rejects_incomplete_dedicated_modes(monkeypatch, argv) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+    result = CliRunner().invoke(cli.app, argv)
+    assert result.exit_code == 2
+    assert json.loads(result.stdout)["error"]["code"] == "invalid_arguments"
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--json", "ops", "connections", "/project1/a", "--max-connections", "0"],
+        ["--json", "ops", "destroy", "/project1/a", "--max-operators", "0"],
+        [
+            "--json",
+            "ops",
+            "copy",
+            "/project1/a",
+            "/project1",
+            "copy",
+            "--max-operators",
+            "0",
+        ],
+        [
+            "--json",
+            "ops",
+            "move",
+            "/project1/a",
+            "/project1",
+            "moved",
+            "--max-operators",
+            "0",
+        ],
+    ],
+)
+def test_structural_commands_reject_zero_bounds(monkeypatch, argv) -> None:
     monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
     result = CliRunner().invoke(cli.app, argv)
     assert result.exit_code == 2

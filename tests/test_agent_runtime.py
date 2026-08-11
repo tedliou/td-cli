@@ -53,6 +53,7 @@ def isolated_touchdesigner_runtime():
 class FakeOwner:
     def __init__(self) -> None:
         self.values: dict[str, object] = {}
+        self.path = "/project1/td_agent"
 
     def fetch(self, key: str, default: object = None) -> object:
         return self.values.get(key, default)
@@ -95,6 +96,7 @@ class FakeConnector:
         self.isInput = is_input
         self.isOutput = not is_input
         self.connections = []
+        self.description = f"connector {index}"
 
     def connect(self, target) -> None:
         if self.isInput:
@@ -117,6 +119,7 @@ class FakeOperator:
         self.OPType = op_type
         self.family = family
         self.children = []
+        self.docked = []
         self.par = SimpleNamespace()
         self.nodeX = 0
         self.nodeY = 0
@@ -126,6 +129,7 @@ class FakeOperator:
         self.outputConnectors = [
             FakeConnector(self, index, is_input=False) for index in range(outputs)
         ]
+        self.destroyed = False
 
     def create(self, op_type: str, name: str):
         created = FakeOperator(f"{self.path}/{name}", op_type=op_type, family="TOP", outputs=1)
@@ -141,6 +145,11 @@ class FakeOperator:
         assert recurse is True
         return ["sample error"]
 
+    def destroy(self) -> None:
+        self.destroyed = True
+        for child in self.children:
+            child.destroy()
+
 
 def test_operator_control_is_the_touchdesigner_graph_interface() -> None:
     root = FakeOperator("/project1")
@@ -154,6 +163,493 @@ def test_operator_control_is_the_touchdesigner_graph_interface() -> None:
     }
     with pytest.raises(module.AgentCommandError, match="operator_not_found"):
         control.execute({"name": "ops.get", "input": {"operator_path": "/missing"}})
+
+
+def test_connections_inventory_reports_every_regular_connector_and_exact_endpoint() -> None:
+    source = FakeOperator("/project1/source", family="TOP", outputs=2)
+    target = FakeOperator("/project1/target", family="TOP", inputs=2)
+    source.outputConnectors[1].connect(target.inputConnectors[0])
+    operators = {item.path: item for item in (source, target)}
+
+    result = make_control(operators.get).execute(
+        {
+            "name": "ops.connections",
+            "input": {"operator_path": source.path, "max_connections": 8},
+        }
+    )
+
+    assert result == {
+        "operator_path": "/project1/source",
+        "inputs": [],
+        "outputs": [
+            {"output_index": 0, "description": "connector 0", "connections": []},
+            {
+                "output_index": 1,
+                "description": "connector 1",
+                "connections": [{"target_path": "/project1/target", "input_index": 0}],
+            },
+        ],
+        "connection_count": 1,
+    }
+
+    target_result = make_control(operators.get).execute(
+        {
+            "name": "ops.connections",
+            "input": {"operator_path": target.path, "max_connections": 8},
+        }
+    )
+    assert target_result["inputs"] == [
+        {
+            "input_index": 0,
+            "description": "connector 0",
+            "connection": {"source_path": "/project1/source", "output_index": 1},
+        },
+        {"input_index": 1, "description": "connector 1", "connection": None},
+    ]
+
+
+def test_connections_inventory_rejects_an_overflow_instead_of_truncating() -> None:
+    source = FakeOperator("/project1/source", family="TOP", outputs=1)
+    targets = [FakeOperator(f"/project1/target{i}", family="TOP", inputs=1) for i in range(2)]
+    for target in targets:
+        source.outputConnectors[0].connect(target.inputConnectors[0])
+
+    with pytest.raises(module.AgentCommandError, match="result_too_large"):
+        make_control({source.path: source}.get).execute(
+            {
+                "name": "ops.connections",
+                "input": {"operator_path": source.path, "max_connections": 1},
+            }
+        )
+
+
+def test_destroy_requires_explicit_subtree_and_connection_authorization() -> None:
+    root = FakeOperator("/project1/group")
+    child = FakeOperator("/project1/group/child", family="TOP", outputs=1)
+    target = FakeOperator("/project1/group/target", family="TOP", inputs=1)
+    child.outputConnectors[0].connect(target.inputConnectors[0])
+    root.children = [child, target]
+    operators = {item.path: item for item in (root, child, target)}
+    lookup = lambda path: (
+        operators.get(path)
+        if operators.get(path) is not None and not operators[path].destroyed
+        else None
+    )
+    control = OperatorControl(lookup, RUNTIME_OPERATOR_CATALOG, protected_path="/project1/td_agent")
+
+    with pytest.raises(module.AgentCommandError, match="operator_not_empty"):
+        control.execute(
+            {
+                "name": "ops.destroy",
+                "input": {
+                    "operator_path": root.path,
+                    "recursive": False,
+                    "allow_connected": False,
+                    "max_operators": 10,
+                },
+            }
+        )
+    with pytest.raises(module.AgentCommandError, match="operator_connected"):
+        control.execute(
+            {
+                "name": "ops.destroy",
+                "input": {
+                    "operator_path": root.path,
+                    "recursive": True,
+                    "allow_connected": False,
+                    "max_operators": 10,
+                },
+            }
+        )
+
+    assert control.execute(
+        {
+            "name": "ops.destroy",
+            "input": {
+                "operator_path": root.path,
+                "recursive": True,
+                "allow_connected": True,
+                "max_operators": 10,
+            },
+        }
+    ) == {
+        "operator_path": "/project1/group",
+        "operator_count": 3,
+        "detached_connections": [
+            {
+                "source_path": "/project1/group/child",
+                "output_index": 0,
+                "target_path": "/project1/group/target",
+                "input_index": 0,
+            }
+        ],
+        "destroyed": True,
+    }
+
+
+@pytest.mark.parametrize("path", ["/", "/project1", "/project1/td_agent"])
+def test_destroy_protects_root_agent_component_and_its_ancestors(path: str) -> None:
+    operator = FakeOperator(path)
+    control = OperatorControl(
+        lambda candidate: operator if candidate == path else None,
+        RUNTIME_OPERATOR_CATALOG,
+        protected_path="/project1/td_agent",
+    )
+
+    with pytest.raises(module.AgentCommandError, match="operator_mutation_forbidden"):
+        control.execute(
+            {
+                "name": "ops.destroy",
+                "input": {
+                    "operator_path": path,
+                    "recursive": True,
+                    "allow_connected": True,
+                    "max_operators": 10,
+                },
+            }
+        )
+
+
+def test_copy_uses_an_exact_name_and_reports_unreplicated_boundary_connections() -> None:
+    source = FakeOperator("/project1/source", op_type="constant", family="TOP", outputs=1)
+    downstream = FakeOperator("/project1/downstream", family="TOP", inputs=1)
+    target_parent = FakeOperator("/project1/group")
+    source.outputConnectors[0].connect(downstream.inputConnectors[0])
+    operators = {item.path: item for item in (source, downstream, target_parent)}
+
+    def copy(source_operator, *, name, includeDocked):
+        assert includeDocked is False
+        created = FakeOperator(
+            f"{target_parent.path}/{name}",
+            op_type=source_operator.OPType,
+            family=source_operator.family,
+            outputs=len(source_operator.outputConnectors),
+        )
+        operators[created.path] = created
+        target_parent.children.append(created)
+        return created
+
+    target_parent.copy = copy
+    lookup = lambda path: (
+        operators.get(path)
+        if operators.get(path) is not None and not operators[path].destroyed
+        else None
+    )
+    control = OperatorControl(lookup, RUNTIME_OPERATOR_CATALOG, protected_path="/project1/td_agent")
+
+    assert control.execute(
+        {
+            "name": "ops.copy",
+            "input": {
+                "source_path": source.path,
+                "target_parent_path": target_parent.path,
+                "new_name": "copy",
+                "node_x": 10,
+                "node_y": 20,
+                "include_docked": False,
+                "max_operators": 10,
+            },
+        }
+    ) == {
+        "source_path": "/project1/source",
+        "path": "/project1/group/copy",
+        "name": "copy",
+        "op_type": "constant",
+        "family": "TOP",
+        "operator_count": 1,
+        "include_docked": False,
+        "unreplicated_connections": [
+            {
+                "source_path": "/project1/source",
+                "output_index": 0,
+                "target_path": "/project1/downstream",
+                "input_index": 0,
+            }
+        ],
+    }
+    assert operators["/project1/group/copy"].nodeX == 10
+    assert operators["/project1/group/copy"].nodeY == 20
+
+
+def test_copy_rolls_back_a_child_created_before_touchdesigner_raises() -> None:
+    source = FakeOperator("/project1/source", family="TOP")
+    target_parent = FakeOperator("/project1/group")
+    operators = {item.path: item for item in (source, target_parent)}
+
+    def copy(*_, **__):
+        partial = FakeOperator("/project1/group/copy", family="TOP")
+        operators[partial.path] = partial
+        target_parent.children.append(partial)
+        raise RuntimeError("TouchDesigner raised after creating the copy")
+
+    target_parent.copy = copy
+    lookup = lambda path: (
+        operators.get(path)
+        if operators.get(path) is not None and not operators[path].destroyed
+        else None
+    )
+
+    with pytest.raises(module.AgentCommandError, match="operator_copy_failed"):
+        OperatorControl(
+            lookup, RUNTIME_OPERATOR_CATALOG, protected_path="/project1/td_agent"
+        ).execute(
+            {
+                "name": "ops.copy",
+                "input": {
+                    "source_path": source.path,
+                    "target_parent_path": target_parent.path,
+                    "new_name": "copy",
+                    "node_x": None,
+                    "node_y": None,
+                    "include_docked": False,
+                    "max_operators": 10,
+                },
+            }
+        )
+
+    assert lookup("/project1/group/copy") is None
+
+
+def test_copy_rejects_unverified_placement_and_rolls_back() -> None:
+    source = FakeOperator("/project1/source", family="TOP")
+    target_parent = FakeOperator("/project1/group")
+    operators = {item.path: item for item in (source, target_parent)}
+
+    class PlacementIgnoringOperator(FakeOperator):
+        @property
+        def nodeX(self):
+            return 0
+
+        @nodeX.setter
+        def nodeX(self, value):
+            del value
+
+    def copy(source_operator, *, name, includeDocked):
+        del includeDocked
+        created = PlacementIgnoringOperator(
+            f"{target_parent.path}/{name}",
+            op_type=source_operator.OPType,
+            family=source_operator.family,
+        )
+        operators[created.path] = created
+        target_parent.children.append(created)
+        return created
+
+    target_parent.copy = copy
+    lookup = lambda path: (
+        operators.get(path)
+        if operators.get(path) is not None and not operators[path].destroyed
+        else None
+    )
+
+    with pytest.raises(module.AgentCommandError, match="operator_copy_failed"):
+        OperatorControl(
+            lookup, RUNTIME_OPERATOR_CATALOG, protected_path="/project1/td_agent"
+        ).execute(
+            {
+                "name": "ops.copy",
+                "input": {
+                    "source_path": source.path,
+                    "target_parent_path": target_parent.path,
+                    "new_name": "copy",
+                    "node_x": 10,
+                    "node_y": None,
+                    "include_docked": False,
+                    "max_operators": 10,
+                },
+            }
+        )
+
+    assert lookup("/project1/group/copy") is None
+
+
+def test_copy_requires_explicit_authorization_for_externally_docked_operators() -> None:
+    source = FakeOperator("/project1/source", family="TOP")
+    source.docked = [FakeOperator("/project1/source_callbacks", family="DAT")]
+    target_parent = FakeOperator("/project1/group")
+    operators = {item.path: item for item in (source, target_parent)}
+
+    def copy(source_operator, *, name, includeDocked):
+        assert includeDocked is True
+        created = FakeOperator(
+            f"{target_parent.path}/{name}",
+            op_type=source_operator.OPType,
+            family=source_operator.family,
+        )
+        operators[created.path] = created
+        target_parent.children.append(created)
+        return created
+
+    target_parent.copy = copy
+    control = OperatorControl(
+        operators.get, RUNTIME_OPERATOR_CATALOG, protected_path="/project1/td_agent"
+    )
+    payload = {
+        "source_path": source.path,
+        "target_parent_path": target_parent.path,
+        "new_name": "copy",
+        "node_x": None,
+        "node_y": None,
+        "include_docked": False,
+        "max_operators": 10,
+    }
+
+    with pytest.raises(module.AgentCommandError, match="operator_docked"):
+        control.execute({"name": "ops.copy", "input": payload})
+
+    payload["include_docked"] = True
+    assert control.execute({"name": "ops.copy", "input": payload})["path"] == (
+        "/project1/group/copy"
+    )
+
+
+def test_move_copies_then_destroys_and_reports_detached_boundary_connections() -> None:
+    source = FakeOperator("/project1/source", op_type="constant", family="TOP", outputs=1)
+    downstream = FakeOperator("/project1/downstream", family="TOP", inputs=1)
+    target_parent = FakeOperator("/project1/group")
+    source.outputConnectors[0].connect(downstream.inputConnectors[0])
+    operators = {item.path: item for item in (source, downstream, target_parent)}
+
+    def copy(source_operator, *, name, includeDocked):
+        assert includeDocked is False
+        created = FakeOperator(
+            f"{target_parent.path}/{name}",
+            op_type=source_operator.OPType,
+            family=source_operator.family,
+            outputs=len(source_operator.outputConnectors),
+        )
+        operators[created.path] = created
+        target_parent.children.append(created)
+        return created
+
+    target_parent.copy = copy
+    lookup = lambda path: (
+        operators.get(path)
+        if operators.get(path) is not None and not operators[path].destroyed
+        else None
+    )
+    control = OperatorControl(lookup, RUNTIME_OPERATOR_CATALOG, protected_path="/project1/td_agent")
+    payload = {
+        "source_path": source.path,
+        "target_parent_path": target_parent.path,
+        "new_name": "moved",
+        "node_x": None,
+        "node_y": None,
+        "allow_connected": False,
+        "max_operators": 10,
+    }
+
+    with pytest.raises(module.AgentCommandError, match="operator_connected"):
+        control.execute({"name": "ops.move", "input": payload})
+
+    result = control.execute({"name": "ops.move", "input": {**payload, "allow_connected": True}})
+    assert result == {
+        "old_path": "/project1/source",
+        "path": "/project1/group/moved",
+        "name": "moved",
+        "op_type": "constant",
+        "family": "TOP",
+        "operator_count": 1,
+        "detached_connections": [
+            {
+                "source_path": "/project1/source",
+                "output_index": 0,
+                "target_path": "/project1/downstream",
+                "input_index": 0,
+            }
+        ],
+        "identity_preserved": False,
+        "moved": True,
+    }
+    assert lookup("/project1/source") is None
+    assert lookup("/project1/group/moved") is not None
+
+
+def test_copy_rolls_back_an_inexact_touchdesigner_result() -> None:
+    source = FakeOperator("/project1/source", family="TOP")
+    target_parent = FakeOperator("/project1/group")
+    operators = {item.path: item for item in (source, target_parent)}
+
+    def copy(source_operator, *, name, includeDocked):
+        created = FakeOperator(
+            f"{target_parent.path}/{name}1",
+            op_type=source_operator.OPType,
+            family=source_operator.family,
+        )
+        operators[created.path] = created
+        target_parent.children.append(created)
+        return created
+
+    target_parent.copy = copy
+    lookup = lambda path: (
+        operators.get(path)
+        if operators.get(path) is not None and not operators[path].destroyed
+        else None
+    )
+    control = OperatorControl(lookup, RUNTIME_OPERATOR_CATALOG)
+
+    with pytest.raises(module.AgentCommandError, match="operator_copy_failed"):
+        control.execute(
+            {
+                "name": "ops.copy",
+                "input": {
+                    "source_path": source.path,
+                    "target_parent_path": target_parent.path,
+                    "new_name": "copy",
+                    "node_x": None,
+                    "node_y": None,
+                    "include_docked": False,
+                    "max_operators": 10,
+                },
+            }
+        )
+    assert lookup("/project1/group/copy1") is None
+
+
+def test_move_rolls_back_the_copy_when_source_deletion_fails() -> None:
+    source = FakeOperator("/project1/source", family="TOP")
+    target_parent = FakeOperator("/project1/group")
+    operators = {item.path: item for item in (source, target_parent)}
+
+    def copy(source_operator, *, name, includeDocked):
+        created = FakeOperator(
+            f"{target_parent.path}/{name}",
+            op_type=source_operator.OPType,
+            family=source_operator.family,
+        )
+        operators[created.path] = created
+        target_parent.children.append(created)
+        return created
+
+    def fail_destroy():
+        raise RuntimeError("destroy failed")
+
+    target_parent.copy = copy
+    source.destroy = fail_destroy
+    lookup = lambda path: (
+        operators.get(path)
+        if operators.get(path) is not None and not operators[path].destroyed
+        else None
+    )
+    control = OperatorControl(lookup, RUNTIME_OPERATOR_CATALOG)
+
+    with pytest.raises(module.AgentCommandError, match="operator_move_failed"):
+        control.execute(
+            {
+                "name": "ops.move",
+                "input": {
+                    "source_path": source.path,
+                    "target_parent_path": target_parent.path,
+                    "new_name": "moved",
+                    "node_x": None,
+                    "node_y": None,
+                    "allow_connected": False,
+                    "max_operators": 10,
+                },
+            }
+        )
+    assert lookup("/project1/source") is source
+    assert lookup("/project1/group/moved") is None
 
 
 def test_extension_reload_preserves_instance_identity_and_unconfirmed_results() -> None:

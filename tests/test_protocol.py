@@ -316,6 +316,127 @@ def test_v011_commands_validate_at_the_protocol_seam(payload, expected_input) ->
     assert command.input.model_dump() == expected_input
 
 
+def test_connections_command_has_a_bounded_read_only_contract() -> None:
+    command = Command.model_validate(
+        {
+            "name": "ops.connections",
+            "input": {"operator_path": "/project1/source", "max_connections": 12},
+        }
+    )
+
+    assert command.input.model_dump() == {
+        "operator_path": "/project1/source",
+        "max_connections": 12,
+    }
+    assert "ops.connections" in COMMAND_CATALOG.batch_names
+
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {
+                "name": "ops.connections",
+                "input": {"operator_path": "/project1/source", "max_connections": 1001},
+            }
+        )
+
+
+def test_destroy_command_requires_explicit_bounded_destructive_options() -> None:
+    command = Command.model_validate(
+        {
+            "name": "ops.destroy",
+            "input": {
+                "operator_path": "/project1/old",
+                "recursive": True,
+                "allow_connected": True,
+                "max_operators": 20,
+            },
+        }
+    )
+
+    assert command.input.model_dump() == {
+        "operator_path": "/project1/old",
+        "recursive": True,
+        "allow_connected": True,
+        "max_operators": 20,
+    }
+    assert "ops.destroy" not in COMMAND_CATALOG.batch_names
+
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {
+                "name": "ops.destroy",
+                "input": {"operator_path": "/project1/old", "max_operators": 1001},
+            }
+        )
+
+
+def test_copy_command_has_exact_destination_and_bounded_subtree_contract() -> None:
+    command = Command.model_validate(
+        {
+            "name": "ops.copy",
+            "input": {
+                "source_path": "/project1/source",
+                "target_parent_path": "/project1/group",
+                "new_name": "copy",
+                "node_x": -20,
+                "node_y": 40,
+                "include_docked": True,
+                "max_operators": 20,
+            },
+        }
+    )
+
+    assert command.input.model_dump() == {
+        "source_path": "/project1/source",
+        "target_parent_path": "/project1/group",
+        "new_name": "copy",
+        "node_x": -20,
+        "node_y": 40,
+        "include_docked": True,
+        "max_operators": 20,
+    }
+    assert "ops.copy" not in COMMAND_CATALOG.batch_names
+
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {
+                "name": "ops.copy",
+                "input": {
+                    "source_path": "/project1/source",
+                    "target_parent_path": "/project1/group",
+                    "new_name": "bad/name",
+                },
+            }
+        )
+
+
+def test_move_command_exposes_copy_destroy_and_detachment_authorization() -> None:
+    command = Command.model_validate(
+        {
+            "name": "ops.move",
+            "input": {
+                "source_path": "/project1/source",
+                "target_parent_path": "/project1/group",
+                "new_name": "moved",
+                "node_x": 10,
+                "node_y": 20,
+                "allow_connected": True,
+                "max_operators": 30,
+            },
+        }
+    )
+
+    assert command.input.model_dump() == {
+        "source_path": "/project1/source",
+        "target_parent_path": "/project1/group",
+        "new_name": "moved",
+        "node_x": 10,
+        "node_y": 20,
+        "allow_connected": True,
+        "max_operators": 30,
+    }
+    assert "ops.move" not in COMMAND_CATALOG.batch_names
+
+
 @pytest.mark.parametrize("name", ["ops.rename", "ops.disconnect", "ops.connect"])
 def test_v011_mutations_are_not_batchable(name: str) -> None:
     with pytest.raises(ValidationError):

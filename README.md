@@ -112,6 +112,34 @@ td --json --instance <selector> ops children /project1 --op-type constantTOP
 td --json --instance <selector> parameters get /project1/source colorr
 ```
 
+Inspect every regular input and output connector before changing a graph. The
+inventory is bounded and fails rather than returning a truncated topology:
+
+```powershell
+td --json --instance <selector> ops connections /project1/source --max-connections 256
+```
+
+Structural mutations use exact paths and names. They reject the root, the
+Agent Component and its ancestors, automatic TouchDesigner names, collisions,
+and oversized subtrees. Destruction requires explicit opt-in for non-empty or
+connected Operators. Copy reports boundary wires that are not replicated.
+Move is a verified copy-then-destroy operation, changes Operator identity, and
+requires explicit opt-in before detaching boundary wires:
+
+```powershell
+td --json --instance <selector> ops copy /project1/source /project1/group copied
+td --json --instance <selector> ops move /project1/source /project1/group moved --allow-connected
+td --json --instance <selector> ops destroy /project1/group/moved --recursive --allow-connected
+```
+
+All three mutations default to a maximum affected subtree of 256 Operators
+(`--max-operators`, maximum 1000). `ops copy --include-docked` is required to
+copy externally docked Operators. Copy and move verify the exact result and
+remove the created copy on failure; a distinct rollback or uncertain-outcome
+error is returned when the requested final state cannot be proven. Neither
+operation promises to rewrite DAT string literals, external systems, or every
+path-bearing expression/reference.
+
 The locked TouchDesigner 2025.32050 catalog covers 680 built-in types across all
 seven Operator families: 478 are supported by default, 165 side-effect or
 environment-dependent types require `ops create --allow-conditional`, 37 are

@@ -44,9 +44,13 @@ class OperatorControl:
     HANDLERS: ClassVar[dict] = {
         "ops.children": "_children",
         "ops.connect": "_connect_operators",
+        "ops.connections": "_connections",
+        "ops.copy": "_copy_operator",
         "ops.create": "_create_operator",
         "ops.disconnect": "_disconnect_operators",
+        "ops.destroy": "_destroy_requested_operator",
         "ops.get": "_get_operator",
+        "ops.move": "_move_operator",
         "ops.rename": "_rename_operator",
         "parameters.get": "_get_parameter",
         "parameters.list": "_list_parameters",
@@ -54,9 +58,10 @@ class OperatorControl:
         "parameters.set": "_set_parameter",
     }
 
-    def __init__(self, operator_lookup, operator_catalog):
+    def __init__(self, operator_lookup, operator_catalog, protected_path=None):
         self.operator_lookup = operator_lookup
         self.operator_catalog = operator_catalog
+        self.protected_path = str(protected_path) if protected_path is not None else None
 
     def execute(self, command):
         name = command["name"]
@@ -82,6 +87,51 @@ class OperatorControl:
         if op_type is not None:
             children = [child for child in children if child["op_type"] == op_type]
         return sorted(children, key=lambda child: child["path"])
+
+    def _connections(self, payload):
+        operator = self._operator(payload)
+        maximum = payload["max_connections"]
+        count = len(self._subtree_connections([operator]))
+        if count > maximum:
+            raise AgentCommandError("result_too_large")
+        inputs = []
+        for connector in operator.inputConnectors:
+            connection = connector.connections[0] if connector.connections else None
+            inputs.append(
+                {
+                    "input_index": int(connector.index),
+                    "description": str(getattr(connector, "description", "") or ""),
+                    "connection": (
+                        {
+                            "source_path": str(connection.owner.path),
+                            "output_index": int(connection.index),
+                        }
+                        if connection is not None
+                        else None
+                    ),
+                }
+            )
+        outputs = []
+        for connector in operator.outputConnectors:
+            outputs.append(
+                {
+                    "output_index": int(connector.index),
+                    "description": str(getattr(connector, "description", "") or ""),
+                    "connections": [
+                        {
+                            "target_path": str(connection.owner.path),
+                            "input_index": int(connection.index),
+                        }
+                        for connection in connector.connections
+                    ],
+                }
+            )
+        return {
+            "operator_path": str(operator.path),
+            "inputs": inputs,
+            "outputs": outputs,
+            "connection_count": count,
+        }
 
     def _rename_operator(self, payload):
         operator = self._operator(payload)
@@ -119,6 +169,228 @@ class OperatorControl:
             "name": new_name,
             "renamed": True,
         }
+
+    def _destroy_requested_operator(self, payload):
+        operator = self._operator(payload)
+        path = str(operator.path)
+        self._require_mutable_path(path)
+        subtree = self._bounded_subtree(operator, payload["max_operators"])
+        if len(subtree) > 1 and not payload["recursive"]:
+            raise AgentCommandError("operator_not_empty")
+        connections = self._subtree_connections(subtree)
+        if connections and not payload["allow_connected"]:
+            raise AgentCommandError("operator_connected")
+        try:
+            operator.destroy()
+        except Exception as error:
+            if self.operator_lookup(path) is None:
+                raise AgentCommandError("operator_destroy_outcome_unknown") from error
+            raise AgentCommandError("operator_destroy_failed") from error
+        if self.operator_lookup(path) is not None:
+            raise AgentCommandError("operator_destroy_failed")
+        return {
+            "operator_path": path,
+            "operator_count": len(subtree),
+            "detached_connections": connections,
+            "destroyed": True,
+        }
+
+    def _copy_operator(self, payload):
+        source = self.operator_lookup(payload["source_path"])
+        target_parent = self.operator_lookup(payload["target_parent_path"])
+        if source is None or target_parent is None:
+            raise AgentCommandError("operator_not_found")
+        self._require_mutable_path(str(source.path))
+        self._require_mutable_destination(str(target_parent.path))
+        if str(target_parent.family) != "COMP":
+            raise AgentCommandError("operator_parent_invalid")
+        expected_path = str(target_parent.path).rstrip("/") + "/" + payload["new_name"]
+        if self.operator_lookup(expected_path) is not None:
+            raise AgentCommandError("operator_already_exists")
+        source_subtree = self._bounded_subtree(source, payload["max_operators"])
+        if source.docked and not payload["include_docked"]:
+            raise AgentCommandError("operator_docked")
+        unreplicated = self._boundary_connections(source_subtree)
+        before = {str(child.path) for child in target_parent.children}
+        created = None
+        created_roots = []
+        try:
+            created = target_parent.copy(
+                source,
+                name=payload["new_name"],
+                includeDocked=payload["include_docked"],
+            )
+            created_roots = [
+                child for child in target_parent.children if str(child.path) not in before
+            ]
+            if (
+                str(created.path) != expected_path
+                or str(created.name) != payload["new_name"]
+                or str(created.OPType) != str(source.OPType)
+                or str(created.family) != str(source.family)
+            ):
+                raise AgentCommandError("operator_copy_failed")
+            affected = self._bounded_forest(created_roots, payload["max_operators"])
+            if created not in affected:
+                raise AgentCommandError("operator_copy_failed")
+            if payload.get("node_x") is not None:
+                created.nodeX = payload["node_x"]
+                if int(created.nodeX) != payload["node_x"]:
+                    raise AgentCommandError("operator_copy_failed")
+            if payload.get("node_y") is not None:
+                created.nodeY = payload["node_y"]
+                if int(created.nodeY) != payload["node_y"]:
+                    raise AgentCommandError("operator_copy_failed")
+        except Exception as error:
+            created_roots = [
+                child for child in target_parent.children if str(child.path) not in before
+            ]
+            if created is not None and created not in created_roots:
+                created_roots.append(created)
+            if not self._rollback_created(created_roots):
+                raise AgentCommandError("operator_copy_rollback_failed") from error
+            if isinstance(error, AgentCommandError):
+                raise
+            raise AgentCommandError("operator_copy_failed") from error
+        return {
+            "source_path": str(source.path),
+            **self._operator_result(created),
+            "operator_count": len(affected),
+            "include_docked": payload["include_docked"],
+            "unreplicated_connections": unreplicated,
+        }
+
+    def _move_operator(self, payload):
+        source = self.operator_lookup(payload["source_path"])
+        if source is None:
+            raise AgentCommandError("operator_not_found")
+        old_path = str(source.path)
+        target_parent_path = payload["target_parent_path"]
+        if target_parent_path.startswith(old_path.rstrip("/") + "/"):
+            raise AgentCommandError("operator_parent_invalid")
+        source_subtree = self._bounded_subtree(source, payload["max_operators"])
+        detached = self._boundary_connections(source_subtree)
+        if detached and not payload["allow_connected"]:
+            raise AgentCommandError("operator_connected")
+        copied = self._copy_operator(
+            {
+                "source_path": old_path,
+                "target_parent_path": target_parent_path,
+                "new_name": payload["new_name"],
+                "node_x": payload.get("node_x"),
+                "node_y": payload.get("node_y"),
+                "include_docked": False,
+                "max_operators": payload["max_operators"],
+            }
+        )
+        created = self.operator_lookup(copied["path"])
+        try:
+            source.destroy()
+        except Exception as error:
+            if self.operator_lookup(old_path) is not None:
+                if created is None or not self._rollback_created([created]):
+                    raise AgentCommandError("operator_move_rollback_failed") from error
+                raise AgentCommandError("operator_move_failed") from error
+        if self.operator_lookup(old_path) is not None:
+            if created is None or not self._rollback_created([created]):
+                raise AgentCommandError("operator_move_rollback_failed")
+            raise AgentCommandError("operator_move_failed")
+        if self.operator_lookup(copied["path"]) is None:
+            raise AgentCommandError("operator_move_outcome_unknown")
+        return {
+            "old_path": old_path,
+            "path": copied["path"],
+            "name": copied["name"],
+            "op_type": copied["op_type"],
+            "family": copied["family"],
+            "operator_count": copied["operator_count"],
+            "detached_connections": detached,
+            "identity_preserved": False,
+            "moved": True,
+        }
+
+    def _require_mutable_path(self, path):
+        if path == "/":
+            raise AgentCommandError("operator_mutation_forbidden")
+        protected = self.protected_path
+        if protected is not None and (protected == path or protected.startswith(path + "/")):
+            raise AgentCommandError("operator_mutation_forbidden")
+
+    def _require_mutable_destination(self, path):
+        protected = self.protected_path
+        if protected is not None and (path == protected or path.startswith(protected + "/")):
+            raise AgentCommandError("operator_mutation_forbidden")
+
+    @staticmethod
+    def _bounded_subtree(root, maximum):
+        rows = []
+        queue = [root]
+        while queue:
+            operator = queue.pop(0)
+            if len(rows) >= maximum:
+                raise AgentCommandError("result_too_large")
+            rows.append(operator)
+            queue.extend(list(getattr(operator, "children", [])))
+        return rows
+
+    @classmethod
+    def _bounded_forest(cls, roots, maximum):
+        rows = []
+        for root in roots:
+            remaining = maximum - len(rows)
+            if remaining <= 0:
+                raise AgentCommandError("result_too_large")
+            rows.extend(cls._bounded_subtree(root, remaining))
+        return rows
+
+    @staticmethod
+    def _subtree_connections(subtree):
+        edges = set()
+        for operator in subtree:
+            for connector in operator.inputConnectors:
+                for connection in connector.connections:
+                    edges.add(
+                        (
+                            str(connection.owner.path),
+                            int(connection.index),
+                            str(operator.path),
+                            int(connector.index),
+                        )
+                    )
+            for connector in operator.outputConnectors:
+                for connection in connector.connections:
+                    edges.add(
+                        (
+                            str(operator.path),
+                            int(connector.index),
+                            str(connection.owner.path),
+                            int(connection.index),
+                        )
+                    )
+        return [
+            {
+                "source_path": source_path,
+                "output_index": output_index,
+                "target_path": target_path,
+                "input_index": input_index,
+            }
+            for source_path, output_index, target_path, input_index in sorted(edges)
+        ]
+
+    @classmethod
+    def _boundary_connections(cls, subtree):
+        paths = {str(operator.path) for operator in subtree}
+        return [
+            edge
+            for edge in cls._subtree_connections(subtree)
+            if (edge["source_path"] in paths) != (edge["target_path"] in paths)
+        ]
+
+    def _rollback_created(self, roots):
+        paths = [str(root.path) for root in roots]
+        for root in reversed(roots):
+            self._destroy_operator(root)
+        return all(self.operator_lookup(path) is None for path in paths)
 
     def _parameter_for_payload(self, payload):
         operator = self._operator(payload)
@@ -506,7 +778,9 @@ class AgentExt:
             raise RuntimeError("Operator catalog DAT is invalid") from error
         if operator_catalog.touchdesigner_build != str(self.app_info.build):
             raise RuntimeError("Operator catalog TouchDesigner build does not match runtime")
-        self.operator_control = OperatorControl(self.operator_lookup, operator_catalog)
+        self.operator_control = OperatorControl(
+            self.operator_lookup, operator_catalog, protected_path=owner_comp.path
+        )
         runtime_session_id = builtins._td_cli_runtime_session_id
         state = getattr(builtins, "_td_cli_agent_state", None)
         if state is None or state["runtime_session_id"] != runtime_session_id:

@@ -123,9 +123,20 @@ def test_network_mutation_error_remains_typed(tmp_path: Path, monkeypatch) -> No
         "connector_replace_rollback_failed",
         "operator_type_unsupported",
         "operator_type_conditional",
+        "operator_mutation_forbidden",
+        "operator_not_empty",
+        "operator_connected",
+        "operator_destroy_failed",
+        "operator_destroy_outcome_unknown",
+        "operator_copy_failed",
+        "operator_copy_rollback_failed",
+        "operator_docked",
+        "operator_move_failed",
+        "operator_move_rollback_failed",
+        "operator_move_outcome_unknown",
     ],
 )
-def test_v011_execution_errors_remain_typed(tmp_path: Path, monkeypatch, code: str) -> None:
+def test_execution_errors_remain_typed(tmp_path: Path, monkeypatch, code: str) -> None:
     monkeypatch.setattr(
         httpx,
         "request",
