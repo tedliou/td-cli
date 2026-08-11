@@ -84,9 +84,9 @@ The Agent was rebuilt from the committed canonical source inside TouchDesigner
 checks.
 
 - Canonical Agent source revision:
-  `a53dff00c3bd51d93749d67e9347af0eadcbb38d21e46968be21afe10b460d83`
+  `bf7f7c8282375672a05954e1b8ada30eff077dcff80d106699635d09324a2615`
 - Local derived artifact SHA-256:
-  `992ec254b0a2acb828f83e6fe7048088c6fc70dede7243db60fc9c1fb5472abf`
+  `ccc410f31a1c80f81ac4790c083a28d23f180479e85dc4fee739bd37af29f1cf`
 - Online Instance Selector: `0e7e`
 - Advertised capabilities: all 28 public Commands
 - Required eight-Operator artifact topology: passed
@@ -95,14 +95,16 @@ Public live commands verified single OP and ordered Multi-OP constants, Int,
 Unicode Str, opaque Python inspection without a value, Pulse, Bind source
 identity, disabled rejection without mutation, and an exact two-block Sequence
 containing a Unicode name, empty name, constant value, and expression source.
-A clamped Sequence write failed with `parameter_sequence_write_failed`; the
-subsequent complete read proved both blocks, names, modes, and values had been
-restored. An Export request without an existing matching channel failed with
+A clamped scalar write failed with `parameter_write_rejected`; the subsequent
+complete read proved its prior mode, value, and source had been restored.
+Bounded Sequence inspection rejected two blocks when `max_blocks` was one, and
+the default bounded read returned the complete two-block representation. An
+Export request without an existing matching channel failed with
 `parameter_export_source_unavailable` and preserved the prior Bind state.
 
 ## Automated and packaged gates
 
-- `uv run pytest -q`: `313 passed` at the final source-first build point.
+- `uv run pytest -q`: `316 passed` at the final source-first build point.
 - `uv run ruff check .`: passed.
 - `uv run mypy src`: passed with 16 source files checked.
 - `git diff --check`: passed.
@@ -113,10 +115,10 @@ restored. An Export request without an existing matching channel failed with
 Local acceptance archive SHA-256 values (not immutable Release assets):
 
 - `td-v0.1.2-windows-x86_64.zip`:
-  `9b3ee365c3238936cbcea45ad28e39945375259dbfa0f2f46e2c5498c1a4bcc0`
+  `a2d36da41665d6341962da960cd975032d1ecd435e071c5f5a1732f1ad41e2fe`
 - `td-daemon-v0.1.2-windows-x86_64.zip`:
-  `88691b6ec4deecb09011bd516353064756cc8455a6b90e08de1ee8b77ac0f5e5`
+  `c87c3e8f66f507ef80a9d57e24b651da0eb589453b7e09a779d9a6ce526ec52d`
 - `td-agent-cli-v0.1.2-windows-x86_64.zip`:
-  `2c20be5dfce6f8c1cf3823c9de64074a2cd63957fcb8ec6cdaa1264b7d36458d`
+  `cda9475cb3ba76ec091454991adcba27ce800c0829a84900563a8c79732f4bb6`
 - `td-agent-component-v0.1.2-td2025.32050.zip`:
-  `56cbc486d35727d4e57b41cd2a898388dfbc00d91527d9a38ba699580537822f`
+  `b7941452dc0d20d64774ba2bf2607f74831fd9c574794d6e923fc18e67db2013`
