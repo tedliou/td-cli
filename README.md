@@ -143,10 +143,29 @@ inventory is bounded and fails rather than returning a truncated topology:
 td --json --instance <selector> ops connections /project1/source --max-connections 256
 ```
 
+COMP Hierarchy Connections are a separate top-to-bottom connector model for
+compatible Object COMPs or compatible Panel COMPs. Inventory is bounded and
+reports the runtime hierarchy kind, every input, every output, and every exact
+endpoint. Connect rejects cross-kind, non-COMP, cyclic, missing, or occupied
+endpoints before mutation. `--replace` snapshots the prior input and restores
+it if the requested replacement cannot be verified:
+
+```powershell
+td --json --instance <selector> ops hierarchy connections /project1/geo1 --max-connections 256
+td --json --instance <selector> ops hierarchy connect /project1/geo1 /project1/geo2
+td --json --instance <selector> ops hierarchy disconnect /project1/geo1 /project1/geo2
+```
+
+Hierarchy reads are batchable; hierarchy mutations are not. The root, Agent
+Component, its ancestors, and descendants are protected. Distinct occupied,
+incompatible-kind, cycle, mutation-failed, rollback-failed, and
+uncertain-outcome errors preserve honest state.
+
 Structural mutations use exact paths and names. They reject the root, the
 Agent Component and its ancestors, automatic TouchDesigner names, collisions,
 and oversized subtrees. Destruction requires explicit opt-in for non-empty or
-connected Operators. Copy reports boundary wires that are not replicated.
+connected Operators, including COMP Hierarchy Connections. Copy reports
+boundary wires that are not replicated and marks hierarchy edges explicitly.
 Move is a verified copy-then-destroy operation, changes Operator identity, and
 requires explicit opt-in before detaching boundary wires:
 

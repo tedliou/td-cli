@@ -67,6 +67,23 @@ def test_locked_socketio_omissions_are_restored_at_the_public_result_boundary() 
     )
     assert connections["inputs"][0]["connection"] is None
 
+    hierarchy = _normalize_command_result(
+        {"name": "ops.hierarchy.connections"},
+        {
+            "operator_path": "/project1/child",
+            "hierarchy_kind": "object",
+            "inputs": [{"input_index": 0, "description": "parent"}],
+            "outputs": [],
+            "connection_count": 0,
+        },
+    )
+    hierarchy_connect = _normalize_command_result(
+        {"name": "ops.hierarchy.connect"},
+        {"connected": True, "replaced": False},
+    )
+    assert hierarchy["inputs"][0]["connection"] is None
+    assert hierarchy_connect["previous_connection"] is None
+
     copied = _normalize_command_result(
         {"name": "ops.copy"},
         {"path": "/project1/copied", "include_docked": 0},

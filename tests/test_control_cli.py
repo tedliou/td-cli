@@ -438,6 +438,61 @@ def test_project_export_batch_and_events_cli_reach_submission_seam(
             },
         ),
         (
+            [
+                "--json",
+                "ops",
+                "hierarchy",
+                "connections",
+                "/project1/a",
+                "--max-connections",
+                "12",
+            ],
+            {
+                "name": "ops.hierarchy.connections",
+                "input": {"operator_path": "/project1/a", "max_connections": 12},
+            },
+        ),
+        (
+            [
+                "--json",
+                "ops",
+                "hierarchy",
+                "connect",
+                "/project1/parent",
+                "/project1/child",
+                "--replace",
+            ],
+            {
+                "name": "ops.hierarchy.connect",
+                "input": {
+                    "source_path": "/project1/parent",
+                    "target_path": "/project1/child",
+                    "output_index": 0,
+                    "input_index": 0,
+                    "replace": True,
+                },
+            },
+        ),
+        (
+            [
+                "--json",
+                "ops",
+                "hierarchy",
+                "disconnect",
+                "/project1/parent",
+                "/project1/child",
+            ],
+            {
+                "name": "ops.hierarchy.disconnect",
+                "input": {
+                    "source_path": "/project1/parent",
+                    "target_path": "/project1/child",
+                    "output_index": 0,
+                    "input_index": 0,
+                },
+            },
+        ),
+        (
             ["--json", "ops", "state", "get", "/project1/a"],
             {"name": "ops.state.get", "input": {"operator_path": "/project1/a"}},
         ),
