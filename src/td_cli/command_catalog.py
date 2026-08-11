@@ -297,7 +297,9 @@ class ParameterSourceInput(StrictModel):
 class SetParameterInput(ParameterInput):
     mode: Literal["constant", "expression", "export", "bind"]
     value: ParameterValue = None
-    source: ParameterSourceInput | None = Field(default=None, exclude_if=lambda value: value is None)
+    source: ParameterSourceInput | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def value_matches_protocol_limits(self) -> SetParameterInput:
@@ -326,13 +328,17 @@ class SetParameterInput(ParameterInput):
 
 class SequenceInput(OperatorInput):
     sequence: str = Field(min_length=1, max_length=256)
+    max_blocks: int = Field(default=MAX_SEQUENCE_BLOCKS, ge=1, le=MAX_SEQUENCE_BLOCKS)
+    max_parameters: int = Field(default=MAX_SEQUENCE_PARAMETERS, ge=1, le=MAX_SEQUENCE_PARAMETERS)
 
 
 class SequenceParameterWrite(StrictModel):
     parameter: str = Field(min_length=1, max_length=256)
     mode: Literal["constant", "expression", "export", "bind"]
     value: ParameterValue = None
-    source: ParameterSourceInput | None = Field(default=None, exclude_if=lambda value: value is None)
+    source: ParameterSourceInput | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def value_matches_protocol_limits(self) -> SequenceParameterWrite:
@@ -352,9 +358,7 @@ class SequenceParameterWrite(StrictModel):
 
 class SequenceBlockWrite(StrictModel):
     name: str | None = Field(default=None, max_length=256)
-    parameters: list[SequenceParameterWrite] = Field(
-        min_length=1, max_length=MAX_SEQUENCE_PARAMETERS
-    )
+    parameters: list[SequenceParameterWrite] = Field(max_length=MAX_SEQUENCE_PARAMETERS)
 
 
 class ReplaceSequenceInput(SequenceInput):

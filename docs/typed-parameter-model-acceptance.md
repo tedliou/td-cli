@@ -27,11 +27,29 @@ outcomes.
 
 ## TouchDesigner 2025.32050 inventory
 
-An isolated `/project1/tdcli_parameter_inventory` network confirmed the custom
-styles Float, Int, Toggle, Pulse, Str, Menu, StrMenu, OP, TOPMulti, Python, and
-Sequence. `TOPMulti.evalOPs()` preserved ordered Operator identities; assigning
-an OP object and an ordered list of TOPs succeeded. A Python Parameter accepted
-an opaque object, confirming that it must not cross the wire.
+Two isolated networks, `/project1/tdcli_parameter_inventory` and
+`/project1/tdcli_parameter_styles`, exercised every Parameter constructor in
+the locked `Page` TDI. All 34 applicable `append*` methods succeeded. Their 29
+distinct runtime styles were:
+
+`CHOP`, `COMP`, `DAT`, `File`, `FileSave`, `Float`, `Folder`, `Header`, `Int`,
+`MAT`, `Menu`, `Momentary`, `Object`, `OP`, `PanelCOMP`, `POP`, `Pulse`,
+`Python`, `RGBA`, `Sequence`, `SOP`, `Str`, `StrMenu`, `Toggle`, `TOP`,
+`TOPMulti`, `UVW`, `WH`, and `XYZW`.
+
+The grouped constructors normalize as documented by runtime style: `appendRGB`
+and `appendRGBA` both report `RGBA`; `appendUV` and `appendUVW` report `UVW`;
+`appendXY`, `appendXYZ`, and `appendXYZW` report `XYZW`; `appendOBJ` and
+`appendObject` report `Object`. The locked `parTypes.py` adds only `DATAdder` to
+this set. There is no `Page` constructor and a full locked TDI Operator-stub
+search found no `ParDATAdder` occurrence, so it remains an explicit `unknown`
+and non-writable style rather than an invented value model.
+
+`TOPMulti.evalOPs()` preserved ordered Operator identities; assigning an OP
+object and an ordered list of TOPs succeeded. A Python Parameter accepted an
+opaque object, confirming that it must not cross the wire. `Momentary` evaluated
+as boolean, all OP-family styles evaluated as exact Operator identities, and
+the numeric/vector constructors exposed individual numeric Pars.
 
 Assigning `bindExpr` immediately produced `ParMode.BIND`, retained the exact
 bind master, and evaluated through the master Parameter. Assigning

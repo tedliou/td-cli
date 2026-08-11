@@ -122,8 +122,15 @@ def test_parameters_set_bool_consumes_an_explicit_boolean_value(monkeypatch) -> 
     [
         (
             [
-                "--json", "parameters", "set", "/project1/target", "Gain",
-                "--bind-source-operator", "/project1/source", "--bind-parameter", "Gain",
+                "--json",
+                "parameters",
+                "set",
+                "/project1/target",
+                "Gain",
+                "--bind-source-operator",
+                "/project1/source",
+                "--bind-parameter",
+                "Gain",
             ],
             {
                 "name": "parameters.set",
@@ -145,12 +152,21 @@ def test_parameters_set_bool_consumes_an_explicit_boolean_value(monkeypatch) -> 
             ["--json", "parameters", "sequence-get", "/project1/target", "Items"],
             {
                 "name": "parameters.sequence.get",
-                "input": {"operator_path": "/project1/target", "sequence": "Items"},
+                "input": {
+                    "operator_path": "/project1/target",
+                    "sequence": "Items",
+                    "max_blocks": 128,
+                    "max_parameters": 256,
+                },
             },
         ),
         (
             [
-                "--json", "parameters", "sequence-replace", "/project1/target", "Items",
+                "--json",
+                "parameters",
+                "sequence-replace",
+                "/project1/target",
+                "Items",
                 "--blocks-json",
                 '[{"name":"first","parameters":[{"parameter":"value","mode":"constant","value":1.5}]}]',
             ],
@@ -159,6 +175,8 @@ def test_parameters_set_bool_consumes_an_explicit_boolean_value(monkeypatch) -> 
                 "input": {
                     "operator_path": "/project1/target",
                     "sequence": "Items",
+                    "max_blocks": 128,
+                    "max_parameters": 256,
                     "blocks": [
                         {
                             "name": "first",
@@ -172,9 +190,7 @@ def test_parameters_set_bool_consumes_an_explicit_boolean_value(monkeypatch) -> 
         ),
     ],
 )
-def test_typed_parameter_cli_commands_reach_submission_seam(
-    monkeypatch, argv, expected
-) -> None:
+def test_typed_parameter_cli_commands_reach_submission_seam(monkeypatch, argv, expected) -> None:
     monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
     result = CliRunner().invoke(cli.app, argv)
     assert result.exit_code == 0, result.output

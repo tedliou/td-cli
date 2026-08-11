@@ -10,6 +10,9 @@ import pytest
 from td_cli.command_catalog import (
     COMMAND_CATALOG,
     MAX_DAT_CONTENT_BYTES,
+    MAX_MULTI_OP_PATHS,
+    MAX_SEQUENCE_BLOCKS,
+    MAX_SEQUENCE_PARAMETERS,
     MAX_TABLE_CELL_BYTES,
     MAX_TABLE_CELLS,
     MAX_TABLE_COLUMNS,
@@ -50,6 +53,12 @@ def test_dat_bounds_match_between_canonical_and_agent_contracts() -> None:
     assert OperatorControl.MAX_TABLE_COLUMNS == MAX_TABLE_COLUMNS
     assert OperatorControl.MAX_TABLE_CELLS == MAX_TABLE_CELLS
     assert OperatorControl.MAX_TABLE_CELL_BYTES == MAX_TABLE_CELL_BYTES
+
+
+def test_parameter_bounds_match_between_canonical_and_agent_contracts() -> None:
+    assert OperatorControl.MAX_MULTI_OP_PATHS == MAX_MULTI_OP_PATHS
+    assert OperatorControl.MAX_SEQUENCE_BLOCKS == MAX_SEQUENCE_BLOCKS
+    assert OperatorControl.MAX_SEQUENCE_PARAMETERS == MAX_SEQUENCE_PARAMETERS
 
 
 @pytest.fixture(autouse=True)
@@ -2068,15 +2077,11 @@ def test_parameter_sequence_replace_reads_back_complete_ordered_blocks() -> None
                 "blocks": [
                     {
                         "name": "first",
-                        "parameters": [
-                            {"parameter": "value", "mode": "constant", "value": 10.0}
-                        ],
+                        "parameters": [{"parameter": "value", "mode": "constant", "value": 10.0}],
                     },
                     {
                         "name": "second",
-                        "parameters": [
-                            {"parameter": "value", "mode": "constant", "value": 20.0}
-                        ],
+                        "parameters": [{"parameter": "value", "mode": "constant", "value": 20.0}],
                     },
                 ],
             },
@@ -2084,6 +2089,95 @@ def test_parameter_sequence_replace_reads_back_complete_ordered_blocks() -> None
     )
     assert [block["name"] for block in result["blocks"]] == ["first", "second"]
     assert [block["parameters"][0]["value"] for block in result["blocks"]] == [10.0, 20.0]
+    with pytest.raises(module.AgentCommandError, match="parameter_sequence_too_large"):
+        control.execute(
+            {
+                "name": "parameters.sequence.get",
+                "input": {
+                    "operator_path": root.path,
+                    "sequence": "Items",
+                    "max_blocks": 1,
+                    "max_parameters": 256,
+                },
+            }
+        )
+
+    sequence.blocks[1].value_par.enable = False
+    before = [(block.name, block.value_par.val) for block in sequence.blocks]
+    with pytest.raises(module.AgentCommandError, match="parameter_disabled"):
+        control.execute(
+            {
+                "name": "parameters.sequence.replace",
+                "input": {
+                    "operator_path": root.path,
+                    "sequence": "Items",
+                    "blocks": [
+                        {
+                            "name": "mutated-first",
+                            "parameters": [
+                                {"parameter": "value", "mode": "constant", "value": 1.0}
+                            ],
+                        },
+                        {
+                            "name": "invalid-second",
+                            "parameters": [
+                                {"parameter": "value", "mode": "constant", "value": 2.0}
+                            ],
+                        },
+                    ],
+                },
+            }
+        )
+    assert [(block.name, block.value_par.val) for block in sequence.blocks] == before
+
+
+def test_parameter_reads_enforce_sequence_and_multi_operator_bounds() -> None:
+    root = FakeOperator("/project1")
+    targets = FakeParameter(None)
+    targets.style = "TOPMulti"
+    targets.isOP = True
+    targets.evalOPs = lambda: [FakeOperator(f"/project1/item{index}") for index in range(257)]
+    root.par.Targets = targets
+    control = make_control({root.path: root}.get)
+
+    with pytest.raises(module.AgentCommandError, match="parameter_value_too_large"):
+        control.execute(
+            {
+                "name": "parameters.get",
+                "input": {"operator_path": root.path, "parameter": "Targets"},
+            }
+        )
+
+
+def test_parameter_rollback_verifies_complete_public_value() -> None:
+    root = FakeOperator("/project1")
+
+    class ClampedParameter(FakeParameter):
+        @property
+        def val(self):
+            return self._value
+
+        @val.setter
+        def val(self, value):
+            self._value = min(float(value), 1.0)
+            self.mode = "constant"
+
+    parameter = ClampedParameter(0.25)
+    root.par.Gain = parameter
+    control = make_control({root.path: root}.get)
+    with pytest.raises(module.AgentCommandError, match="parameter_write_rejected"):
+        control.execute(
+            {
+                "name": "parameters.set",
+                "input": {
+                    "operator_path": root.path,
+                    "parameter": "Gain",
+                    "mode": "constant",
+                    "value": 2.0,
+                },
+            }
+        )
+    assert parameter.val == 0.25
 
 
 def test_bind_write_normalizes_socketio_omitted_nullable_source_fields() -> None:

@@ -204,6 +204,9 @@ class DaemonClient:
             "parameter_outcome_unknown",
             "parameter_sequence_not_found",
             "parameter_sequence_too_large",
+            "parameter_sequence_not_writable",
+            "parameter_sequence_shape_invalid",
+            "parameter_value_too_large",
             "parameter_sequence_write_failed",
             "parameter_sequence_rollback_failed",
             "parameter_sequence_outcome_unknown",
@@ -223,8 +226,15 @@ class DaemonClient:
                 result.get("mode") not in {"constant", "expression", "export", "bind"}
                 or result.get("value_type")
                 not in {
-                    "boolean", "integer", "number", "string", "operator", "multi_operator",
-                    "python", "sequence", "unknown",
+                    "boolean",
+                    "integer",
+                    "number",
+                    "string",
+                    "operator",
+                    "multi_operator",
+                    "python",
+                    "sequence",
+                    "unknown",
                 }
             )
         ):
@@ -268,8 +278,7 @@ class DaemonClient:
                 raise ClientError("protocol_incompatible")
         if (
             isinstance(command, dict)
-            and command.get("name")
-            in {"parameters.sequence.get", "parameters.sequence.replace"}
+            and command.get("name") in {"parameters.sequence.get", "parameters.sequence.replace"}
             and isinstance(result, dict)
             and not isinstance(result.get("blocks"), list)
         ):

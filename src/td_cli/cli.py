@@ -850,13 +850,9 @@ def parameters_set(
     operator_value: Annotated[str | None, typer.Option("--operator")] = None,
     operators_json: Annotated[str | None, typer.Option("--operators-json")] = None,
     expression: Annotated[str | None, typer.Option("--expression")] = None,
-    export_source_operator: Annotated[
-        str | None, typer.Option("--export-source-operator")
-    ] = None,
+    export_source_operator: Annotated[str | None, typer.Option("--export-source-operator")] = None,
     export_channel: Annotated[str | None, typer.Option("--export-channel")] = None,
-    bind_source_operator: Annotated[
-        str | None, typer.Option("--bind-source-operator")
-    ] = None,
+    bind_source_operator: Annotated[str | None, typer.Option("--bind-source-operator")] = None,
     bind_parameter: Annotated[str | None, typer.Option("--bind-parameter")] = None,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
@@ -948,6 +944,8 @@ def parameters_sequence_get(
     ctx: typer.Context,
     operator_path: Annotated[str | None, typer.Argument()] = None,
     sequence: Annotated[str | None, typer.Argument()] = None,
+    max_blocks: Annotated[int, typer.Option("--max-blocks", min=1, max=128)] = 128,
+    max_parameters: Annotated[int, typer.Option("--max-parameters", min=1, max=256)] = 256,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
@@ -956,7 +954,12 @@ def parameters_sequence_get(
     if (operator_path is None) != (sequence is None):
         _fail(ctx, ClientError("invalid_arguments"))
     dedicated = (
-        {"operator_path": operator_path, "sequence": sequence}
+        {
+            "operator_path": operator_path,
+            "sequence": sequence,
+            "max_blocks": max_blocks,
+            "max_parameters": max_parameters,
+        }
         if operator_path is not None and sequence is not None
         else None
     )

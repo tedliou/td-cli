@@ -174,9 +174,7 @@ def test_parameter_sources_and_sequences_are_strict_and_bounded() -> None:
                 "blocks": [
                     {
                         "name": "first",
-                        "parameters": [
-                            {"parameter": "Value", "mode": "constant", "value": 1.5}
-                        ],
+                        "parameters": [{"parameter": "Value", "mode": "constant", "value": 1.5}],
                     }
                 ],
             },

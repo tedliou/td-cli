@@ -816,7 +816,9 @@ class OperatorControl:
         read_only = bool(getattr(parameter, "readOnly", False))
         enabled = bool(getattr(parameter, "enable", True))
         hidden = bool(getattr(parameter, "hidden", False))
-        writable = not read_only and enabled and not hidden
+        page = getattr(parameter, "page", None)
+        internal = hasattr(parameter, "page") and page is None
+        writable = not read_only and enabled and not hidden and not internal
         constant_supported = writable and value_kind in {
             "boolean",
             "integer",
@@ -824,10 +826,10 @@ class OperatorControl:
             "string",
             "menu",
             "operator",
+            "multi_operator",
         }
         expression_supported = constant_supported
         pulse_supported = writable and value_kind == "pulse"
-        page = getattr(parameter, "page", None)
         menu = value_kind == "menu"
         expression_source = getattr(parameter, "expr", None)
         return {
@@ -846,9 +848,14 @@ class OperatorControl:
             "expression_supported": expression_supported,
             "pulse_supported": pulse_supported,
             "export_supported": writable and value_kind in {"boolean", "integer", "number"},
-            "bind_supported": writable and value_kind not in {"pulse", "python", "sequence", "unknown"},
+            "bind_supported": writable
+            and value_kind not in {"pulse", "python", "sequence", "unknown"},
             "unsupported_reason": cls._parameter_unsupported_reason(
-                value_kind, read_only=read_only, enabled=enabled, hidden=hidden
+                value_kind,
+                read_only=read_only,
+                enabled=enabled,
+                hidden=hidden,
+                internal=internal,
             ),
             "sequence": cls._parameter_sequence_identity(parameter),
             "source": cls._parameter_source(parameter, cls._parameter_mode(parameter)),
@@ -884,13 +891,15 @@ class OperatorControl:
         }
 
     @staticmethod
-    def _parameter_unsupported_reason(value_kind, *, read_only, enabled, hidden):
+    def _parameter_unsupported_reason(value_kind, *, read_only, enabled, hidden, internal):
         if hidden:
             return "obsolete"
         if read_only:
             return "read_only"
         if not enabled:
             return "disabled"
+        if internal:
+            return "internal"
         if value_kind in {"python", "sequence", "unknown"}:
             return "opaque_or_structural"
         return None
@@ -909,12 +918,19 @@ class OperatorControl:
     def _get_parameter_sequence(self, payload):
         operator = self._operator(payload)
         sequence = self._sequence(operator, payload["sequence"])
-        return self._sequence_result(operator, sequence)
+        return self._sequence_result(
+            operator,
+            sequence,
+            max_blocks=payload.get("max_blocks", self.MAX_SEQUENCE_BLOCKS),
+            max_parameters=payload.get("max_parameters", self.MAX_SEQUENCE_PARAMETERS),
+        )
 
     def _replace_parameter_sequence(self, payload):
         operator = self._operator(payload)
+        operator_path = str(operator.path)
         sequence = self._sequence(operator, payload["sequence"])
         before = self._sequence_result(operator, sequence)
+        self._preflight_sequence_replace(operator, sequence, payload["blocks"], before)
         try:
             self._apply_sequence_blocks(sequence, payload["blocks"])
             result = self._sequence_result(operator, sequence)
@@ -923,9 +939,12 @@ class OperatorControl:
             return result
         except Exception as error:
             try:
-                current = self._sequence(operator, payload["sequence"])
+                current_operator = self.operator_lookup(operator_path)
+                if current_operator is None:
+                    raise AgentCommandError("parameter_sequence_not_found")
+                current = self._sequence(current_operator, payload["sequence"])
                 self._apply_sequence_blocks(current, before["blocks"])
-                if self._sequence_result(operator, current)["blocks"] != before["blocks"]:
+                if self._sequence_result(current_operator, current)["blocks"] != before["blocks"]:
                     raise RuntimeError("sequence rollback mismatch")
             except AgentCommandError as rollback_error:
                 if rollback_error.code in {"operator_not_found", "parameter_sequence_not_found"}:
@@ -947,7 +966,11 @@ class OperatorControl:
         return sequence
 
     @classmethod
-    def _sequence_result(cls, operator, sequence):
+    def _sequence_result(cls, operator, sequence, max_blocks=None, max_parameters=None):
+        max_blocks = cls.MAX_SEQUENCE_BLOCKS if max_blocks is None else max_blocks
+        max_parameters = cls.MAX_SEQUENCE_PARAMETERS if max_parameters is None else max_parameters
+        if len(sequence.blocks) > max_blocks:
+            raise AgentCommandError("parameter_sequence_too_large")
         blocks = []
         for block in list(sequence.blocks):
             parameters = []
@@ -972,9 +995,13 @@ class OperatorControl:
                     if item["source"] is not None:
                         descriptor["source"] = item["source"]
                     parameters.append(descriptor)
+                    if len(parameters) > max_parameters:
+                        raise AgentCommandError("parameter_sequence_too_large")
             blocks.append(
                 {
-                    "name": str(block.name) if getattr(block, "namePar", None) is not None else None,
+                    "name": str(block.name)
+                    if getattr(block, "namePar", None) is not None
+                    else None,
                     "parameters": parameters,
                 }
             )
@@ -985,6 +1012,46 @@ class OperatorControl:
             "max_blocks": int(sequence.maxBlocks) if sequence.maxBlocks is not None else None,
             "blocks": blocks,
         }
+
+    def _preflight_sequence_replace(self, operator, sequence, blocks, before):
+        if len(blocks) > self.MAX_SEQUENCE_BLOCKS:
+            raise AgentCommandError("parameter_sequence_too_large")
+        if sequence.maxBlocks is not None and len(blocks) > int(sequence.maxBlocks):
+            raise AgentCommandError("parameter_sequence_too_large")
+        if blocks and not sequence.blocks:
+            raise AgentCommandError("parameter_sequence_not_writable")
+        template = before["blocks"][0] if before["blocks"] else None
+        expected_names = (
+            [item["parameter"] for item in template["parameters"]] if template is not None else []
+        )
+        for block_index, block_input in enumerate(blocks):
+            template_block = (
+                sequence.blocks[block_index]
+                if block_index < len(sequence.blocks)
+                else sequence.blocks[0]
+            )
+            names = [item["parameter"] for item in block_input["parameters"]]
+            if names != expected_names or len(names) > self.MAX_SEQUENCE_PARAMETERS:
+                raise AgentCommandError("parameter_sequence_shape_invalid")
+            if (
+                block_input.get("name") is not None
+                and getattr(template_block, "namePar", None) is None
+            ):
+                raise AgentCommandError("parameter_sequence_shape_invalid")
+            for item in block_input["parameters"]:
+                try:
+                    parameter = template_block.par[item["parameter"]]
+                except Exception as error:
+                    raise AgentCommandError("parameter_not_found") from error
+                parameter_payload = {
+                    "operator_path": str(operator.path),
+                    "parameter": str(parameter.name),
+                    "mode": item["mode"],
+                    "value": item.get("value"),
+                }
+                if item.get("source") is not None:
+                    parameter_payload["source"] = item["source"]
+                self._preflight_parameter("parameters.set", operator, parameter_payload, parameter)
 
     def _apply_sequence_blocks(self, sequence, blocks):
         if len(blocks) > self.MAX_SEQUENCE_BLOCKS:
@@ -1021,16 +1088,50 @@ class OperatorControl:
 
     @staticmethod
     def _parameter_value_kind(parameter):
+        style = str(getattr(parameter, "style", "")).lower()
         if bool(getattr(parameter, "isSequence", False)):
             return "sequence"
         if bool(getattr(parameter, "isPython", False)):
             return "python"
         if bool(getattr(parameter, "isOP", False)):
-            style = str(getattr(parameter, "style", "")).lower()
             return "multi_operator" if "multi" in style else "operator"
+        style_kinds = {
+            "str": "string",
+            "file": "string",
+            "filesave": "string",
+            "folder": "string",
+            "header": "string",
+            "float": "number",
+            "rgba": "number",
+            "uvw": "number",
+            "wh": "number",
+            "xyzw": "number",
+            "int": "integer",
+            "toggle": "boolean",
+            "momentary": "boolean",
+            "pulse": "pulse",
+            "menu": "menu",
+            "strmenu": "menu",
+            "python": "python",
+            "sequence": "sequence",
+            "object": "operator",
+            "sop": "operator",
+            "pop": "operator",
+            "mat": "operator",
+            "chop": "operator",
+            "top": "operator",
+            "dat": "operator",
+            "panelcomp": "operator",
+            "comp": "operator",
+            "op": "operator",
+            "topmulti": "multi_operator",
+        }
+        if style in style_kinds:
+            return style_kinds[style]
         checks = (
             ("isPulse", "pulse"),
             ("isMenu", "menu"),
+            ("isMomentary", "boolean"),
             ("isToggle", "boolean"),
             ("isInt", "integer"),
             ("isFloat", "number"),
@@ -1046,11 +1147,13 @@ class OperatorControl:
         name = command["name"]
         payload = command["input"]
         operator = self.operator_lookup(payload["operator_path"])
-        if operator is None:
+        if operator is None or str(operator.path) != payload["operator_path"]:
             raise AgentCommandError("operator_not_found")
         if name.startswith("parameters.") and "parameter" in payload:
             parameter = self._parameter(operator, payload["parameter"])
             self._preflight_parameter(name, operator, payload, parameter)
+        if name == "parameters.sequence.get":
+            self._get_parameter_sequence(payload)
 
     def _create_operator(self, payload):
         catalog_status = self.operator_catalog.require_creatable(
@@ -1205,12 +1308,7 @@ class OperatorControl:
         if name in {"parameters.get", "parameters.set"}:
             self._parameter_result(operator, payload["parameter"], parameter)
         if name == "parameters.set":
-            if getattr(parameter, "readOnly", False):
-                raise AgentCommandError("parameter_read_only")
-            if not bool(getattr(parameter, "enable", True)):
-                raise AgentCommandError("parameter_disabled")
-            if bool(getattr(parameter, "hidden", False)):
-                raise AgentCommandError("parameter_obsolete")
+            self._require_parameter_writable(parameter)
             self._validate_parameter_write(parameter, payload)
             if payload["mode"] == "expression":
                 try:
@@ -1220,22 +1318,37 @@ class OperatorControl:
         if name == "parameters.pulse" and not getattr(parameter, "isPulse", False):
             raise AgentCommandError("parameter_not_pulseable")
         if name == "parameters.pulse":
-            if getattr(parameter, "readOnly", False):
-                raise AgentCommandError("parameter_read_only")
-            if not bool(getattr(parameter, "enable", True)):
-                raise AgentCommandError("parameter_disabled")
-            if bool(getattr(parameter, "hidden", False)):
-                raise AgentCommandError("parameter_obsolete")
+            self._require_parameter_writable(parameter)
 
-    @classmethod
-    def _validate_parameter_write(cls, parameter, payload):
-        kind = cls._parameter_value_kind(parameter)
+    @staticmethod
+    def _require_parameter_writable(parameter):
+        if getattr(parameter, "readOnly", False):
+            raise AgentCommandError("parameter_read_only")
+        if not bool(getattr(parameter, "enable", True)):
+            raise AgentCommandError("parameter_disabled")
+        if bool(getattr(parameter, "hidden", False)):
+            raise AgentCommandError("parameter_obsolete")
+        if hasattr(parameter, "page") and getattr(parameter, "page", None) is None:
+            raise AgentCommandError("parameter_type_unsupported")
+
+    def _validate_parameter_write(self, parameter, payload):
+        kind = self._parameter_value_kind(parameter)
         mode = payload["mode"]
         if kind in {"pulse", "python", "sequence", "unknown"}:
             raise AgentCommandError("parameter_type_unsupported")
         if mode == "export" and kind not in {"boolean", "integer", "number"}:
             raise AgentCommandError("parameter_type_unsupported")
         value = payload.get("value")
+        if mode == "bind":
+            source = payload["source"]
+            source_operator = self.operator_lookup(source["operator_path"])
+            if source_operator is None or str(source_operator.path) != source["operator_path"]:
+                raise AgentCommandError("parameter_source_not_found")
+            self._parameter(source_operator, source["parameter"])
+        if mode == "export":
+            self._require_existing_export_source(parameter, payload["source"])
+        if mode == "constant" and kind in {"operator", "multi_operator"}:
+            self._parameter_constant_for_write(parameter, value)
         if mode != "constant":
             return
         expected = {
@@ -1245,24 +1358,29 @@ class OperatorControl:
             "string": str,
             "menu": str,
         }.get(kind)
-        if expected is not None and (not isinstance(value, expected) or kind == "integer" and type(value) is bool):
+        if expected is not None and (
+            not isinstance(value, expected) or kind == "integer" and type(value) is bool
+        ):
             raise AgentCommandError("parameter_value_invalid")
         if kind == "menu" and value not in list(getattr(parameter, "menuNames", []) or []):
             raise AgentCommandError("parameter_value_invalid")
 
     def _set_parameter(self, payload):
         operator, parameter = self._parameter_for_payload(payload)
+        operator_path = str(operator.path)
         self._preflight_parameter("parameters.set", operator, payload, parameter)
         before = self._parameter_snapshot(parameter)
+        before_result = self._parameter_result(operator, payload["parameter"], parameter)
         try:
             if payload["mode"] == "expression":
                 parameter.expr = payload["value"]
             elif payload["mode"] == "bind":
                 source = payload["source"]
                 source_operator = self.operator_lookup(source["operator_path"])
-                if source_operator is None or self._parameter(
-                    source_operator, source["parameter"]
-                ) is None:
+                if (
+                    source_operator is None
+                    or self._parameter(source_operator, source["parameter"]) is None
+                ):
                     raise AgentCommandError("parameter_source_not_found")
                 parameter.bindExpr = "op({!r}).par.{}".format(
                     source["operator_path"], source["parameter"]
@@ -1279,7 +1397,9 @@ class OperatorControl:
                 if payload["mode"] == "expression"
                 else "parameter_write_rejected"
             )
-            self._rollback_parameter(operator, payload["parameter"], before, error)
+            self._rollback_parameter(
+                operator_path, payload["parameter"], before, before_result, error
+            )
             raise AgentCommandError(code) from error
         try:
             result = self._parameter_result(operator, payload["parameter"], parameter)
@@ -1288,11 +1408,15 @@ class OperatorControl:
                 if payload["mode"] in {"export", "bind"}
                 else payload["value"]
             )
-            actual = result.get("source") if payload["mode"] in {"export", "bind"} else result["value"]
+            actual = (
+                result.get("source") if payload["mode"] in {"export", "bind"} else result["value"]
+            )
             if result["mode"] != payload["mode"] or actual != expected:
                 raise RuntimeError("parameter readback mismatch")
         except Exception as error:
-            self._rollback_parameter(operator, payload["parameter"], before, error)
+            self._rollback_parameter(
+                operator_path, payload["parameter"], before, before_result, error
+            )
             raise AgentCommandError("parameter_write_rejected") from error
         return result
 
@@ -1325,8 +1449,12 @@ class OperatorControl:
         return operators[0] if operators else None
 
     def _activate_parameter_export(self, parameter, source):
+        self._require_existing_export_source(parameter, source)
+        parameter.mode = getattr(getattr(builtins, "ParMode", None), "EXPORT", "export")
+
+    def _require_existing_export_source(self, parameter, source):
         source_operator = self.operator_lookup(source["operator_path"])
-        if source_operator is None:
+        if source_operator is None or str(source_operator.path) != source["operator_path"]:
             raise AgentCommandError("parameter_source_not_found")
         try:
             channel = source_operator[source["channel"]]
@@ -1343,7 +1471,6 @@ class OperatorControl:
             or str(current.name) != source["channel"]
         ):
             raise AgentCommandError("parameter_export_source_unavailable")
-        parameter.mode = getattr(getattr(builtins, "ParMode", None), "EXPORT", "export")
 
     @classmethod
     def _parameter_snapshot(cls, parameter):
@@ -1355,8 +1482,11 @@ class OperatorControl:
             "bind_expr": getattr(parameter, "bindExpr", ""),
         }
 
-    def _rollback_parameter(self, operator, name, before, cause):
+    def _rollback_parameter(self, operator_path, name, before, before_result, cause):
         try:
+            operator = self.operator_lookup(operator_path)
+            if operator is None or str(operator.path) != operator_path:
+                raise AgentCommandError("parameter_not_found")
             parameter = self._parameter(operator, name)
             mode = before["mode"]
             if mode == "expression":
@@ -1367,9 +1497,9 @@ class OperatorControl:
                 parameter.mode = before["raw_mode"]
             else:
                 parameter.val = before["val"]
-            restored = self._parameter_snapshot(parameter)
-            if restored["mode"] != mode:
-                raise RuntimeError("rollback mode mismatch")
+            restored = self._parameter_result(operator, name, parameter)
+            if restored != before_result:
+                raise RuntimeError("rollback readback mismatch")
         except AgentCommandError as error:
             if error.code == "parameter_not_found":
                 raise AgentCommandError("parameter_outcome_unknown") from cause
@@ -1411,6 +1541,8 @@ class OperatorControl:
             except Exception as error:
                 raise AgentCommandError("parameter_type_unsupported") from error
             paths = [str(item.path) for item in operators]
+            if len(paths) > cls.MAX_MULTI_OP_PATHS:
+                raise AgentCommandError("parameter_value_too_large")
             value = paths if kind == "multi_operator" else (paths[0] if paths else None)
         else:
             value = parameter.eval()
