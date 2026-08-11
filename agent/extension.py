@@ -163,7 +163,15 @@ class OperatorControl:
                 column_stop,
             )
             byte_count = self._table_byte_count(rows)
+            if any(
+                len(cell.encode("utf-8")) > self.MAX_TABLE_CELL_BYTES
+                for row in rows
+                for cell in row
+            ):
+                raise AgentCommandError("result_too_large")
         except Exception as error:
+            if isinstance(error, AgentCommandError):
+                raise
             raise AgentCommandError("dat_content_unavailable") from error
         if byte_count > payload["max_bytes"]:
             raise AgentCommandError("result_too_large")
@@ -248,6 +256,8 @@ class OperatorControl:
                 if read() != before:
                     raise RuntimeError("DAT rollback verification failed")
             except Exception as rollback_error:
+                if self.operator_lookup(path) is None:
+                    raise AgentCommandError(f"{error_prefix}_outcome_unknown") from rollback_error
                 raise AgentCommandError(f"{error_prefix}_rollback_failed") from rollback_error
             raise AgentCommandError(f"{error_prefix}_write_failed") from error
 
@@ -264,10 +274,25 @@ class OperatorControl:
             sync_parameter = getattr(operator.par, "syncfile", None)
             file_path = "" if file_parameter is None else str(file_parameter.eval() or "")
             sync_file = False if sync_parameter is None else bool(sync_parameter.eval())
+            locked = bool(operator.lock)
+            replicated = getattr(operator, "replicator", None) is not None
+            cloned = self._has_clone_ancestor(operator)
         except Exception as error:
             raise AgentCommandError("dat_content_unavailable") from error
-        if file_path or sync_file:
+        if file_path or sync_file or locked or replicated or cloned:
             raise AgentCommandError("dat_content_not_writable")
+
+    @staticmethod
+    def _has_clone_ancestor(operator):
+        parent_method = getattr(operator, "parent", None)
+        ancestor = parent_method() if callable(parent_method) else None
+        while ancestor is not None:
+            clone_parameter = getattr(getattr(ancestor, "par", None), "clone", None)
+            if clone_parameter is not None and str(clone_parameter.eval() or ""):
+                return True
+            parent_method = getattr(ancestor, "parent", None)
+            ancestor = parent_method() if callable(parent_method) else None
+        return False
 
     @classmethod
     def _text_dat_snapshot(cls, operator):

@@ -600,6 +600,22 @@ def test_table_dat_get_returns_an_explicit_bounded_window_and_dimensions() -> No
         "utf8_bytes": 3,
     }
 
+    oversized_cell = FakeTableDat("/project1/large", [["x" * (MAX_TABLE_CELL_BYTES + 1)]])
+    with pytest.raises(module.AgentCommandError, match="result_too_large"):
+        make_control({oversized_cell.path: oversized_cell}.get).execute(
+            {
+                "name": "dat.table.get",
+                "input": {
+                    "operator_path": oversized_cell.path,
+                    "row_offset": 0,
+                    "column_offset": 0,
+                    "row_count": 1,
+                    "column_count": 1,
+                    "max_bytes": MAX_DAT_CONTENT_BYTES,
+                },
+            }
+        )
+
 
 def test_table_dat_replace_and_patch_return_exact_verified_complete_state() -> None:
     table = FakeTableDat("/project1/grid", [["old"]])
@@ -663,6 +679,53 @@ def test_table_dat_mutations_reject_external_file_modes() -> None:
             }
         )
     assert table._rows == [["before"]]
+
+
+@pytest.mark.parametrize("mode", ["locked", "replicated", "cloned"])
+def test_dat_mutations_reject_read_only_and_generated_modes(mode: str) -> None:
+    table = FakeTableDat("/project1/generated/grid", [["before"]])
+    if mode == "locked":
+        table.lock = True
+    elif mode == "replicated":
+        table.replicator = object()
+    else:
+        clone_parent = SimpleNamespace(
+            par=SimpleNamespace(clone=FakeDatParameter("/project1/template")),
+            parent=lambda: None,
+        )
+        table.parent = lambda: clone_parent
+    with pytest.raises(module.AgentCommandError, match="dat_content_not_writable"):
+        make_control({table.path: table}.get).execute(
+            {
+                "name": "dat.table.replace",
+                "input": {"operator_path": table.path, "rows": [["after"]]},
+            }
+        )
+    assert table._rows == [["before"]]
+
+
+def test_dat_mutation_reports_unknown_if_operator_disappears_during_rollback() -> None:
+    class VanishingRollbackTextDat(FakeTextDat):
+        @property
+        def text(self):
+            return self._text
+
+        @text.setter
+        def text(self, value):
+            if getattr(self, "restoring", False) and value == "before":
+                self.alive = False
+                raise RuntimeError("operator vanished")
+            self._text = str(value).upper() if getattr(self, "correct", False) else value
+
+    text = VanishingRollbackTextDat("/project1/notes", "before")
+    text.alive = True
+    text.correct = True
+    text.restoring = True
+    lookup = lambda path: text if path == text.path and text.alive else None
+    with pytest.raises(module.AgentCommandError, match="text_dat_outcome_unknown"):
+        make_control(lookup).execute(
+            {"name": "dat.text.set", "input": {"operator_path": text.path, "text": "after"}}
+        )
 
 
 def test_dat_mutations_reject_unbounded_prior_content_before_writing() -> None:

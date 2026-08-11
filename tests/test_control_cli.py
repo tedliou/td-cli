@@ -278,7 +278,7 @@ def test_create_conditional_operator_requires_explicit_cli_opt_in(monkeypatch) -
         ),
     ],
 )
-def test_phase_3_commands_reach_public_submission_seam(monkeypatch, argv, expected) -> None:
+def test_dedicated_cli_commands_reach_public_submission_seam(monkeypatch, argv, expected) -> None:
     monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
 
     result = CliRunner().invoke(cli.app, argv)
