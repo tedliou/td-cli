@@ -778,6 +778,61 @@ def test_move_command_exposes_copy_destroy_and_detachment_authorization() -> Non
     assert "ops.move" not in COMMAND_CATALOG.batch_names
 
 
+def test_trusted_tox_import_has_a_strict_bounded_non_batchable_contract() -> None:
+    command = Command.model_validate(
+        {
+            "name": "ops.tox.import",
+            "input": {
+                "parent_path": "/project1/imports",
+                "tox_path": r"C:\approved\asset.tox",
+                "allowlist_root": r"C:\approved",
+                "target_name": "asset",
+                "trusted": True,
+                "replace": True,
+                "max_file_bytes": 1024,
+                "max_operators": 20,
+            },
+        }
+    )
+
+    assert command.input.model_dump() == {
+        "parent_path": "/project1/imports",
+        "tox_path": r"C:\approved\asset.tox",
+        "allowlist_root": r"C:\approved",
+        "target_name": "asset",
+        "trusted": True,
+        "replace": True,
+        "max_file_bytes": 1024,
+        "max_operators": 20,
+    }
+    assert "ops.tox.import" not in COMMAND_CATALOG.batch_names
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("trusted", False),
+        ("tox_path", "asset.tox"),
+        ("tox_path", r"C:\approved\asset.txt"),
+        ("allowlist_root", r"\\server\share"),
+        ("max_file_bytes", 67_108_865),
+        ("max_operators", 1001),
+    ],
+)
+def test_trusted_tox_import_rejects_untrusted_or_unbounded_input(field: str, value: object) -> None:
+    payload = {
+        "parent_path": "/project1/imports",
+        "tox_path": r"C:\approved\asset.tox",
+        "allowlist_root": r"C:\approved",
+        "target_name": "asset",
+        "trusted": True,
+    }
+    payload[field] = value
+
+    with pytest.raises(ValidationError):
+        Command.model_validate({"name": "ops.tox.import", "input": payload})
+
+
 @pytest.mark.parametrize("name", ["ops.rename", "ops.disconnect", "ops.connect"])
 def test_v011_mutations_are_not_batchable(name: str) -> None:
     with pytest.raises(ValidationError):

@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass
+from pathlib import PureWindowsPath
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -43,6 +44,7 @@ class ConnectionsInput(OperatorInput):
 
 MAX_INSPECTION_ITEMS = 100
 MAX_INSPECTION_STRING_BYTES = 4096
+MAX_TOX_FILE_BYTES = 67_108_864
 
 
 class InspectOperatorInput(OperatorInput):
@@ -236,6 +238,42 @@ class CopyOperatorInput(StructuralDestinationInput):
 
 class MoveOperatorInput(StructuralDestinationInput):
     allow_connected: bool = False
+
+
+def _valid_local_windows_path(value: str) -> str:
+    if len(value.encode("utf-8")) > MAX_INSPECTION_STRING_BYTES:
+        raise ValueError("path exceeds the UTF-8 byte limit")
+    path = PureWindowsPath(value)
+    if not path.is_absolute() or not path.drive or str(path).startswith("\\\\"):
+        raise ValueError("path must be an absolute local Windows path")
+    if any(part in {"", ".", ".."} for part in path.parts[1:]):
+        raise ValueError("path must be canonical")
+    if ":" in str(path)[2:]:
+        raise ValueError("alternate data streams are not supported")
+    return value
+
+
+class ImportToxInput(StrictModel):
+    parent_path: str
+    tox_path: str
+    allowlist_root: str
+    target_name: str
+    trusted: Literal[True]
+    replace: bool = False
+    max_file_bytes: int = Field(default=MAX_TOX_FILE_BYTES, ge=1, le=MAX_TOX_FILE_BYTES)
+    max_operators: int = Field(default=256, ge=1, le=1000)
+
+    _parent_path = field_validator("parent_path")(_valid_operator_path)
+    _tox_path = field_validator("tox_path")(_valid_local_windows_path)
+    _allowlist_root = field_validator("allowlist_root")(_valid_local_windows_path)
+    _target_name = field_validator("target_name")(_valid_operator_name)
+
+    @field_validator("tox_path")
+    @classmethod
+    def tox_path_has_exact_extension(cls, value: str) -> str:
+        if PureWindowsPath(value).suffix.lower() != ".tox":
+            raise ValueError("tox_path must have a .tox extension")
+        return value
 
 
 class ConnectOperatorsInput(StrictModel):
@@ -467,6 +505,7 @@ COMMAND_CATALOG = CommandCatalog(
         CommandDefinition("ops.destroy", DestroyOperatorInput),
         CommandDefinition("ops.copy", CopyOperatorInput),
         CommandDefinition("ops.move", MoveOperatorInput),
+        CommandDefinition("ops.tox.import", ImportToxInput),
         CommandDefinition("ops.connect", ConnectOperatorsInput),
         CommandDefinition("ops.disconnect", DisconnectOperatorsInput),
         CommandDefinition("ops.hierarchy.connect", ConnectOperatorsInput),
@@ -496,6 +535,7 @@ CommandInput = (
     | DestroyOperatorInput
     | CopyOperatorInput
     | MoveOperatorInput
+    | ImportToxInput
     | ConnectOperatorsInput
     | DisconnectOperatorsInput
     | ParameterInput
