@@ -121,7 +121,7 @@ Recommended non-null scalar fields:
 | `pixel_format_display` | string | `pixelFormat: str` | Display-only label; do not use as an identifier. |
 | `gpu_memory_bytes` | integer | common `OP.gpuMemory: int` | Family-relevant cached GPU allocation; declaration is in `OP.py` lines 199-202. |
 | `current_pass` | integer | `curPass: int` | Runtime cook-pass observation. |
-| `newest_slice_w_offset` | integer | `newestSliceWOffset: int` | Relevant to 3D texture filling; preserve TD's value for other TOPs. |
+| `newest_slice_w_offset` | number | `newestSliceWOffset: int` | Locked live Texture 3D returned normalized fractional values despite the TDI annotation; preserve a finite number. |
 
 Never call `sample()`: TDI explicitly says it is very expensive, stalls the
 graphics pipeline, and downloads the entire texture (`TOP.py` lines 88-111).

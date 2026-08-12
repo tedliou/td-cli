@@ -208,7 +208,7 @@ class OperatorControl:
             "pixel_format": str(operator.pixelFormat),
             "pixel_format_name": str(operator.pixelFormatName),
             "current_pass": self._integer(operator.curPass),
-            "newest_slice_w_offset": self._integer(operator.newestSliceWOffset),
+            "newest_slice_w_offset": self._finite_number(operator.newestSliceWOffset),
         }
 
     def _inspect_sop(self, operator, max_items):

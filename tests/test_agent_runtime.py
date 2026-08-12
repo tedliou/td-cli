@@ -361,7 +361,12 @@ def test_family_inspection_returns_discriminated_results_for_all_six_families() 
     top = inspection_operator("/project1/top", "TOP")
     top.width, top.height, top.depth = 1920, 1080, 1
     top.aspect, top.pixelFormat, top.pixelFormatName = 16 / 9, "8-bit fixed (RGBA)", "rgba8fixed"
-    top.aspectWidth, top.aspectHeight, top.curPass, top.newestSliceWOffset = 16.0, 9.0, 0, 0
+    top.aspectWidth, top.aspectHeight, top.curPass, top.newestSliceWOffset = (
+        16.0,
+        9.0,
+        0,
+        0.25,
+    )
 
     sop = inspection_operator("/project1/sop", "SOP")
     sop.numPoints, sop.numPrims, sop.numVertices = 8, 6, 24
@@ -393,6 +398,7 @@ def test_family_inspection_returns_discriminated_results_for_all_six_families() 
     assert results["CHOP"]["details"]["channel_names"] == ["tx", "ty"]
     assert results["DAT"]["details"]["dat_kind"] == "table"
     assert results["TOP"]["details"]["resolution"] == {"width": 1920, "height": 1080, "depth": 1}
+    assert results["TOP"]["details"]["newest_slice_w_offset"] == 0.25
     assert results["SOP"]["details"]["attributes"]["point"][0]["name"] == "P"
     assert results["POP"]["details"]["allocated"] == {"points": 8, "primitives": 6, "vertices": 24}
     assert results["MAT"]["details"] == {}
