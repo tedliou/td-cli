@@ -1027,16 +1027,12 @@ class OperatorControl:
                     ):
                         raise RuntimeError("rollback verification failed")
                 except Exception as rollback_error:
-                    stage_clean = stage is None or self._destroy_exact(stage)
-                    backup_clean = backup_stage is None or self._destroy_exact(backup_stage)
                     if self.operator_lookup(str(parent.path)) is not parent:
                         raise AgentCommandError("tox_import_outcome_unknown") from rollback_error
-                    if not stage_clean or not backup_clean:
+                    if not self._cleanup_tox_stages(stage, backup_stage):
                         raise AgentCommandError("tox_import_outcome_unknown") from rollback_error
                     raise AgentCommandError("tox_rollback_failed") from rollback_error
-                stage_clean = stage is None or self._destroy_exact(stage)
-                backup_clean = backup_stage is None or self._destroy_exact(backup_stage)
-                if not stage_clean or not backup_clean:
+                if not self._cleanup_tox_stages(stage, backup_stage):
                     raise AgentCommandError("tox_import_outcome_unknown") from error
                 raise AgentCommandError("tox_commit_failed") from error
             if (
@@ -1045,9 +1041,7 @@ class OperatorControl:
                 and not self._destroy_exact(installed)
             ):
                 raise AgentCommandError("tox_import_outcome_unknown") from error
-            stage_clean = stage is None or self._destroy_exact(stage)
-            backup_clean = backup_stage is None or self._destroy_exact(backup_stage)
-            if not stage_clean or not backup_clean:
+            if not self._cleanup_tox_stages(stage, backup_stage):
                 raise AgentCommandError("tox_import_outcome_unknown") from error
             if isinstance(error, AgentCommandError):
                 raise
@@ -1253,6 +1247,11 @@ class OperatorControl:
         except Exception:  # noqa: BLE001 - TouchDesigner raises tdError subclasses
             return False
         return self.operator_lookup(path) is None
+
+    def _cleanup_tox_stages(self, stage, backup_stage):
+        stage_clean = stage is None or self._destroy_exact(stage)
+        backup_clean = backup_stage is None or self._destroy_exact(backup_stage)
+        return stage_clean and backup_clean
 
     def _require_mutable_path(self, path):
         if path == "/":
