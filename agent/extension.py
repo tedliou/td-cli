@@ -1144,16 +1144,6 @@ class OperatorControl:
         ):
             raise AgentCommandError("tox_parent_protected")
 
-    @staticmethod
-    def _verify_tox_source_unchanged(source):
-        try:
-            current = Path(source["path"]).stat()
-            identity = (current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns)
-        except Exception as error:
-            raise AgentCommandError("tox_path_rejected") from error
-        if identity != source["identity"]:
-            raise AgentCommandError("tox_path_rejected")
-
     def _create_tox_stage(self, parent, purpose):
         name = "tdcli_tox_" + purpose + "_" + uuid.uuid4().hex[:16]
         path = str(parent.path).rstrip("/") + "/" + name
