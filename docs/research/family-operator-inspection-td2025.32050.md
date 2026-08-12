@@ -170,7 +170,7 @@ Safe default fields:
 
 | Field | JSON type | TDI declaration | Nullability/risk |
 |---|---:|---|---|
-| `dimension` | normalized string or integer | `dimension: Any` | TDI does not provide a stable type. Normalize only observed scalar/enum values; otherwise fail validation rather than stringify arbitrary objects. |
+| `dimension` | bounded ordered integer list | `dimension: Any` | Locked live Box and downstream POPs returned ordered nonnegative integer dimensions. This corrects the earlier scalar/enum inference from the broad TDI annotation; apply `max_items` and reject any other shape or value. |
 | `max_vertices_per_line_strip` | integer | `maxVertsPerLineStrip: int` | Non-null scalar. |
 | `compare` / `template` | boolean | corresponding flags | Non-null scalar. |
 | `allocated_points` | integer | `numPoints(max=True)` | TDI says `max=True` is always instant and ignores `delayed`. |
