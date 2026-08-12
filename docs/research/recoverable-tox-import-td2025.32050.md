@@ -205,7 +205,10 @@ Contract rules:
   loading. Never rely on TD's automatic numeric suffix.
 - Use a uniquely named, direct child staging COMP under the exact parent (for
   example `tdcli_tox_stage_<request-id>`), record the complete before-child id
-  set, and call `stage.loadTox(verified_path, unwired=True, pattern=None)`.
+  set, read the verified file once into a bounded bytearray, and call
+  `stage.loadByteArray(verified_bytes, unwired=True, pattern=None)`. This binds
+  the executed content to the reported SHA-256 and avoids reopening a mutable
+  path after verification.
   The stage namespace must initially contain no other child.
 - Require exactly one new child id and the returned object to be that id, a
   valid COMP, and direct child of stage. Require source root name to be safe,

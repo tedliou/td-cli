@@ -952,10 +952,10 @@ class OperatorControl:
         installed = None
         try:
             stage = self._create_tox_stage(parent, "stage")
-            staged_root = self._load_one_tox_root(stage, source["path"], from_bytes=False)
+            staged_root = self._load_one_tox_root(stage, source["bytes"])
             staged_manifest = self._tox_manifest(staged_root, payload["max_operators"])
             self._require_tox_snapshot(staged_root)
-            self._verify_tox_source_unchanged(source)
+            self._require_exact_stage_root(stage, staged_root)
             current = self.operator_lookup(destination_path)
             if previous is None:
                 if current is not None:
@@ -963,12 +963,17 @@ class OperatorControl:
             elif current is not previous or int(current.id) != previous_id:
                 raise AgentCommandError("tox_import_outcome_unknown")
             if previous is not None:
-                previous_manifest = self._tox_manifest(previous, payload["max_operators"])
+                previous_manifest = self._tox_manifest(
+                    previous, payload["max_operators"], include_linkage=True
+                )
                 try:
                     backup = bytearray(previous.saveByteArray())
                     backup_stage = self._create_tox_stage(parent, "backup")
-                    restored = self._load_one_tox_root(backup_stage, backup, from_bytes=True)
-                    if self._tox_manifest(restored, payload["max_operators"]) != previous_manifest:
+                    restored = self._load_one_tox_root(backup_stage, backup)
+                    if (
+                        self._tox_manifest(restored, payload["max_operators"], include_linkage=True)
+                        != previous_manifest
+                    ):
                         raise RuntimeError("backup manifest mismatch")
                     if not self._destroy_exact(backup_stage):
                         raise RuntimeError("backup verification cleanup failed")
@@ -1022,7 +1027,9 @@ class OperatorControl:
                     restored.name = payload["target_name"]
                     if (
                         self.operator_lookup(destination_path) is not restored
-                        or self._tox_manifest(restored, payload["max_operators"])
+                        or self._tox_manifest(
+                            restored, payload["max_operators"], include_linkage=True
+                        )
                         != previous_manifest
                     ):
                         raise RuntimeError("rollback verification failed")
@@ -1080,13 +1087,10 @@ class OperatorControl:
             size = int(requested_stat.st_size)
             if size > payload["max_file_bytes"]:
                 raise AgentCommandError("tox_file_too_large")
-            digest = hashlib.sha256()
             with canonical.open("rb") as stream:
-                while True:
-                    chunk = stream.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    digest.update(chunk)
+                content = stream.read(payload["max_file_bytes"] + 1)
+            if len(content) > payload["max_file_bytes"]:
+                raise AgentCommandError("tox_file_too_large")
             after = canonical.stat()
             identity = (
                 requested_stat.st_dev,
@@ -1099,8 +1103,9 @@ class OperatorControl:
             return {
                 "path": str(canonical),
                 "size": size,
-                "sha256": digest.hexdigest(),
+                "sha256": hashlib.sha256(content).hexdigest(),
                 "identity": identity,
+                "bytes": bytearray(content),
             }
         except AgentCommandError:
             raise
@@ -1156,13 +1161,10 @@ class OperatorControl:
             raise AgentCommandError("tox_import_outcome_unknown")
         return stage
 
-    def _load_one_tox_root(self, stage, source, from_bytes):
+    def _load_one_tox_root(self, stage, source):
         before = {int(child.id) for child in stage.children}
         try:
-            if from_bytes:
-                root = stage.loadByteArray(source, unwired=True, pattern=None)
-            else:
-                root = stage.loadTox(source, unwired=True, pattern=None)
+            root = stage.loadByteArray(source, unwired=True, pattern=None)
         except Exception as error:
             raise AgentCommandError("tox_load_failed") from error
         created = [child for child in stage.children if int(child.id) not in before]
@@ -1176,7 +1178,12 @@ class OperatorControl:
             raise AgentCommandError("tox_load_failed")
         return root
 
-    def _tox_manifest(self, root, maximum):
+    def _require_exact_stage_root(self, stage, root):
+        children = list(stage.children)
+        if len(children) != 1 or children[0] is not root:
+            raise AgentCommandError("tox_verification_failed")
+
+    def _tox_manifest(self, root, maximum, include_linkage=False):
         try:
             operators = self._bounded_subtree(root, maximum)
             prefix = str(root.path).rstrip("/")
@@ -1192,14 +1199,24 @@ class OperatorControl:
                 relative = "." if operator is root else path[len(prefix) + 1 :]
                 if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", str(operator.name)) is None:
                     raise RuntimeError("unsafe Operator name")
-                rows.append(
-                    {
-                        "relative_path": relative,
-                        "name": str(operator.name),
-                        "op_type": op_type,
-                        "family": str(operator.family),
+                row = {
+                    "relative_path": relative,
+                    "name": str(operator.name),
+                    "op_type": op_type,
+                    "family": str(operator.family),
+                }
+                if include_linkage and str(operator.family) == "COMP":
+                    parameters = getattr(operator, "par", None)
+                    row["linkage"] = {
+                        "externaltox": self._tox_parameter(parameters, "externaltox", ""),
+                        "enableexternaltox": bool(
+                            self._tox_parameter(parameters, "enableexternaltox", False)
+                        ),
+                        "savebackup": bool(self._tox_parameter(parameters, "savebackup", False)),
+                        "subcompname": self._tox_parameter(parameters, "subcompname", ""),
+                        "relpath": self._tox_parameter(parameters, "relpath", "inherit"),
                     }
-                )
+                rows.append(row)
             rows.sort(key=lambda row: row["relative_path"])
             if any(
                 self.operator_lookup(str(operator.path)) is not operator for operator in operators
@@ -1212,6 +1229,11 @@ class OperatorControl:
             raise
         except Exception as error:
             raise AgentCommandError("tox_verification_failed") from error
+
+    @staticmethod
+    def _tox_parameter(parameters, name, default):
+        parameter = getattr(parameters, name, None)
+        return default if parameter is None else parameter.eval()
 
     @staticmethod
     def _manifest_with_root_name(manifest, name):

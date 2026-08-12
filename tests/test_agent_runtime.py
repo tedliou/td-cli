@@ -204,7 +204,13 @@ class FakeOperator:
         self.family = family
         self.children = []
         self.docked = []
-        self.par = SimpleNamespace()
+        self.par = SimpleNamespace(
+            externaltox=FakeDatParameter(""),
+            enableexternaltox=FakeDatParameter(False),
+            savebackup=FakeDatParameter(False),
+            subcompname=FakeDatParameter(""),
+            relpath=FakeDatParameter("inherit"),
+        )
         self.nodeX = 0
         self.nodeY = 0
         self.nodeWidth = 130
@@ -397,6 +403,10 @@ class FakeToxGraphOperator:
                 restore(child, operator)
             return operator
 
+        if bytes(data) == b"trusted-tox":
+            root = FakeToxGraphOperator("source_root", self)
+            FakeToxGraphOperator("nested", root)
+            return root
         return restore(json.loads(bytes(data).decode("utf-8")), self)
 
     def copy(self, source, *, name, includeDocked):
@@ -656,6 +666,25 @@ def test_trusted_tox_inventory_accepts_locked_conditional_executable_types() -> 
     manifest = make_control(operators.get)._tox_manifest(root, 2)
 
     assert [row["op_type"] for row in manifest] == ["baseCOMP", "executeDAT"]
+
+
+def test_tox_backup_manifest_includes_critical_comp_linkage_state() -> None:
+    root = FakeToxGraphOperator("linked")
+    root.par.externaltox = FakeDatParameter("source.tox")
+    root.par.enableexternaltox = FakeDatParameter(True)
+    root.par.savebackup = FakeDatParameter(True)
+    root.par.subcompname = FakeDatParameter("inside")
+    root.par.relpath = FakeDatParameter("externaltox")
+
+    manifest = make_control({str(root.path): root}.get)._tox_manifest(root, 1, include_linkage=True)
+
+    assert manifest[0]["linkage"] == {
+        "externaltox": "source.tox",
+        "enableexternaltox": True,
+        "savebackup": True,
+        "subcompname": "inside",
+        "relpath": "externaltox",
+    }
 
 
 class FakeAttribute:
