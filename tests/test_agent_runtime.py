@@ -687,6 +687,52 @@ def test_tox_backup_manifest_includes_critical_comp_linkage_state() -> None:
     }
 
 
+def test_tox_import_reports_unknown_when_final_snapshot_replaces_destination(
+    tmp_path: Path, monkeypatch
+) -> None:
+    project = FakeToxGraphOperator("project1")
+    imports = FakeToxGraphOperator("imports", project)
+
+    def lookup(path):
+        queue = [project]
+        while queue:
+            operator = queue.pop(0)
+            if str(operator.path) == path:
+                return operator
+            queue.extend(operator.children)
+        return None
+
+    control = make_control(lookup)
+    original = control._require_tox_snapshot
+
+    def replace_after_snapshot(operator):
+        original(operator)
+        if str(operator.path) == "/project1/imports/asset":
+            operator.destroy()
+            FakeToxGraphOperator("asset", imports)
+
+    monkeypatch.setattr(control, "_require_tox_snapshot", replace_after_snapshot)
+    tox = tmp_path / "asset.tox"
+    tox.write_bytes(b"trusted-tox")
+
+    with pytest.raises(module.AgentCommandError, match="tox_import_outcome_unknown"):
+        control.execute(
+            {
+                "name": "ops.tox.import",
+                "input": {
+                    "parent_path": "/project1/imports",
+                    "tox_path": str(tox),
+                    "allowlist_root": str(tmp_path),
+                    "target_name": "asset",
+                    "trusted": True,
+                    "replace": False,
+                    "max_file_bytes": 1024,
+                    "max_operators": 20,
+                },
+            }
+        )
+
+
 class FakeAttribute:
     def __init__(self, name: str, size: int, value_type=float) -> None:
         self.name = name

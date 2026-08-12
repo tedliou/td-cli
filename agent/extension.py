@@ -998,6 +998,12 @@ class OperatorControl:
             ):
                 raise RuntimeError("installed manifest mismatch")
             self._require_tox_snapshot(installed)
+            if self.operator_lookup(destination_path) is not installed:
+                raise AgentCommandError("tox_import_outcome_unknown")
+            if self._tox_manifest(installed, payload["max_operators"]) != installed_manifest:
+                raise AgentCommandError("tox_import_outcome_unknown")
+            if self.operator_lookup(destination_path) is not installed:
+                raise AgentCommandError("tox_import_outcome_unknown")
             if not self._destroy_exact(stage):
                 raise AgentCommandError("tox_import_outcome_unknown")
             return {
