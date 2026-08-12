@@ -445,12 +445,16 @@ def test_family_inspection_detects_operator_disappearance_during_read() -> None:
         )
 
 
-def test_family_inspection_uses_touchdesigner_passive_lookup(monkeypatch) -> None:
+def test_family_inspection_uses_touchdesigner_passive_lookup() -> None:
     operator = inspection_operator("/project1/mat", "MAT")
     calls = []
-    monkeypatch.setitem(module.__dict__, "passive", lambda value: calls.append(value) or value)
+    control = OperatorControl(
+        {operator.path: operator}.get,
+        RUNTIME_OPERATOR_CATALOG,
+        passive_lookup=lambda value: calls.append(value) or value,
+    )
 
-    make_control({operator.path: operator}.get).execute(
+    control.execute(
         {"name": "ops.inspect", "input": {"operator_path": operator.path, "max_items": 8}}
     )
 

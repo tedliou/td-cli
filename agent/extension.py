@@ -10,6 +10,11 @@ import uuid
 from pathlib import Path
 from typing import ClassVar
 
+try:
+    import td as _td_runtime
+except ImportError:  # Outside the locked TouchDesigner runtime during unit tests.
+    _td_runtime = None
+
 if not hasattr(builtins, "_td_cli_runtime_session_id"):
     builtins._td_cli_runtime_session_id = str(uuid.uuid4())
 
@@ -94,10 +99,11 @@ class OperatorControl:
     MAX_HIERARCHY_TRAVERSAL = 1000
     INSPECTION_FAMILIES = ("CHOP", "DAT", "TOP", "SOP", "POP", "MAT")
 
-    def __init__(self, operator_lookup, operator_catalog, protected_path=None):
+    def __init__(self, operator_lookup, operator_catalog, protected_path=None, passive_lookup=None):
         self.operator_lookup = operator_lookup
         self.operator_catalog = operator_catalog
         self.protected_path = str(protected_path) if protected_path is not None else None
+        self.passive_lookup = passive_lookup or (lambda operator: operator)
 
     def execute(self, command):
         name = command["name"]
@@ -121,8 +127,7 @@ class OperatorControl:
         family = str(operator.family)
         if family not in self.INSPECTION_FAMILIES:
             raise AgentCommandError("operator_family_unsupported")
-        passive_fn = globals().get("passive")
-        inspected = passive_fn(operator) if callable(passive_fn) else operator
+        inspected = self.passive_lookup(operator)
         try:
             result = {
                 "operator_path": str(operator.path),
@@ -2050,7 +2055,10 @@ class AgentExt:
         if operator_catalog.touchdesigner_build != str(self.app_info.build):
             raise RuntimeError("Operator catalog TouchDesigner build does not match runtime")
         self.operator_control = OperatorControl(
-            self.operator_lookup, operator_catalog, protected_path=owner_comp.path
+            self.operator_lookup,
+            operator_catalog,
+            protected_path=owner_comp.path,
+            passive_lookup=getattr(_td_runtime, "passive", None),
         )
         runtime_session_id = builtins._td_cli_runtime_session_id
         state = getattr(builtins, "_td_cli_agent_state", None)
