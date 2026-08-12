@@ -84,6 +84,19 @@ transport seam. No security or product contract was relaxed.
 - `uv run mypy src`: passed with 16 source files checked.
 - `git diff --check`: passed.
 
-Final packaged Windows CLI smoke and archive hashes are recorded after the
-review fixes are committed so the staged Agent source commit and package
-identity match the final branch tip.
+PyInstaller 6.15.0 rebuilt all three executable tools and the Agent Component
+distribution from source commit `fadd8c73ded3cb43217322dc49f12e66a30ee3ba`.
+Each packaged executable passed its clean-directory version smoke. The extracted
+packaged `td.exe` then performed a real Trusted TOX Import against the Online
+Instance and returned the exact two-Operator inventory and source SHA-256.
+
+Local acceptance archive SHA-256 values (not immutable Release assets):
+
+- `td-v0.1.2-windows-x86_64.zip`:
+  `22a7753f2af8b8822cd998a9038497e4413e4b7d56931f1bcab128233b6764a9`
+- `td-daemon-v0.1.2-windows-x86_64.zip`:
+  `04fce32d1e222ca6f977d9f56b207a9b1173a8045faebbd48cd8095e2105b9de`
+- `td-agent-cli-v0.1.2-windows-x86_64.zip`:
+  `70b17ef5d110d463435827e6342995df7e62ac23d3742b352f5282da9559f2ba`
+- `td-agent-component-v0.1.2-td2025.32050.zip`:
+  `c4298331b0b9f4889de79daac8886439d20b0e96b258e6632cf5af27039c6909`
