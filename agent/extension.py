@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import uuid
 from pathlib import Path
 from typing import ClassVar
@@ -64,6 +65,7 @@ class OperatorControl:
         "ops.rename": "_rename_operator",
         "ops.state.get": "_get_operator_state",
         "ops.state.set": "_set_operator_state",
+        "ops.tox.import": "_import_tox",
         "dat.text.get": "_get_text_dat",
         "dat.text.set": "_set_text_dat",
         "dat.table.get": "_get_table_dat",
@@ -98,6 +100,7 @@ class OperatorControl:
     MAX_SEQUENCE_PARAMETERS = 256
     MAX_HIERARCHY_TRAVERSAL = 1000
     MAX_INSPECTION_STRING_BYTES = 4096
+    MAX_TOX_FILE_BYTES = 67_108_864
     INSPECTION_FAMILIES = ("CHOP", "DAT", "TOP", "SOP", "POP", "MAT")
 
     def __init__(self, operator_lookup, operator_catalog, protected_path=None, passive_lookup=None):
@@ -924,6 +927,349 @@ class OperatorControl:
             "identity_preserved": False,
             "moved": True,
         }
+
+    def _import_tox(self, payload):
+        if payload.get("trusted") not in (True, 1):
+            raise AgentCommandError("tox_trust_required")
+        source = self._preflight_tox_file(payload)
+        parent = self.operator_lookup(payload["parent_path"])
+        if parent is None or str(parent.path) != payload["parent_path"]:
+            raise AgentCommandError("operator_not_found")
+        if str(parent.family) != "COMP":
+            raise AgentCommandError("operator_parent_invalid")
+        self._require_tox_parent(str(parent.path))
+        destination_path = str(parent.path).rstrip("/") + "/" + payload["target_name"]
+        previous = self.operator_lookup(destination_path)
+        if previous is not None and not payload.get("replace", False):
+            raise AgentCommandError("tox_destination_exists")
+        previous_id = None if previous is None else int(previous.id)
+        stage = None
+        backup_stage = None
+        staged_root = None
+        backup = None
+        previous_manifest = None
+        old_destroyed = False
+        installed = None
+        try:
+            stage = self._create_tox_stage(parent, "stage")
+            staged_root = self._load_one_tox_root(stage, source["bytes"])
+            staged_manifest = self._tox_manifest(staged_root, payload["max_operators"])
+            self._require_tox_snapshot(staged_root)
+            self._require_exact_stage_root(stage, staged_root)
+            current = self.operator_lookup(destination_path)
+            if previous is None:
+                if current is not None:
+                    raise AgentCommandError("tox_destination_exists")
+            elif current is not previous or int(current.id) != previous_id:
+                raise AgentCommandError("tox_import_outcome_unknown")
+            if previous is not None:
+                previous_manifest = self._tox_manifest(
+                    previous, payload["max_operators"], include_linkage=True
+                )
+                try:
+                    backup = bytearray(previous.saveByteArray())
+                    backup_stage = self._create_tox_stage(parent, "backup")
+                    restored = self._load_one_tox_root(backup_stage, backup)
+                    if (
+                        self._tox_manifest(restored, payload["max_operators"], include_linkage=True)
+                        != previous_manifest
+                    ):
+                        raise RuntimeError("backup manifest mismatch")
+                    if not self._destroy_exact(backup_stage):
+                        raise RuntimeError("backup verification cleanup failed")
+                    backup_stage = None
+                except Exception as error:
+                    if (
+                        isinstance(error, AgentCommandError)
+                        and error.code == "tox_import_outcome_unknown"
+                    ):
+                        raise
+                    raise AgentCommandError("tox_backup_failed") from error
+                previous.destroy()
+                old_destroyed = True
+                if self.operator_lookup(destination_path) is not None:
+                    raise RuntimeError("old destination remained after destroy")
+            installed = parent.copy(staged_root, name=payload["target_name"], includeDocked=False)
+            if self.operator_lookup(destination_path) is not installed:
+                raise RuntimeError("installed identity mismatch")
+            installed_manifest = self._tox_manifest(installed, payload["max_operators"])
+            if installed_manifest != self._manifest_with_root_name(
+                staged_manifest, payload["target_name"]
+            ):
+                raise RuntimeError("installed manifest mismatch")
+            self._require_tox_snapshot(installed)
+            if self.operator_lookup(destination_path) is not installed:
+                raise AgentCommandError("tox_import_outcome_unknown")
+            if self._tox_manifest(installed, payload["max_operators"]) != installed_manifest:
+                raise AgentCommandError("tox_import_outcome_unknown")
+            if self.operator_lookup(destination_path) is not installed:
+                raise AgentCommandError("tox_import_outcome_unknown")
+            if not self._destroy_exact(stage):
+                raise AgentCommandError("tox_import_outcome_unknown")
+            return {
+                "parent_path": str(parent.path),
+                "path": str(installed.path),
+                "name": str(installed.name),
+                "op_type": str(installed.OPType),
+                "family": str(installed.family),
+                "operator_count": len(installed_manifest),
+                "inventory": installed_manifest,
+                "source_path": source["path"],
+                "file_bytes": source["size"],
+                "sha256": source["sha256"],
+                "trusted": True,
+                "replaced": previous is not None,
+                "rollback_performed": False,
+            }
+        except Exception as error:
+            if old_destroyed:
+                try:
+                    current = self.operator_lookup(destination_path)
+                    if current is not None:
+                        current.destroy()
+                    restored = parent.loadByteArray(backup, unwired=True, pattern=None)
+                    if restored is None:
+                        raise RuntimeError("rollback returned no root")
+                    restored.name = payload["target_name"]
+                    if (
+                        self.operator_lookup(destination_path) is not restored
+                        or self._tox_manifest(
+                            restored, payload["max_operators"], include_linkage=True
+                        )
+                        != previous_manifest
+                    ):
+                        raise RuntimeError("rollback verification failed")
+                except Exception as rollback_error:
+                    if self.operator_lookup(str(parent.path)) is not parent:
+                        raise AgentCommandError("tox_import_outcome_unknown") from rollback_error
+                    if not self._cleanup_tox_stages(stage, backup_stage):
+                        raise AgentCommandError("tox_import_outcome_unknown") from rollback_error
+                    raise AgentCommandError("tox_rollback_failed") from rollback_error
+                if not self._cleanup_tox_stages(stage, backup_stage):
+                    raise AgentCommandError("tox_import_outcome_unknown") from error
+                raise AgentCommandError("tox_commit_failed") from error
+            if (
+                installed is not None
+                and self.operator_lookup(destination_path) is installed
+                and not self._destroy_exact(installed)
+            ):
+                raise AgentCommandError("tox_import_outcome_unknown") from error
+            if not self._cleanup_tox_stages(stage, backup_stage):
+                raise AgentCommandError("tox_import_outcome_unknown") from error
+            if isinstance(error, AgentCommandError):
+                raise
+            raise AgentCommandError("tox_commit_failed") from error
+
+    def _preflight_tox_file(self, payload):
+        try:
+            requested = Path(payload["tox_path"])
+            allowed = Path(payload["allowlist_root"])
+            if (
+                not requested.is_absolute()
+                or not allowed.is_absolute()
+                or str(requested).startswith("\\\\")
+                or str(allowed).startswith("\\\\")
+                or ":" in str(requested)[2:]
+                or ":" in str(allowed)[2:]
+            ):
+                raise ValueError("not absolute")
+            requested_stat = requested.lstat()
+            allowed_stat = allowed.lstat()
+            reparse_flag = getattr(__import__("stat"), "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+            if (
+                not allowed.is_dir()
+                or not requested.is_file()
+                or requested.suffix.lower() != ".tox"
+                or getattr(requested_stat, "st_file_attributes", 0) & reparse_flag
+                or getattr(allowed_stat, "st_file_attributes", 0) & reparse_flag
+            ):
+                raise ValueError("unsupported file kind")
+            canonical = requested.resolve(strict=True)
+            canonical_root = allowed.resolve(strict=True)
+            if canonical.drive.lower() != canonical_root.drive.lower():
+                raise ValueError("different drive")
+            canonical.relative_to(canonical_root)
+            self._reject_reparse_path(canonical_root, canonical, reparse_flag)
+            size = int(requested_stat.st_size)
+            if size > payload["max_file_bytes"]:
+                raise AgentCommandError("tox_file_too_large")
+            with canonical.open("rb") as stream:
+                content = stream.read(payload["max_file_bytes"] + 1)
+            if len(content) > payload["max_file_bytes"]:
+                raise AgentCommandError("tox_file_too_large")
+            after = canonical.stat()
+            identity = (
+                requested_stat.st_dev,
+                requested_stat.st_ino,
+                size,
+                requested_stat.st_mtime_ns,
+            )
+            if identity != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns):
+                raise ValueError("file changed")
+            return {
+                "path": str(canonical),
+                "size": size,
+                "sha256": hashlib.sha256(content).hexdigest(),
+                "identity": identity,
+                "bytes": bytearray(content),
+            }
+        except AgentCommandError:
+            raise
+        except Exception as error:
+            raise AgentCommandError("tox_path_rejected") from error
+
+    @staticmethod
+    def _reject_reparse_path(root, path, reparse_flag):
+        current = root
+        candidates = [root]
+        for part in path.relative_to(root).parts:
+            current = current / part
+            candidates.append(current)
+        if any(
+            getattr(candidate.lstat(), "st_file_attributes", 0) & reparse_flag
+            for candidate in candidates
+        ):
+            raise ValueError("reparse point")
+
+    def _require_tox_parent(self, path):
+        protected = self.protected_path
+        if (
+            path == "/"
+            or protected is not None
+            and (
+                protected == path
+                or protected.startswith(path.rstrip("/") + "/")
+                or path.startswith(protected.rstrip("/") + "/")
+            )
+        ):
+            raise AgentCommandError("tox_parent_protected")
+
+    def _create_tox_stage(self, parent, purpose):
+        name = "tdcli_tox_" + purpose + "_" + uuid.uuid4().hex[:16]
+        path = str(parent.path).rstrip("/") + "/" + name
+        if self.operator_lookup(path) is not None:
+            raise AgentCommandError("tox_import_outcome_unknown")
+        try:
+            stage = parent.create("baseCOMP", name)
+        except Exception as error:
+            raise AgentCommandError("tox_load_failed") from error
+        if self.operator_lookup(path) is not stage or list(stage.children):
+            raise AgentCommandError("tox_import_outcome_unknown")
+        return stage
+
+    def _load_one_tox_root(self, stage, source):
+        before = {int(child.id) for child in stage.children}
+        try:
+            root = stage.loadByteArray(source, unwired=True, pattern=None)
+        except Exception as error:
+            raise AgentCommandError("tox_load_failed") from error
+        created = [child for child in stage.children if int(child.id) not in before]
+        if (
+            root is None
+            or len(created) != 1
+            or created[0] is not root
+            or str(root.family) != "COMP"
+            or self.operator_lookup(str(root.path)) is not root
+        ):
+            raise AgentCommandError("tox_load_failed")
+        return root
+
+    def _require_exact_stage_root(self, stage, root):
+        children = list(stage.children)
+        if len(children) != 1 or children[0] is not root:
+            raise AgentCommandError("tox_verification_failed")
+
+    def _tox_manifest(self, root, maximum, include_linkage=False):
+        try:
+            operators = self._bounded_subtree(root, maximum)
+            prefix = str(root.path).rstrip("/")
+            rows = []
+            for operator in operators:
+                path = str(operator.path)
+                if operator is not root and not path.startswith(prefix + "/"):
+                    raise RuntimeError("subtree escaped root")
+                op_type = str(operator.OPType)
+                entry = self.operator_catalog.entries.get(op_type)
+                if entry is None or entry.get("status") not in {"supported", "conditional"}:
+                    raise RuntimeError("unsupported Operator type")
+                relative = "." if operator is root else path[len(prefix) + 1 :]
+                if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", str(operator.name)) is None:
+                    raise RuntimeError("unsafe Operator name")
+                row = {
+                    "relative_path": relative,
+                    "name": str(operator.name),
+                    "op_type": op_type,
+                    "family": str(operator.family),
+                }
+                if include_linkage and str(operator.family) == "COMP":
+                    parameters = getattr(operator, "par", None)
+                    row["linkage"] = {
+                        "externaltox": self._tox_parameter(parameters, "externaltox", ""),
+                        "enableexternaltox": bool(
+                            self._tox_parameter(parameters, "enableexternaltox", False)
+                        ),
+                        "savebackup": bool(self._tox_parameter(parameters, "savebackup", False)),
+                        "subcompname": self._tox_parameter(parameters, "subcompname", ""),
+                        "relpath": self._tox_parameter(parameters, "relpath", "inherit"),
+                    }
+                rows.append(row)
+            rows.sort(key=lambda row: row["relative_path"])
+            if any(
+                self.operator_lookup(str(operator.path)) is not operator for operator in operators
+            ):
+                raise AgentCommandError("tox_import_outcome_unknown")
+            return rows
+        except AgentCommandError as error:
+            if error.code == "result_too_large":
+                raise AgentCommandError("tox_verification_failed") from error
+            raise
+        except Exception as error:
+            raise AgentCommandError("tox_verification_failed") from error
+
+    @staticmethod
+    def _tox_parameter(parameters, name, default):
+        parameter = getattr(parameters, name, None)
+        return default if parameter is None else parameter.eval()
+
+    @staticmethod
+    def _manifest_with_root_name(manifest, name):
+        return [
+            {**row, "name": name} if row["relative_path"] == "." else dict(row) for row in manifest
+        ]
+
+    def _require_tox_snapshot(self, root):
+        try:
+            for operator in self._bounded_subtree(root, 1000):
+                if str(operator.family) != "COMP":
+                    continue
+                parameters = getattr(operator, "par", None)
+                for parameter_name in ("externaltox", "subcompname"):
+                    parameter = getattr(parameters, parameter_name, None)
+                    if parameter is not None and str(parameter.eval() or ""):
+                        raise RuntimeError("external TOX linkage")
+                enabled = getattr(parameters, "enableexternaltox", None)
+                if enabled is not None and bool(enabled.eval()):
+                    raise RuntimeError("external TOX linkage enabled")
+                vfs = getattr(operator, "vfs", None)
+                if vfs is not None and len(vfs) != 0:
+                    raise RuntimeError("nonempty VFS")
+        except Exception as error:
+            if isinstance(error, AgentCommandError):
+                raise
+            raise AgentCommandError("tox_verification_failed") from error
+
+    def _destroy_exact(self, operator):
+        path = str(operator.path)
+        try:
+            operator.destroy()
+        except Exception:  # noqa: BLE001 - TouchDesigner raises tdError subclasses
+            return False
+        return self.operator_lookup(path) is None
+
+    def _cleanup_tox_stages(self, stage, backup_stage):
+        stage_clean = stage is None or self._destroy_exact(stage)
+        backup_clean = backup_stage is None or self._destroy_exact(backup_stage)
+        return stage_clean and backup_clean
 
     def _require_mutable_path(self, path):
         if path == "/":

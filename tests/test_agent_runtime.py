@@ -18,6 +18,7 @@ from td_cli.command_catalog import (
     MAX_TABLE_CELLS,
     MAX_TABLE_COLUMNS,
     MAX_TABLE_ROWS,
+    MAX_TOX_FILE_BYTES,
     OPERATOR_STATE_FIELDS,
     SetOperatorStateInput,
 )
@@ -61,6 +62,7 @@ def test_parameter_bounds_match_between_canonical_and_agent_contracts() -> None:
     assert OperatorControl.MAX_MULTI_OP_PATHS == MAX_MULTI_OP_PATHS
     assert OperatorControl.MAX_SEQUENCE_BLOCKS == MAX_SEQUENCE_BLOCKS
     assert OperatorControl.MAX_SEQUENCE_PARAMETERS == MAX_SEQUENCE_PARAMETERS
+    assert OperatorControl.MAX_TOX_FILE_BYTES == MAX_TOX_FILE_BYTES
 
 
 @pytest.fixture(autouse=True)
@@ -202,7 +204,13 @@ class FakeOperator:
         self.family = family
         self.children = []
         self.docked = []
-        self.par = SimpleNamespace()
+        self.par = SimpleNamespace(
+            externaltox=FakeDatParameter(""),
+            enableexternaltox=FakeDatParameter(False),
+            savebackup=FakeDatParameter(False),
+            subcompname=FakeDatParameter(""),
+            relpath=FakeDatParameter("inherit"),
+        )
         self.nodeX = 0
         self.nodeY = 0
         self.nodeWidth = 130
@@ -323,6 +331,406 @@ def test_operator_control_is_the_touchdesigner_graph_interface() -> None:
     }
     with pytest.raises(module.AgentCommandError, match="operator_not_found"):
         control.execute({"name": "ops.get", "input": {"operator_path": "/missing"}})
+
+
+class FakeToxGraphOperator:
+    next_id = 10_000
+
+    def __init__(self, name: str, parent=None, *, op_type="baseCOMP", family="COMP") -> None:
+        self._name = name
+        self._parent = parent
+        self.OPType = op_type
+        self.family = family
+        self.children = []
+        self.par = SimpleNamespace()
+        self.vfs = []
+        self.id = FakeToxGraphOperator.next_id
+        self.fail_copy_name = None
+        FakeToxGraphOperator.next_id += 1
+        if parent is not None:
+            parent.children.append(self)
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, value):
+        if self._parent is not None and any(
+            child is not self and child.name == value for child in self._parent.children
+        ):
+            raise RuntimeError("duplicate name")
+        self._name = value
+
+    @property
+    def path(self):
+        if self._parent is None:
+            return "/" + self.name
+        return str(self._parent.path).rstrip("/") + "/" + self.name
+
+    def parent(self):
+        return self._parent
+
+    def create(self, op_type, name):
+        assert op_type == "baseCOMP"
+        return FakeToxGraphOperator(name, self)
+
+    def loadTox(self, _path, *, unwired, pattern):
+        assert unwired is True and pattern is None
+        root = FakeToxGraphOperator("source_root", self)
+        FakeToxGraphOperator("nested", root)
+        return root
+
+    def saveByteArray(self):
+        def row(operator):
+            return {
+                "name": operator.name,
+                "op_type": operator.OPType,
+                "family": operator.family,
+                "children": [row(child) for child in operator.children],
+            }
+
+        return bytearray(json.dumps(row(self)).encode("utf-8"))
+
+    def loadByteArray(self, data, *, unwired, pattern):
+        assert unwired is True and pattern is None
+
+        def restore(payload, parent):
+            operator = FakeToxGraphOperator(
+                payload["name"], parent, op_type=payload["op_type"], family=payload["family"]
+            )
+            for child in payload["children"]:
+                restore(child, operator)
+            return operator
+
+        if bytes(data) == b"trusted-tox":
+            root = FakeToxGraphOperator("source_root", self)
+            FakeToxGraphOperator("nested", root)
+            return root
+        return restore(json.loads(bytes(data).decode("utf-8")), self)
+
+    def copy(self, source, *, name, includeDocked):
+        assert includeDocked is False
+        if self.fail_copy_name == name:
+            raise RuntimeError("injected copy failure")
+        copied = FakeToxGraphOperator(name, self, op_type=source.OPType, family=source.family)
+        for child in source.children:
+            copied.copy(child, name=child.name, includeDocked=False)
+        return copied
+
+    def destroy(self):
+        if self._parent is not None:
+            self._parent.children.remove(self)
+        self._parent = None
+
+
+def test_trusted_tox_import_stages_verifies_and_installs_one_bounded_root(tmp_path: Path) -> None:
+    project = FakeToxGraphOperator("project1")
+    imports = FakeToxGraphOperator("imports", project)
+
+    def lookup(path):
+        queue = [project]
+        while queue:
+            operator = queue.pop(0)
+            if str(operator.path) == path:
+                return operator
+            queue.extend(operator.children)
+        return None
+
+    tox = tmp_path / "asset.tox"
+    tox.write_bytes(b"trusted-tox")
+    result = make_control(lookup).execute(
+        {
+            "name": "ops.tox.import",
+            "input": {
+                "parent_path": "/project1/imports",
+                "tox_path": str(tox),
+                "allowlist_root": str(tmp_path),
+                "target_name": "asset",
+                "trusted": 1,
+                "replace": False,
+                "max_file_bytes": 1024,
+                "max_operators": 20,
+            },
+        }
+    )
+
+    assert result["path"] == "/project1/imports/asset"
+    assert result["operator_count"] == 2
+    assert result["trusted"] is True
+    assert result["replaced"] is False
+    assert result["rollback_performed"] is False
+    assert result["sha256"] == "5141a53e76767f869b88ee3e6c38818dcd46c09bd14f8362e2c78d6dc16ab7c5"
+    assert [child.name for child in imports.children] == ["asset"]
+
+
+def test_tox_import_rejects_missing_trust_before_touchdesigner_mutation(tmp_path: Path) -> None:
+    tox = tmp_path / "asset.tox"
+    tox.write_bytes(b"trusted-tox")
+    control = make_control(lambda _path: None)
+
+    with pytest.raises(module.AgentCommandError, match="tox_trust_required"):
+        control.execute(
+            {
+                "name": "ops.tox.import",
+                "input": {
+                    "parent_path": "/project1/imports",
+                    "tox_path": str(tox),
+                    "allowlist_root": str(tmp_path),
+                    "target_name": "asset",
+                    "trusted": False,
+                    "replace": False,
+                    "max_file_bytes": 1024,
+                    "max_operators": 20,
+                },
+            }
+        )
+
+
+def test_trusted_tox_import_verifies_backup_before_replacing_destination(tmp_path: Path) -> None:
+    project = FakeToxGraphOperator("project1")
+    imports = FakeToxGraphOperator("imports", project)
+    old = FakeToxGraphOperator("asset", imports)
+    FakeToxGraphOperator("old_child", old)
+
+    def lookup(path):
+        queue = [project]
+        while queue:
+            operator = queue.pop(0)
+            if str(operator.path) == path:
+                return operator
+            queue.extend(operator.children)
+        return None
+
+    tox = tmp_path / "asset.tox"
+    tox.write_bytes(b"trusted-tox")
+    result = make_control(lookup).execute(
+        {
+            "name": "ops.tox.import",
+            "input": {
+                "parent_path": "/project1/imports",
+                "tox_path": str(tox),
+                "allowlist_root": str(tmp_path),
+                "target_name": "asset",
+                "trusted": True,
+                "replace": True,
+                "max_file_bytes": 1024,
+                "max_operators": 20,
+            },
+        }
+    )
+
+    assert result["replaced"] is True
+    assert [child.name for child in imports.children] == ["asset"]
+    assert [child.name for child in imports.children[0].children] == ["nested"]
+
+
+def test_trusted_tox_import_restores_verified_backup_when_commit_fails(tmp_path: Path) -> None:
+    project = FakeToxGraphOperator("project1")
+    imports = FakeToxGraphOperator("imports", project)
+    old = FakeToxGraphOperator("asset", imports)
+    FakeToxGraphOperator("old_child", old)
+    imports.fail_copy_name = "asset"
+
+    def lookup(path):
+        queue = [project]
+        while queue:
+            operator = queue.pop(0)
+            if str(operator.path) == path:
+                return operator
+            queue.extend(operator.children)
+        return None
+
+    tox = tmp_path / "asset.tox"
+    tox.write_bytes(b"trusted-tox")
+    with pytest.raises(module.AgentCommandError, match="tox_commit_failed"):
+        make_control(lookup).execute(
+            {
+                "name": "ops.tox.import",
+                "input": {
+                    "parent_path": "/project1/imports",
+                    "tox_path": str(tox),
+                    "allowlist_root": str(tmp_path),
+                    "target_name": "asset",
+                    "trusted": True,
+                    "replace": True,
+                    "max_file_bytes": 1024,
+                    "max_operators": 20,
+                },
+            }
+        )
+
+    restored = lookup("/project1/imports/asset")
+    assert restored is not None
+    assert [child.name for child in restored.children] == ["old_child"]
+    assert [child.name for child in imports.children] == ["asset"]
+
+
+def test_trusted_tox_import_rejects_oversized_files_before_graph_mutation(tmp_path: Path) -> None:
+    tox = tmp_path / "asset.tox"
+    tox.write_bytes(b"too-large")
+    control = make_control(lambda _path: None)
+
+    with pytest.raises(module.AgentCommandError, match="tox_file_too_large"):
+        control.execute(
+            {
+                "name": "ops.tox.import",
+                "input": {
+                    "parent_path": "/project1/imports",
+                    "tox_path": str(tox),
+                    "allowlist_root": str(tmp_path),
+                    "target_name": "asset",
+                    "trusted": True,
+                    "replace": False,
+                    "max_file_bytes": 1,
+                    "max_operators": 20,
+                },
+            }
+        )
+
+
+def test_trusted_tox_import_rejects_existing_destination_without_staging(tmp_path: Path) -> None:
+    project = FakeToxGraphOperator("project1")
+    imports = FakeToxGraphOperator("imports", project)
+    existing = FakeToxGraphOperator("asset", imports)
+
+    def lookup(path):
+        return {
+            str(project.path): project,
+            str(imports.path): imports,
+            str(existing.path): existing,
+        }.get(path)
+
+    tox = tmp_path / "asset.tox"
+    tox.write_bytes(b"trusted-tox")
+    with pytest.raises(module.AgentCommandError, match="tox_destination_exists"):
+        make_control(lookup).execute(
+            {
+                "name": "ops.tox.import",
+                "input": {
+                    "parent_path": "/project1/imports",
+                    "tox_path": str(tox),
+                    "allowlist_root": str(tmp_path),
+                    "target_name": "asset",
+                    "trusted": True,
+                    "replace": False,
+                    "max_file_bytes": 1024,
+                    "max_operators": 20,
+                },
+            }
+        )
+
+    assert imports.children == [existing]
+
+
+def test_trusted_tox_import_fails_instead_of_truncating_subtree_inventory(tmp_path: Path) -> None:
+    project = FakeToxGraphOperator("project1")
+    imports = FakeToxGraphOperator("imports", project)
+
+    def lookup(path):
+        queue = [project]
+        while queue:
+            operator = queue.pop(0)
+            if str(operator.path) == path:
+                return operator
+            queue.extend(operator.children)
+        return None
+
+    tox = tmp_path / "asset.tox"
+    tox.write_bytes(b"trusted-tox")
+    with pytest.raises(module.AgentCommandError, match="tox_verification_failed"):
+        make_control(lookup).execute(
+            {
+                "name": "ops.tox.import",
+                "input": {
+                    "parent_path": "/project1/imports",
+                    "tox_path": str(tox),
+                    "allowlist_root": str(tmp_path),
+                    "target_name": "asset",
+                    "trusted": True,
+                    "replace": False,
+                    "max_file_bytes": 1024,
+                    "max_operators": 1,
+                },
+            }
+        )
+
+    assert imports.children == []
+
+
+def test_trusted_tox_inventory_accepts_locked_conditional_executable_types() -> None:
+    root = FakeToxGraphOperator("trusted")
+    executable = FakeToxGraphOperator("callback", root, op_type="executeDAT", family="DAT")
+    operators = {str(root.path): root, str(executable.path): executable}
+
+    manifest = make_control(operators.get)._tox_manifest(root, 2)
+
+    assert [row["op_type"] for row in manifest] == ["baseCOMP", "executeDAT"]
+
+
+def test_tox_backup_manifest_includes_critical_comp_linkage_state() -> None:
+    root = FakeToxGraphOperator("linked")
+    root.par.externaltox = FakeDatParameter("source.tox")
+    root.par.enableexternaltox = FakeDatParameter(True)
+    root.par.savebackup = FakeDatParameter(True)
+    root.par.subcompname = FakeDatParameter("inside")
+    root.par.relpath = FakeDatParameter("externaltox")
+
+    manifest = make_control({str(root.path): root}.get)._tox_manifest(root, 1, include_linkage=True)
+
+    assert manifest[0]["linkage"] == {
+        "externaltox": "source.tox",
+        "enableexternaltox": True,
+        "savebackup": True,
+        "subcompname": "inside",
+        "relpath": "externaltox",
+    }
+
+
+def test_tox_import_reports_unknown_when_final_snapshot_replaces_destination(
+    tmp_path: Path, monkeypatch
+) -> None:
+    project = FakeToxGraphOperator("project1")
+    imports = FakeToxGraphOperator("imports", project)
+
+    def lookup(path):
+        queue = [project]
+        while queue:
+            operator = queue.pop(0)
+            if str(operator.path) == path:
+                return operator
+            queue.extend(operator.children)
+        return None
+
+    control = make_control(lookup)
+    original = control._require_tox_snapshot
+
+    def replace_after_snapshot(operator):
+        original(operator)
+        if str(operator.path) == "/project1/imports/asset":
+            operator.destroy()
+            FakeToxGraphOperator("asset", imports)
+
+    monkeypatch.setattr(control, "_require_tox_snapshot", replace_after_snapshot)
+    tox = tmp_path / "asset.tox"
+    tox.write_bytes(b"trusted-tox")
+
+    with pytest.raises(module.AgentCommandError, match="tox_import_outcome_unknown"):
+        control.execute(
+            {
+                "name": "ops.tox.import",
+                "input": {
+                    "parent_path": "/project1/imports",
+                    "tox_path": str(tox),
+                    "allowlist_root": str(tmp_path),
+                    "target_name": "asset",
+                    "trusted": True,
+                    "replace": False,
+                    "max_file_bytes": 1024,
+                    "max_operators": 20,
+                },
+            }
+        )
 
 
 class FakeAttribute:

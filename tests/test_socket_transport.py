@@ -90,6 +90,12 @@ def test_locked_socketio_omissions_are_restored_at_the_public_result_boundary() 
     )
     assert copied["include_docked"] is False
 
+    imported = _normalize_command_result(
+        {"name": "ops.tox.import"},
+        {"trusted": 1, "replaced": 0, "rollback_performed": 0},
+    )
+    assert imported == {"trusted": True, "replaced": False, "rollback_performed": False}
+
     state = _normalize_command_result(
         {"name": "ops.state.get"},
         {

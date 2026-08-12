@@ -193,6 +193,26 @@ error is returned when the requested final state cannot be proven. Neither
 operation promises to rewrite DAT string literals, external systems, or every
 path-bearing expression/reference.
 
+Trusted TOX Import accepts one existing absolute local `.tox` beneath an
+explicit allowlist root. The caller must pass `--trusted`: a TOX is executable
+TouchDesigner project content and may run callbacks while loading. td-cli does
+not sandbox it and cannot undo filesystem, network, process, or other
+out-of-graph side effects. It does bound and verify the destination Operator
+graph, rejects external TOX linkage and VFS content, and never saves the
+project:
+
+```powershell
+td --json --instance <selector> ops tox import /project1/imports C:\approved\asset.tox C:\approved asset --trusted
+```
+
+Collisions are rejected unless `--replace` is supplied. Replacement first
+creates an in-memory backup and independently restores and compares it in an
+isolated temporary namespace. Only then may it remove the old destination. A
+failed commit restores and verifies that backup; cleanup, disappearance, and
+unprovable identity failures use distinct rollback or uncertain-outcome
+errors. Files default to a 64 MiB maximum and inventories to 256 Operators
+(maximum 1000); every bound fails rather than truncates.
+
 Common Operator state has its own read and atomic partial-update Commands. The
 locked common subset is node position, size, RGB color, comment, and the
 Bypass, Lock, Viewer, and Expose flags. Every requested field is read back;

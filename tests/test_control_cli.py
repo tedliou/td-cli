@@ -288,6 +288,37 @@ def test_typed_parameter_cli_commands_reach_submission_seam(monkeypatch, argv, e
                 },
             },
         ),
+        (
+            [
+                "--json",
+                "ops",
+                "tox",
+                "import",
+                "/project1/imports",
+                r"C:\approved\asset.tox",
+                r"C:\approved",
+                "asset",
+                "--trusted",
+                "--replace",
+                "--max-file-bytes",
+                "1024",
+                "--max-operators",
+                "20",
+            ],
+            {
+                "name": "ops.tox.import",
+                "input": {
+                    "parent_path": "/project1/imports",
+                    "tox_path": r"C:\approved\asset.tox",
+                    "allowlist_root": r"C:\approved",
+                    "target_name": "asset",
+                    "trusted": True,
+                    "replace": True,
+                    "max_file_bytes": 1024,
+                    "max_operators": 20,
+                },
+            },
+        ),
     ],
 )
 def test_every_typed_cli_command_reaches_the_public_submission_seam(

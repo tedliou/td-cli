@@ -14,7 +14,7 @@ from typer._click.exceptions import ClickException, UsageError
 
 from td_cli import __version__
 from td_cli.client import ClientError, DaemonClient
-from td_cli.command_catalog import MAX_DAT_CONTENT_BYTES, MAX_INSPECTION_ITEMS
+from td_cli.command_catalog import MAX_DAT_CONTENT_BYTES, MAX_INSPECTION_ITEMS, MAX_TOX_FILE_BYTES
 from td_cli.protocol import Command
 
 app = typer.Typer(no_args_is_help=True)
@@ -23,6 +23,7 @@ requests_app = typer.Typer()
 ops_app = typer.Typer()
 ops_state_app = typer.Typer()
 ops_hierarchy_app = typer.Typer()
+ops_tox_app = typer.Typer()
 dat_app = typer.Typer()
 dat_text_app = typer.Typer()
 dat_table_app = typer.Typer()
@@ -36,6 +37,7 @@ app.add_typer(requests_app, name="requests")
 app.add_typer(ops_app, name="ops")
 ops_app.add_typer(ops_state_app, name="state")
 ops_app.add_typer(ops_hierarchy_app, name="hierarchy")
+ops_app.add_typer(ops_tox_app, name="tox")
 app.add_typer(dat_app, name="dat")
 dat_app.add_typer(dat_text_app, name="text")
 dat_app.add_typer(dat_table_app, name="table")
@@ -845,6 +847,46 @@ def ops_move(
         specific_input={"allow_connected": allow_connected},
     )
     _command(ctx, "ops.move", dedicated, input, input_file, no_wait, request_id)
+
+
+@ops_tox_app.command("import")
+def ops_tox_import(
+    ctx: typer.Context,
+    parent_path: Annotated[str | None, typer.Argument()] = None,
+    tox_path: Annotated[str | None, typer.Argument()] = None,
+    allowlist_root: Annotated[str | None, typer.Argument()] = None,
+    target_name: Annotated[str | None, typer.Argument()] = None,
+    trusted: Annotated[bool, typer.Option("--trusted")] = False,
+    replace: Annotated[bool, typer.Option("--replace")] = False,
+    max_file_bytes: Annotated[int | None, typer.Option("--max-file-bytes")] = None,
+    max_operators: Annotated[int | None, typer.Option("--max-operators")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    identity = (parent_path, tox_path, allowlist_root, target_name)
+    if any(value is not None for value in identity) and not all(
+        value is not None for value in identity
+    ):
+        _fail(ctx, ClientError("invalid_arguments"))
+    if (
+        trusted or replace or max_file_bytes is not None or max_operators is not None
+    ) and parent_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = None
+    if all(value is not None for value in identity):
+        dedicated = {
+            "parent_path": parent_path,
+            "tox_path": tox_path,
+            "allowlist_root": allowlist_root,
+            "target_name": target_name,
+            "trusted": trusted,
+            "replace": replace,
+            "max_file_bytes": max_file_bytes if max_file_bytes is not None else MAX_TOX_FILE_BYTES,
+            "max_operators": max_operators if max_operators is not None else 256,
+        }
+    _command(ctx, "ops.tox.import", dedicated, input, input_file, no_wait, request_id)
 
 
 @ops_app.command("disconnect")

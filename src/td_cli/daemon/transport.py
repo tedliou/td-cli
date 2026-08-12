@@ -406,6 +406,10 @@ def _normalize_command_result(command: object, result: object) -> object:
         ]
     elif name == "ops.copy" and "include_docked" in normalized:
         normalized["include_docked"] = bool(normalized["include_docked"])
+    elif name == "ops.tox.import":
+        for field in ("trusted", "replaced", "rollback_performed"):
+            if field in normalized:
+                normalized[field] = bool(normalized[field])
     elif name in {"ops.state.get", "ops.state.set"} and isinstance(normalized.get("state"), dict):
         state = dict(normalized["state"])
         for field in OPERATOR_STATE_BOOLEAN_FIELDS:
