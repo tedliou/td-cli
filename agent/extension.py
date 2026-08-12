@@ -4,6 +4,7 @@ import base64
 import builtins
 import hashlib
 import json
+import math
 import os
 import uuid
 from pathlib import Path
@@ -53,6 +54,7 @@ class OperatorControl:
         "ops.disconnect": "_disconnect_operators",
         "ops.destroy": "_destroy_requested_operator",
         "ops.get": "_get_operator",
+        "ops.inspect": "_inspect_operator",
         "ops.move": "_move_operator",
         "ops.rename": "_rename_operator",
         "ops.state.get": "_get_operator_state",
@@ -90,6 +92,7 @@ class OperatorControl:
     MAX_SEQUENCE_BLOCKS = 128
     MAX_SEQUENCE_PARAMETERS = 256
     MAX_HIERARCHY_TRAVERSAL = 1000
+    INSPECTION_FAMILIES = ("CHOP", "DAT", "TOP", "SOP", "POP", "MAT")
 
     def __init__(self, operator_lookup, operator_catalog, protected_path=None):
         self.operator_lookup = operator_lookup
@@ -112,6 +115,195 @@ class OperatorControl:
 
     def _get_operator(self, payload):
         return self._operator_result(self._operator(payload))
+
+    def _inspect_operator(self, payload):
+        operator = self._operator(payload)
+        family = str(operator.family)
+        if family not in self.INSPECTION_FAMILIES:
+            raise AgentCommandError("operator_family_unsupported")
+        passive_fn = globals().get("passive")
+        inspected = passive_fn(operator) if callable(passive_fn) else operator
+        try:
+            result = {
+                "operator_path": str(operator.path),
+                "op_type": str(operator.OPType),
+                "family": family,
+                "memory": {
+                    "cpu_bytes": self._nonnegative_integer(inspected.cpuMemory),
+                    "gpu_bytes": self._nonnegative_integer(inspected.gpuMemory),
+                },
+                "cook": {
+                    "cpu_ms": self._finite_number(inspected.cpuCookTime),
+                    "gpu_ms": self._finite_number(inspected.gpuCookTime),
+                    "cooked_this_frame": bool(inspected.cookedThisFrame),
+                    "cooked_previous_frame": bool(inspected.cookedPreviousFrame),
+                },
+                "flags": {
+                    "display": bool(inspected.display),
+                    "render": bool(inspected.render),
+                },
+                "details": getattr(self, "_inspect_" + family.lower())(
+                    inspected, payload["max_items"]
+                ),
+            }
+        except AgentCommandError:
+            raise
+        except Exception as error:
+            if self.operator_lookup(str(operator.path)) is not operator:
+                raise AgentCommandError("family_inspection_outcome_unknown") from error
+            raise AgentCommandError("family_inspection_unavailable") from error
+        if self.operator_lookup(str(operator.path)) is not operator:
+            raise AgentCommandError("family_inspection_outcome_unknown")
+        return result
+
+    def _inspect_chop(self, operator, max_items):
+        channel_count = self._nonnegative_integer(operator.numChans)
+        self._require_inspection_bound(channel_count, max_items)
+        channels = list(operator.chans())
+        if len(channels) != channel_count:
+            raise AgentCommandError("family_inspection_unavailable")
+        return {
+            "channel_count": channel_count,
+            "channel_names": [str(channel.name) for channel in channels],
+            "sample_count": self._nonnegative_integer(operator.numSamples),
+            "sample_rate": self._finite_number(operator.rate),
+            "start_index": self._finite_number(operator.start),
+            "end_index": self._finite_number(operator.end),
+            "time_slice": bool(operator.isTimeSlice),
+            "export": bool(operator.export),
+            "export_changes": self._nonnegative_integer(operator.exportChanges),
+        }
+
+    def _inspect_dat(self, operator, _max_items):
+        is_table = bool(operator.isTable)
+        is_text = bool(operator.isText)
+        if is_table == is_text:
+            raise AgentCommandError("family_inspection_unavailable")
+        editing_file = operator.editingFile
+        return {
+            "dat_kind": "table" if is_table else "text",
+            "editable": bool(operator.isEditable),
+            "row_count": self._nonnegative_integer(operator.numRows),
+            "column_count": self._nonnegative_integer(operator.numCols),
+            "export": bool(operator.export),
+            "editing_file": None if editing_file is None else str(editing_file),
+        }
+
+    def _inspect_top(self, operator, _max_items):
+        return {
+            "resolution": {
+                "width": self._nonnegative_integer(operator.width),
+                "height": self._nonnegative_integer(operator.height),
+                "depth": self._nonnegative_integer(operator.depth),
+            },
+            "aspect": self._finite_number(operator.aspect),
+            "aspect_width": self._finite_number(operator.aspectWidth),
+            "aspect_height": self._finite_number(operator.aspectHeight),
+            "pixel_format": str(operator.pixelFormat),
+            "pixel_format_name": str(operator.pixelFormatName),
+            "current_pass": self._integer(operator.curPass),
+            "newest_slice_w_offset": self._integer(operator.newestSliceWOffset),
+        }
+
+    def _inspect_sop(self, operator, max_items):
+        return {
+            "counts": {
+                "points": self._nonnegative_integer(operator.numPoints),
+                "primitives": self._nonnegative_integer(operator.numPrims),
+                "vertices": self._nonnegative_integer(operator.numVertices),
+            },
+            "bounds": self._inspection_bounds(operator),
+            "attributes": {
+                "point": self._inspection_attributes(operator.pointAttribs, max_items),
+                "vertex": self._inspection_attributes(operator.vertexAttribs, max_items),
+                "primitive": self._inspection_attributes(operator.primAttribs, max_items),
+            },
+            "groups": {
+                "point": self._inspection_names(operator.pointGroups, max_items),
+                "primitive": self._inspection_names(operator.primGroups, max_items),
+            },
+            "template": bool(operator.template),
+            "compare": bool(operator.compare),
+        }
+
+    def _inspect_pop(self, operator, _max_items):
+        return {
+            "dimension": [self._nonnegative_integer(value) for value in list(operator.dimension)],
+            "max_vertices_per_line_strip": self._nonnegative_integer(operator.maxVertsPerLineStrip),
+            "allocated": {
+                "points": self._nonnegative_integer(operator.numPoints(max=True)),
+                "primitives": self._nonnegative_integer(operator.numPrims(max=True)),
+                "vertices": self._nonnegative_integer(operator.numVerts(max=True)),
+            },
+            "template": bool(operator.template),
+            "compare": bool(operator.compare),
+        }
+
+    @staticmethod
+    def _inspect_mat(_operator, _max_items):
+        return {}
+
+    @classmethod
+    def _inspection_bounds(cls, operator):
+        result = {
+            name: [cls._finite_number(value) for value in list(getattr(operator, name))]
+            for name in ("min", "max", "center", "size")
+        }
+        if any(len(position) != 3 for position in result.values()):
+            raise AgentCommandError("family_inspection_unavailable")
+        return result
+
+    @classmethod
+    def _inspection_attributes(cls, attributes, max_items):
+        cls._require_inspection_bound(len(attributes), max_items)
+        snapshot = list(attributes)
+        if len(snapshot) != len(attributes):
+            raise AgentCommandError("family_inspection_unavailable")
+        return [
+            {
+                "name": str(attribute.name),
+                "value_type": getattr(attribute.type, "__name__", str(attribute.type)),
+                "size": cls._nonnegative_integer(attribute.size),
+                "is_array": bool(attribute.isArray),
+                "array_size": cls._nonnegative_integer(attribute.arraySize),
+                "matrix_rows": cls._nonnegative_integer(attribute.numMatRows),
+                "matrix_columns": cls._nonnegative_integer(attribute.numMatCols),
+            }
+            for attribute in snapshot
+        ]
+
+    @classmethod
+    def _inspection_names(cls, values, max_items):
+        names = list(values.keys()) if isinstance(values, dict) else list(values)
+        cls._require_inspection_bound(len(names), max_items)
+        return sorted(str(name) for name in names)
+
+    @staticmethod
+    def _require_inspection_bound(count, max_items):
+        if count > max_items:
+            raise AgentCommandError("result_too_large")
+
+    @staticmethod
+    def _nonnegative_integer(value):
+        if type(value) is not int or value < 0:
+            raise AgentCommandError("family_inspection_unavailable")
+        return value
+
+    @staticmethod
+    def _integer(value):
+        if type(value) is int:
+            return value
+        if type(value) is float and math.isfinite(value) and value.is_integer():
+            return int(value)
+        else:
+            raise AgentCommandError("family_inspection_unavailable")
+
+    @staticmethod
+    def _finite_number(value):
+        number = float(value)
+        if not math.isfinite(number):
+            raise AgentCommandError("family_inspection_unavailable")
+        return number
 
     def _get_text_dat(self, payload):
         operator = self._require_dat(payload, "textDAT")

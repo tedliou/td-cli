@@ -41,6 +41,13 @@ class ConnectionsInput(OperatorInput):
     max_connections: int = Field(default=256, ge=1, le=1000)
 
 
+MAX_INSPECTION_ITEMS = 100
+
+
+class InspectOperatorInput(OperatorInput):
+    max_items: int = Field(default=MAX_INSPECTION_ITEMS, ge=1, le=1000)
+
+
 class OperatorColorInput(StrictModel):
     red: float = Field(ge=0, le=1, allow_inf_nan=False)
     green: float = Field(ge=0, le=1, allow_inf_nan=False)
@@ -437,6 +444,7 @@ class CommandCatalog:
 COMMAND_CATALOG = CommandCatalog(
     (
         CommandDefinition("ops.get", OperatorInput, batchable=True),
+        CommandDefinition("ops.inspect", InspectOperatorInput, batchable=True),
         CommandDefinition("ops.children", ChildrenInput, batchable=True),
         CommandDefinition("ops.connections", ConnectionsInput, batchable=True),
         CommandDefinition("ops.hierarchy.connections", ConnectionsInput, batchable=True),
@@ -475,6 +483,7 @@ CommandInput = (
     OperatorInput
     | ChildrenInput
     | ConnectionsInput
+    | InspectOperatorInput
     | SetOperatorStateInput
     | TextDatReadInput
     | TextDatSetInput

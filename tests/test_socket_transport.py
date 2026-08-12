@@ -108,6 +108,19 @@ def test_locked_socketio_omissions_are_restored_at_the_public_result_boundary() 
     assert state["state"]["viewer"] is True
     assert state["state"]["expose"] is False
 
+    inspection = _normalize_command_result(
+        {"name": "ops.inspect"},
+        {
+            "family": "CHOP",
+            "cook": {"cooked_this_frame": 1, "cooked_previous_frame": 0},
+            "flags": {"display": 1, "render": 0},
+            "details": {"time_slice": 0, "export": 1},
+        },
+    )
+    assert inspection["cook"] == {"cooked_this_frame": True, "cooked_previous_frame": False}
+    assert inspection["flags"] == {"display": True, "render": False}
+    assert inspection["details"] == {"time_slice": False, "export": True}
+
     batched = _normalize_command_result(
         {
             "name": "batch.execute",

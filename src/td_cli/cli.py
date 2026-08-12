@@ -14,7 +14,7 @@ from typer._click.exceptions import ClickException, UsageError
 
 from td_cli import __version__
 from td_cli.client import ClientError, DaemonClient
-from td_cli.command_catalog import MAX_DAT_CONTENT_BYTES
+from td_cli.command_catalog import MAX_DAT_CONTENT_BYTES, MAX_INSPECTION_ITEMS
 from td_cli.protocol import Command
 
 app = typer.Typer(no_args_is_help=True)
@@ -384,6 +384,29 @@ def ops_get(
         no_wait,
         request_id,
     )
+
+
+@ops_app.command("inspect")
+def ops_inspect(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    max_items: Annotated[int | None, typer.Option("--max-items")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    if max_items is not None and operator_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = (
+        {
+            "operator_path": operator_path,
+            "max_items": max_items if max_items is not None else MAX_INSPECTION_ITEMS,
+        }
+        if operator_path is not None
+        else None
+    )
+    _command(ctx, "ops.inspect", dedicated, input, input_file, no_wait, request_id)
 
 
 @ops_state_app.command("get")

@@ -56,6 +56,10 @@ _Avoid_: hierarchy wire, parent connection
 A top-to-bottom parent/child connection between compatible Object COMPs or compatible Panel COMPs. It is not a Regular Connection and never connects across the Object and Panel hierarchy kinds.
 _Avoid_: regular wire, COMP data connection
 
+**Operator Family Inspection**:
+A bounded, read-only snapshot of the latest cached CHOP, DAT, TOP, SOP, POP, or MAT family metadata for one Operator. It does not force a cook, return family content, or replace common Operator state, Parameter, connection, or DAT content Commands.
+_Avoid_: Operator dump, arbitrary attribute inspection, family content preview
+
 **Parameter Value**:
 A typed boolean, integer, number, string, one canonical Operator Path (or null),
 or a bounded ordered list of canonical Operator Paths, read from or written to
