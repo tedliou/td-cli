@@ -19,6 +19,21 @@ def test_command_catalog_is_the_single_command_contract() -> None:
         Command.model_validate({"name": "future.command", "input": {"operator_path": "/project1"}})
 
 
+def test_family_inspection_input_is_strict_bounded_and_batchable() -> None:
+    assert COMMAND_CATALOG.validate_input("ops.inspect", {"operator_path": "/project1/source"}) == {
+        "operator_path": "/project1/source",
+        "max_items": 100,
+    }
+    assert "ops.inspect" in COMMAND_CATALOG.batch_names
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {
+                "name": "ops.inspect",
+                "input": {"operator_path": "/project1/source", "max_items": 1001},
+            }
+        )
+
+
 def test_protocol_rejects_unknown_and_coerced_command_input_fields() -> None:
     with pytest.raises(ValidationError):
         OperatorInput.model_validate({"operator_path": 12})
@@ -97,6 +112,90 @@ def test_protocol_v1_typed_commands_validate_and_canonicalize(
     payload: dict[str, object], canonical: str
 ) -> None:
     assert Command.model_validate(payload).canonical_json() == canonical
+
+
+def test_parameter_sources_and_sequences_are_strict_and_bounded() -> None:
+    bind = Command.model_validate(
+        {
+            "name": "parameters.set",
+            "input": {
+                "operator_path": "/project1/target",
+                "parameter": "Gain",
+                "mode": "bind",
+                "source": {
+                    "kind": "bind_parameter",
+                    "operator_path": "/project1/source",
+                    "parameter": "Gain",
+                },
+            },
+        }
+    )
+    assert bind.input.source.parameter == "Gain"
+
+    multi = Command.model_validate(
+        {
+            "name": "parameters.set",
+            "input": {
+                "operator_path": "/project1/target",
+                "parameter": "Targets",
+                "mode": "constant",
+                "value": ["/project1/a", "/project1/b"],
+            },
+        }
+    )
+    assert multi.input.value == ["/project1/a", "/project1/b"]
+
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {
+                "name": "parameters.set",
+                "input": {
+                    "operator_path": "/project1/target",
+                    "parameter": "Gain",
+                    "mode": "bind",
+                    "source": {
+                        "kind": "bind_parameter",
+                        "operator_path": "/project1/source",
+                        "parameter": "Gain",
+                        "channel": "chan1",
+                    },
+                },
+            }
+        )
+
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {
+                "name": "parameters.set",
+                "input": {
+                    "operator_path": "/project1/target",
+                    "parameter": "Gain",
+                    "mode": "bind",
+                    "source": {
+                        "kind": "bind_parameter",
+                        "operator_path": "/project1/source",
+                        "parameter": "Gain.__class__",
+                    },
+                },
+            }
+        )
+
+    sequence = Command.model_validate(
+        {
+            "name": "parameters.sequence.replace",
+            "input": {
+                "operator_path": "/project1/target",
+                "sequence": "Items",
+                "blocks": [
+                    {
+                        "name": "first",
+                        "parameters": [{"parameter": "Value", "mode": "constant", "value": 1.5}],
+                    }
+                ],
+            },
+        }
+    )
+    assert sequence.input.blocks[0].parameters[0].value == 1.5
 
 
 @pytest.mark.parametrize(
@@ -314,6 +413,424 @@ def test_network_mutation_commands_are_strict_bounded_and_not_batchable() -> Non
 def test_v011_commands_validate_at_the_protocol_seam(payload, expected_input) -> None:
     command = Command.model_validate(payload)
     assert command.input.model_dump() == expected_input
+
+
+def test_connections_command_has_a_bounded_read_only_contract() -> None:
+    command = Command.model_validate(
+        {
+            "name": "ops.connections",
+            "input": {"operator_path": "/project1/source", "max_connections": 12},
+        }
+    )
+
+    assert command.input.model_dump() == {
+        "operator_path": "/project1/source",
+        "max_connections": 12,
+    }
+    assert "ops.connections" in COMMAND_CATALOG.batch_names
+
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {
+                "name": "ops.connections",
+                "input": {"operator_path": "/project1/source", "max_connections": 1001},
+            }
+        )
+
+
+def test_hierarchy_connection_commands_are_distinct_strict_and_bounded() -> None:
+    inventory = Command.model_validate(
+        {
+            "name": "ops.hierarchy.connections",
+            "input": {"operator_path": "/project1/parent", "max_connections": 12},
+        }
+    )
+    connected = Command.model_validate(
+        {
+            "name": "ops.hierarchy.connect",
+            "input": {
+                "source_path": "/project1/parent",
+                "target_path": "/project1/child",
+                "replace": True,
+            },
+        }
+    )
+    disconnected = Command.model_validate(
+        {
+            "name": "ops.hierarchy.disconnect",
+            "input": {
+                "source_path": "/project1/parent",
+                "target_path": "/project1/child",
+            },
+        }
+    )
+
+    assert inventory.input.model_dump() == {
+        "operator_path": "/project1/parent",
+        "max_connections": 12,
+    }
+    assert connected.input.model_dump() == {
+        "source_path": "/project1/parent",
+        "target_path": "/project1/child",
+        "output_index": 0,
+        "input_index": 0,
+        "replace": True,
+    }
+    assert disconnected.input.model_dump() == {
+        "source_path": "/project1/parent",
+        "target_path": "/project1/child",
+        "output_index": 0,
+        "input_index": 0,
+    }
+    assert "ops.hierarchy.connections" in COMMAND_CATALOG.batch_names
+    assert "ops.hierarchy.connect" not in COMMAND_CATALOG.batch_names
+    assert "ops.hierarchy.disconnect" not in COMMAND_CATALOG.batch_names
+
+    invalid = [
+        {
+            "name": "ops.hierarchy.connections",
+            "input": {"operator_path": "/project1/parent", "max_connections": 1001},
+        },
+        {
+            "name": "ops.hierarchy.connect",
+            "input": {
+                "source_path": "/project1/../parent",
+                "target_path": "/project1/child",
+            },
+        },
+        {
+            "name": "ops.hierarchy.disconnect",
+            "input": {
+                "source_path": "/project1/parent",
+                "target_path": "/project1/child",
+                "input_index": 256,
+            },
+        },
+    ]
+    for payload in invalid:
+        with pytest.raises(ValidationError):
+            Command.model_validate(payload)
+
+
+def test_operator_state_get_is_a_strict_batchable_read_contract() -> None:
+    command = Command.model_validate(
+        {"name": "ops.state.get", "input": {"operator_path": "/project1/source"}}
+    )
+
+    assert command.input.model_dump() == {"operator_path": "/project1/source"}
+    assert "ops.state.get" in COMMAND_CATALOG.batch_names
+
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {
+                "name": "ops.state.get",
+                "input": {"operator_path": "/project1/source", "attribute": "storage"},
+            }
+        )
+
+
+def test_operator_state_set_is_a_strict_bounded_non_batchable_patch() -> None:
+    command = Command.model_validate(
+        {
+            "name": "ops.state.set",
+            "input": {
+                "operator_path": "/project1/source",
+                "node_x": -100,
+                "node_y": 200,
+                "node_width": 140,
+                "node_height": 80,
+                "color": {"red": 0.1, "green": 0.2, "blue": 0.3},
+                "comment": "source node",
+                "bypass": True,
+                "lock": False,
+                "viewer": True,
+                "expose": False,
+            },
+        }
+    )
+
+    assert command.input.model_dump(exclude_none=True) == {
+        "operator_path": "/project1/source",
+        "node_x": -100,
+        "node_y": 200,
+        "node_width": 140,
+        "node_height": 80,
+        "color": {"red": 0.1, "green": 0.2, "blue": 0.3},
+        "comment": "source node",
+        "bypass": True,
+        "lock": False,
+        "viewer": True,
+        "expose": False,
+    }
+    assert "ops.state.set" not in COMMAND_CATALOG.batch_names
+
+    invalid_inputs = [
+        {"operator_path": "/project1/source"},
+        {"operator_path": "/project1/source", "node_width": 0},
+        {"operator_path": "/project1/source", "comment": "x" * 4097},
+        {"operator_path": "/project1/source", "bypass": 1},
+        {"operator_path": "/project1/source", "color": {"red": 0.1, "green": 0.2}},
+        {
+            "operator_path": "/project1/source",
+            "color": {"red": 0.1, "green": float("nan"), "blue": 0.3},
+        },
+        {"operator_path": "/project1/source", "storage": {"unsafe": True}},
+    ]
+    for invalid_input in invalid_inputs:
+        with pytest.raises(ValidationError):
+            Command.model_validate({"name": "ops.state.set", "input": invalid_input})
+
+
+def test_text_dat_commands_are_strict_utf8_bounded_contracts() -> None:
+    read = Command.model_validate(
+        {"name": "dat.text.get", "input": {"operator_path": "/project1/notes", "max_bytes": 128}}
+    )
+    write = Command.model_validate(
+        {"name": "dat.text.set", "input": {"operator_path": "/project1/notes", "text": "繁體\n"}}
+    )
+
+    assert read.input.model_dump() == {"operator_path": "/project1/notes", "max_bytes": 128}
+    assert write.input.model_dump() == {"operator_path": "/project1/notes", "text": "繁體\n"}
+    assert "dat.text.get" in COMMAND_CATALOG.batch_names
+    assert "dat.text.set" not in COMMAND_CATALOG.batch_names
+
+    for payload in (
+        {"operator_path": "/project1/notes", "max_bytes": 0},
+        {"operator_path": "/project1/notes", "text": "界" * 64_854},
+        {"operator_path": "/project1/notes", "text": "ok", "file": "unsafe.txt"},
+    ):
+        with pytest.raises(ValidationError):
+            Command.model_validate(
+                {"name": "dat.text.set" if "text" in payload else "dat.text.get", "input": payload}
+            )
+
+    worst_case = Command.model_validate(
+        {
+            "name": "dat.text.set",
+            "input": {"operator_path": "/project1/notes", "text": "\u0001" * 32_768},
+        }
+    )
+    assert len(worst_case.model_dump_json().encode("utf-8")) < 256 * 1024
+
+
+def test_table_dat_commands_require_bounded_rectangular_string_cells() -> None:
+    read = Command.model_validate(
+        {
+            "name": "dat.table.get",
+            "input": {
+                "operator_path": "/project1/grid",
+                "row_offset": 2,
+                "column_offset": 3,
+                "row_count": 4,
+                "column_count": 5,
+                "max_bytes": 1024,
+            },
+        }
+    )
+    replace = Command.model_validate(
+        {
+            "name": "dat.table.replace",
+            "input": {"operator_path": "/project1/grid", "rows": [["甲", ""], ["1", "2"]]},
+        }
+    )
+    patch = Command.model_validate(
+        {
+            "name": "dat.table.patch",
+            "input": {
+                "operator_path": "/project1/grid",
+                "row_offset": 1,
+                "column_offset": 2,
+                "rows": [["x", "y"]],
+            },
+        }
+    )
+
+    assert read.input.model_dump() == {
+        "operator_path": "/project1/grid",
+        "row_offset": 2,
+        "column_offset": 3,
+        "row_count": 4,
+        "column_count": 5,
+        "max_bytes": 1024,
+    }
+    assert replace.input.model_dump() == {
+        "operator_path": "/project1/grid",
+        "rows": [["甲", ""], ["1", "2"]],
+    }
+    assert patch.input.model_dump() == {
+        "operator_path": "/project1/grid",
+        "row_offset": 1,
+        "column_offset": 2,
+        "rows": [["x", "y"]],
+    }
+    assert "dat.table.get" in COMMAND_CATALOG.batch_names
+    assert "dat.table.replace" not in COMMAND_CATALOG.batch_names
+    assert "dat.table.patch" not in COMMAND_CATALOG.batch_names
+
+    invalid_commands = (
+        ("dat.table.get", {"operator_path": "/project1/grid", "row_count": 65, "column_count": 65}),
+        ("dat.table.replace", {"operator_path": "/project1/grid", "rows": [["a"], ["b", "c"]]}),
+        ("dat.table.replace", {"operator_path": "/project1/grid", "rows": [[1]]}),
+        ("dat.table.replace", {"operator_path": "/project1/grid", "rows": [[]]}),
+        ("dat.table.patch", {"operator_path": "/project1/grid", "rows": []}),
+        ("dat.table.patch", {"operator_path": "/project1/grid", "rows": [["界" * 5_462]]}),
+    )
+    for name, payload in invalid_commands:
+        with pytest.raises(ValidationError):
+            Command.model_validate({"name": name, "input": payload})
+
+
+def test_destroy_command_requires_explicit_bounded_destructive_options() -> None:
+    command = Command.model_validate(
+        {
+            "name": "ops.destroy",
+            "input": {
+                "operator_path": "/project1/old",
+                "recursive": True,
+                "allow_connected": True,
+                "max_operators": 20,
+            },
+        }
+    )
+
+    assert command.input.model_dump() == {
+        "operator_path": "/project1/old",
+        "recursive": True,
+        "allow_connected": True,
+        "max_operators": 20,
+    }
+    assert "ops.destroy" not in COMMAND_CATALOG.batch_names
+
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {
+                "name": "ops.destroy",
+                "input": {"operator_path": "/project1/old", "max_operators": 1001},
+            }
+        )
+
+
+def test_copy_command_has_exact_destination_and_bounded_subtree_contract() -> None:
+    command = Command.model_validate(
+        {
+            "name": "ops.copy",
+            "input": {
+                "source_path": "/project1/source",
+                "target_parent_path": "/project1/group",
+                "new_name": "copy",
+                "node_x": -20,
+                "node_y": 40,
+                "include_docked": True,
+                "max_operators": 20,
+            },
+        }
+    )
+
+    assert command.input.model_dump() == {
+        "source_path": "/project1/source",
+        "target_parent_path": "/project1/group",
+        "new_name": "copy",
+        "node_x": -20,
+        "node_y": 40,
+        "include_docked": True,
+        "max_operators": 20,
+    }
+    assert "ops.copy" not in COMMAND_CATALOG.batch_names
+
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {
+                "name": "ops.copy",
+                "input": {
+                    "source_path": "/project1/source",
+                    "target_parent_path": "/project1/group",
+                    "new_name": "bad/name",
+                },
+            }
+        )
+
+
+def test_move_command_exposes_copy_destroy_and_detachment_authorization() -> None:
+    command = Command.model_validate(
+        {
+            "name": "ops.move",
+            "input": {
+                "source_path": "/project1/source",
+                "target_parent_path": "/project1/group",
+                "new_name": "moved",
+                "node_x": 10,
+                "node_y": 20,
+                "allow_connected": True,
+                "max_operators": 30,
+            },
+        }
+    )
+
+    assert command.input.model_dump() == {
+        "source_path": "/project1/source",
+        "target_parent_path": "/project1/group",
+        "new_name": "moved",
+        "node_x": 10,
+        "node_y": 20,
+        "allow_connected": True,
+        "max_operators": 30,
+    }
+    assert "ops.move" not in COMMAND_CATALOG.batch_names
+
+
+def test_trusted_tox_import_has_a_strict_bounded_non_batchable_contract() -> None:
+    command = Command.model_validate(
+        {
+            "name": "ops.tox.import",
+            "input": {
+                "parent_path": "/project1/imports",
+                "tox_path": r"C:\approved\asset.tox",
+                "allowlist_root": r"C:\approved",
+                "target_name": "asset",
+                "trusted": True,
+                "replace": True,
+                "max_file_bytes": 1024,
+                "max_operators": 20,
+            },
+        }
+    )
+
+    assert command.input.model_dump() == {
+        "parent_path": "/project1/imports",
+        "tox_path": r"C:\approved\asset.tox",
+        "allowlist_root": r"C:\approved",
+        "target_name": "asset",
+        "trusted": True,
+        "replace": True,
+        "max_file_bytes": 1024,
+        "max_operators": 20,
+    }
+    assert "ops.tox.import" not in COMMAND_CATALOG.batch_names
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("trusted", False),
+        ("tox_path", "asset.tox"),
+        ("tox_path", r"C:\approved\asset.txt"),
+        ("allowlist_root", r"\\server\share"),
+        ("max_file_bytes", 67_108_865),
+        ("max_operators", 1001),
+    ],
+)
+def test_trusted_tox_import_rejects_untrusted_or_unbounded_input(field: str, value: object) -> None:
+    payload = {
+        "parent_path": "/project1/imports",
+        "tox_path": r"C:\approved\asset.tox",
+        "allowlist_root": r"C:\approved",
+        "target_name": "asset",
+        "trusted": True,
+    }
+    payload[field] = value
+
+    with pytest.raises(ValidationError):
+        Command.model_validate({"name": "ops.tox.import", "input": payload})
 
 
 @pytest.mark.parametrize("name", ["ops.rename", "ops.disconnect", "ops.connect"])

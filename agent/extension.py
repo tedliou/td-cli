@@ -4,10 +4,17 @@ import base64
 import builtins
 import hashlib
 import json
+import math
 import os
+import re
 import uuid
 from pathlib import Path
 from typing import ClassVar
+
+try:
+    import td as _td_runtime
+except ImportError:  # Outside the locked TouchDesigner runtime during unit tests.
+    _td_runtime = None
 
 if not hasattr(builtins, "_td_cli_runtime_session_id"):
     builtins._td_cli_runtime_session_id = str(uuid.uuid4())
@@ -44,19 +51,63 @@ class OperatorControl:
     HANDLERS: ClassVar[dict] = {
         "ops.children": "_children",
         "ops.connect": "_connect_operators",
+        "ops.connections": "_connections",
+        "ops.hierarchy.connections": "_hierarchy_connections",
+        "ops.hierarchy.connect": "_connect_hierarchy",
+        "ops.hierarchy.disconnect": "_disconnect_hierarchy",
+        "ops.copy": "_copy_operator",
         "ops.create": "_create_operator",
         "ops.disconnect": "_disconnect_operators",
+        "ops.destroy": "_destroy_requested_operator",
         "ops.get": "_get_operator",
+        "ops.inspect": "_inspect_operator",
+        "ops.move": "_move_operator",
         "ops.rename": "_rename_operator",
+        "ops.state.get": "_get_operator_state",
+        "ops.state.set": "_set_operator_state",
+        "ops.tox.import": "_import_tox",
+        "dat.text.get": "_get_text_dat",
+        "dat.text.set": "_set_text_dat",
+        "dat.table.get": "_get_table_dat",
+        "dat.table.replace": "_replace_table_dat",
+        "dat.table.patch": "_patch_table_dat",
         "parameters.get": "_get_parameter",
         "parameters.list": "_list_parameters",
         "parameters.pulse": "_pulse_parameter",
         "parameters.set": "_set_parameter",
+        "parameters.sequence.get": "_get_parameter_sequence",
+        "parameters.sequence.replace": "_replace_parameter_sequence",
     }
+    STATE_FIELDS: ClassVar[tuple] = (
+        ("node_x", "nodeX", "integer"),
+        ("node_y", "nodeY", "integer"),
+        ("node_width", "nodeWidth", "integer"),
+        ("node_height", "nodeHeight", "integer"),
+        ("color", "color", "color"),
+        ("comment", "comment", "string"),
+        ("bypass", "bypass", "boolean"),
+        ("viewer", "viewer", "boolean"),
+        ("expose", "expose", "boolean"),
+        ("lock", "lock", "boolean"),
+    )
+    MAX_DAT_CONTENT_BYTES = 32_768
+    MAX_TABLE_ROWS = 256
+    MAX_TABLE_COLUMNS = 256
+    MAX_TABLE_CELLS = 4096
+    MAX_TABLE_CELL_BYTES = 16_384
+    MAX_MULTI_OP_PATHS = 256
+    MAX_SEQUENCE_BLOCKS = 128
+    MAX_SEQUENCE_PARAMETERS = 256
+    MAX_HIERARCHY_TRAVERSAL = 1000
+    MAX_INSPECTION_STRING_BYTES = 4096
+    MAX_TOX_FILE_BYTES = 67_108_864
+    INSPECTION_FAMILIES = ("CHOP", "DAT", "TOP", "SOP", "POP", "MAT")
 
-    def __init__(self, operator_lookup, operator_catalog):
+    def __init__(self, operator_lookup, operator_catalog, protected_path=None, passive_lookup=None):
         self.operator_lookup = operator_lookup
         self.operator_catalog = operator_catalog
+        self.protected_path = str(protected_path) if protected_path is not None else None
+        self.passive_lookup = passive_lookup or (lambda operator: operator)
 
     def execute(self, command):
         name = command["name"]
@@ -68,12 +119,558 @@ class OperatorControl:
 
     def _operator(self, payload):
         operator = self.operator_lookup(payload["operator_path"])
-        if operator is None:
+        if operator is None or str(operator.path) != payload["operator_path"]:
             raise AgentCommandError("operator_not_found")
         return operator
 
     def _get_operator(self, payload):
         return self._operator_result(self._operator(payload))
+
+    def _inspect_operator(self, payload):
+        operator = self._operator(payload)
+        family = str(operator.family)
+        if family not in self.INSPECTION_FAMILIES:
+            raise AgentCommandError("operator_family_unsupported")
+        inspected = self.passive_lookup(operator)
+        try:
+            result = {
+                "operator_path": str(operator.path),
+                "op_type": str(operator.OPType),
+                "family": family,
+                "snapshot": "passive",
+                "memory": {
+                    "cpu_bytes": self._nonnegative_integer(inspected.cpuMemory),
+                    "gpu_bytes": self._nonnegative_integer(inspected.gpuMemory),
+                },
+                "cook": {
+                    "cpu_ms": self._finite_number(inspected.cpuCookTime),
+                    "gpu_ms": self._finite_number(inspected.gpuCookTime),
+                    "cooked_this_frame": bool(inspected.cookedThisFrame),
+                    "cooked_previous_frame": bool(inspected.cookedPreviousFrame),
+                },
+                "flags": {
+                    "display": bool(inspected.display),
+                    "render": bool(inspected.render),
+                },
+                "details": getattr(self, "_inspect_" + family.lower())(
+                    inspected, payload["max_items"]
+                ),
+            }
+        except AgentCommandError:
+            raise
+        except Exception as error:
+            if self.operator_lookup(str(operator.path)) is not operator:
+                raise AgentCommandError("family_inspection_outcome_unknown") from error
+            raise AgentCommandError("family_inspection_unavailable") from error
+        if self.operator_lookup(str(operator.path)) is not operator:
+            raise AgentCommandError("family_inspection_outcome_unknown")
+        return result
+
+    def _inspect_chop(self, operator, max_items):
+        channel_count = self._nonnegative_integer(operator.numChans)
+        self._require_inspection_bound(channel_count, max_items)
+        channels = list(operator.chans())
+        if len(channels) != channel_count:
+            raise AgentCommandError("family_inspection_unavailable")
+        return {
+            "channel_count": channel_count,
+            "channel_names": [self._inspection_string(channel.name) for channel in channels],
+            "sample_count": self._nonnegative_integer(operator.numSamples),
+            "sample_rate": self._finite_number(operator.rate),
+            "start_index": self._finite_number(operator.start),
+            "end_index": self._finite_number(operator.end),
+            "time_slice": bool(operator.isTimeSlice),
+            "export": bool(operator.export),
+            "export_changes": self._nonnegative_integer(operator.exportChanges),
+        }
+
+    def _inspect_dat(self, operator, _max_items):
+        is_table = bool(operator.isTable)
+        is_text = bool(operator.isText)
+        if is_table == is_text:
+            raise AgentCommandError("family_inspection_unavailable")
+        editing_file = operator.editingFile
+        return {
+            "dat_kind": "table" if is_table else "text",
+            "editable": bool(operator.isEditable),
+            "row_count": self._nonnegative_integer(operator.numRows),
+            "column_count": self._nonnegative_integer(operator.numCols),
+            "export": bool(operator.export),
+            "editing_file": None if editing_file is None else self._inspection_string(editing_file),
+        }
+
+    def _inspect_top(self, operator, _max_items):
+        return {
+            "resolution": {
+                "width": self._nonnegative_integer(operator.width),
+                "height": self._nonnegative_integer(operator.height),
+                "depth": self._nonnegative_integer(operator.depth),
+            },
+            "aspect": self._finite_number(operator.aspect),
+            "aspect_width": self._finite_number(operator.aspectWidth),
+            "aspect_height": self._finite_number(operator.aspectHeight),
+            "pixel_format": self._inspection_string(operator.pixelFormat),
+            "pixel_format_name": self._inspection_string(operator.pixelFormatName),
+            "current_pass": self._integer(operator.curPass),
+            "newest_slice_w_offset": self._finite_number(operator.newestSliceWOffset),
+        }
+
+    def _inspect_sop(self, operator, max_items):
+        return {
+            "counts": {
+                "points": self._nonnegative_integer(operator.numPoints),
+                "primitives": self._nonnegative_integer(operator.numPrims),
+                "vertices": self._nonnegative_integer(operator.numVertices),
+            },
+            "bounds": self._inspection_bounds(operator),
+            "attributes": {
+                "point": self._inspection_attributes(operator.pointAttribs, max_items),
+                "vertex": self._inspection_attributes(operator.vertexAttribs, max_items),
+                "primitive": self._inspection_attributes(operator.primAttribs, max_items),
+            },
+            "groups": {
+                "point": self._inspection_names(operator.pointGroups, max_items),
+                "primitive": self._inspection_names(operator.primGroups, max_items),
+            },
+            "template": bool(operator.template),
+            "compare": bool(operator.compare),
+        }
+
+    def _inspect_pop(self, operator, max_items):
+        dimension = list(operator.dimension)
+        self._require_inspection_bound(len(dimension), max_items)
+        return {
+            "dimension": [self._nonnegative_integer(value) for value in dimension],
+            "max_vertices_per_line_strip": self._nonnegative_integer(operator.maxVertsPerLineStrip),
+            "allocated": {
+                "points": self._nonnegative_integer(operator.numPoints(max=True)),
+                "primitives": self._nonnegative_integer(operator.numPrims(max=True)),
+                "vertices": self._nonnegative_integer(operator.numVerts(max=True)),
+            },
+            "template": bool(operator.template),
+            "compare": bool(operator.compare),
+        }
+
+    @staticmethod
+    def _inspect_mat(_operator, _max_items):
+        return {}
+
+    @classmethod
+    def _inspection_bounds(cls, operator):
+        result = {
+            name: [cls._finite_number(value) for value in list(getattr(operator, name))]
+            for name in ("min", "max", "center", "size")
+        }
+        if any(len(position) != 3 for position in result.values()):
+            raise AgentCommandError("family_inspection_unavailable")
+        return result
+
+    @classmethod
+    def _inspection_attributes(cls, attributes, max_items):
+        cls._require_inspection_bound(len(attributes), max_items)
+        snapshot = list(attributes)
+        if len(snapshot) != len(attributes):
+            raise AgentCommandError("family_inspection_unavailable")
+        return [
+            {
+                "name": cls._inspection_string(attribute.name),
+                "value_type": cls._inspection_string(
+                    getattr(attribute.type, "__name__", str(attribute.type))
+                ),
+                "size": cls._nonnegative_integer(attribute.size),
+                "is_array": bool(attribute.isArray),
+                "array_size": cls._nonnegative_integer(attribute.arraySize),
+                "matrix_rows": cls._nonnegative_integer(attribute.numMatRows),
+                "matrix_columns": cls._nonnegative_integer(attribute.numMatCols),
+            }
+            for attribute in snapshot
+        ]
+
+    @classmethod
+    def _inspection_names(cls, values, max_items):
+        names = list(values.keys()) if isinstance(values, dict) else list(values)
+        cls._require_inspection_bound(len(names), max_items)
+        return sorted(cls._inspection_string(name) for name in names)
+
+    @classmethod
+    def _inspection_string(cls, value):
+        text = str(value)
+        if len(text.encode("utf-8")) > cls.MAX_INSPECTION_STRING_BYTES:
+            raise AgentCommandError("result_too_large")
+        return text
+
+    @staticmethod
+    def _require_inspection_bound(count, max_items):
+        if count > max_items:
+            raise AgentCommandError("result_too_large")
+
+    @staticmethod
+    def _nonnegative_integer(value):
+        if type(value) is not int or value < 0:
+            raise AgentCommandError("family_inspection_unavailable")
+        return value
+
+    @staticmethod
+    def _integer(value):
+        if type(value) is int:
+            return value
+        if type(value) is float and math.isfinite(value) and value.is_integer():
+            return int(value)
+        else:
+            raise AgentCommandError("family_inspection_unavailable")
+
+    @staticmethod
+    def _finite_number(value):
+        number = float(value)
+        if not math.isfinite(number):
+            raise AgentCommandError("family_inspection_unavailable")
+        return number
+
+    def _get_text_dat(self, payload):
+        operator = self._require_dat(payload, "textDAT")
+        try:
+            text = str(operator.text)
+            byte_count = len(text.encode("utf-8"))
+        except Exception as error:
+            raise AgentCommandError("dat_content_unavailable") from error
+        if byte_count > payload["max_bytes"]:
+            raise AgentCommandError("result_too_large")
+        return {
+            "operator_path": str(operator.path),
+            "dat_kind": "text",
+            "text": text,
+            "utf8_bytes": byte_count,
+        }
+
+    def _set_text_dat(self, payload):
+        operator = self._require_dat(payload, "textDAT")
+        path = str(operator.path)
+        self._require_dat_mutable(operator)
+        before = self._text_dat_snapshot(operator)
+
+        def apply():
+            operator.text = payload["text"]
+
+        def read():
+            return self._text_dat_snapshot(operator)
+
+        text = self._mutate_dat(
+            path,
+            before,
+            payload["text"],
+            apply,
+            read,
+            lambda snapshot: setattr(operator, "text", snapshot),
+            "text_dat",
+        )
+        return {
+            "operator_path": path,
+            "dat_kind": "text",
+            "text": text,
+            "utf8_bytes": len(text.encode("utf-8")),
+        }
+
+    def _get_table_dat(self, payload):
+        operator = self._require_dat(payload, "tableDAT")
+        try:
+            total_rows = int(operator.numRows)
+            total_columns = int(operator.numCols)
+            row_stop = min(total_rows, payload["row_offset"] + payload["row_count"])
+            column_stop = min(total_columns, payload["column_offset"] + payload["column_count"])
+            rows = self._table_rows(
+                operator,
+                payload["row_offset"],
+                row_stop,
+                payload["column_offset"],
+                column_stop,
+            )
+            byte_count = self._table_byte_count(rows)
+            if any(
+                len(cell.encode("utf-8")) > self.MAX_TABLE_CELL_BYTES
+                for row in rows
+                for cell in row
+            ):
+                raise AgentCommandError("result_too_large")
+        except Exception as error:
+            if isinstance(error, AgentCommandError):
+                raise
+            raise AgentCommandError("dat_content_unavailable") from error
+        if byte_count > payload["max_bytes"]:
+            raise AgentCommandError("result_too_large")
+        return {
+            "operator_path": str(operator.path),
+            "dat_kind": "table",
+            "total_rows": total_rows,
+            "total_columns": total_columns,
+            "row_offset": payload["row_offset"],
+            "column_offset": payload["column_offset"],
+            "rows": rows,
+            "utf8_bytes": byte_count,
+        }
+
+    def _replace_table_dat(self, payload):
+        operator = self._require_dat(payload, "tableDAT")
+        return self._mutate_table_dat(operator, payload["rows"], "table_dat")
+
+    def _patch_table_dat(self, payload):
+        operator = self._require_dat(payload, "tableDAT")
+        rows = payload["rows"]
+        row_offset = payload["row_offset"]
+        column_offset = payload["column_offset"]
+        try:
+            total_rows = int(operator.numRows)
+            total_columns = int(operator.numCols)
+        except Exception as error:
+            raise AgentCommandError("dat_content_unavailable") from error
+        if row_offset + len(rows) > total_rows or column_offset + len(rows[0]) > total_columns:
+            raise AgentCommandError("table_dat_patch_out_of_bounds")
+        path = str(operator.path)
+        self._require_dat_mutable(operator)
+        before = self._table_dat_snapshot(operator)
+        expected = [list(row) for row in before]
+        for row_index, row in enumerate(rows, start=row_offset):
+            for column_index, value in enumerate(row, start=column_offset):
+                expected[row_index][column_index] = value
+
+        def apply():
+            for row_index, row in enumerate(rows, start=row_offset):
+                for column_index, value in enumerate(row, start=column_offset):
+                    operator[row_index, column_index].val = value
+
+        after = self._mutate_dat(
+            path,
+            before,
+            expected,
+            apply,
+            lambda: self._table_dat_snapshot(operator),
+            lambda snapshot: self._write_table_rows(operator, snapshot),
+            "table_dat",
+        )
+        return self._complete_table_result(path, after)
+
+    def _mutate_table_dat(self, operator, rows, error_prefix):
+        path = str(operator.path)
+        self._require_dat_mutable(operator)
+        before = self._table_dat_snapshot(operator)
+        after = self._mutate_dat(
+            path,
+            before,
+            rows,
+            lambda: self._write_table_rows(operator, rows),
+            lambda: self._table_dat_snapshot(operator),
+            lambda snapshot: self._write_table_rows(operator, snapshot),
+            error_prefix,
+        )
+        return self._complete_table_result(path, after)
+
+    def _mutate_dat(self, path, before, expected, apply, read, restore, error_prefix):
+        try:
+            apply()
+            after = read()
+            if after != expected:
+                raise RuntimeError("DAT readback mismatch")
+            return after
+        except Exception as error:
+            if self.operator_lookup(path) is None:
+                raise AgentCommandError(f"{error_prefix}_outcome_unknown") from error
+            try:
+                restore(before)
+                if read() != before:
+                    raise RuntimeError("DAT rollback verification failed")
+            except Exception as rollback_error:
+                if self.operator_lookup(path) is None:
+                    raise AgentCommandError(f"{error_prefix}_outcome_unknown") from rollback_error
+                raise AgentCommandError(f"{error_prefix}_rollback_failed") from rollback_error
+            raise AgentCommandError(f"{error_prefix}_write_failed") from error
+
+    def _require_dat(self, payload, op_type):
+        operator = self._operator(payload)
+        if str(operator.OPType) != op_type:
+            raise AgentCommandError("dat_type_mismatch")
+        return operator
+
+    def _require_dat_mutable(self, operator):
+        self._require_mutable_path(str(operator.path))
+        try:
+            file_parameter = getattr(operator.par, "file", None)
+            sync_parameter = getattr(operator.par, "syncfile", None)
+            file_path = "" if file_parameter is None else str(file_parameter.eval() or "")
+            sync_file = False if sync_parameter is None else bool(sync_parameter.eval())
+            locked = bool(operator.lock)
+            replicated = getattr(operator, "replicator", None) is not None
+            cloned = self._has_clone_ancestor(operator)
+        except Exception as error:
+            raise AgentCommandError("dat_content_unavailable") from error
+        if file_path or sync_file or locked or replicated or cloned:
+            raise AgentCommandError("dat_content_not_writable")
+
+    @staticmethod
+    def _has_clone_ancestor(operator):
+        parent_method = getattr(operator, "parent", None)
+        ancestor = parent_method() if callable(parent_method) else None
+        while ancestor is not None:
+            clone_parameter = getattr(getattr(ancestor, "par", None), "clone", None)
+            if clone_parameter is not None and str(clone_parameter.eval() or ""):
+                return True
+            parent_method = getattr(ancestor, "parent", None)
+            ancestor = parent_method() if callable(parent_method) else None
+        return False
+
+    @classmethod
+    def _text_dat_snapshot(cls, operator):
+        try:
+            text = str(operator.text)
+        except Exception as error:
+            raise AgentCommandError("dat_content_unavailable") from error
+        if len(text.encode("utf-8")) > cls.MAX_DAT_CONTENT_BYTES:
+            raise AgentCommandError("dat_content_too_large")
+        return text
+
+    @classmethod
+    def _table_dat_snapshot(cls, operator):
+        try:
+            row_count = int(operator.numRows)
+            column_count = int(operator.numCols)
+            if (
+                row_count > cls.MAX_TABLE_ROWS
+                or column_count > cls.MAX_TABLE_COLUMNS
+                or row_count * column_count > cls.MAX_TABLE_CELLS
+            ):
+                raise AgentCommandError("dat_content_too_large")
+            rows = cls._table_rows(operator, 0, row_count, 0, column_count)
+        except Exception as error:
+            if isinstance(error, AgentCommandError):
+                raise
+            raise AgentCommandError("dat_content_unavailable") from error
+        if cls._table_byte_count(rows) > cls.MAX_DAT_CONTENT_BYTES or any(
+            len(cell.encode("utf-8")) > cls.MAX_TABLE_CELL_BYTES for row in rows for cell in row
+        ):
+            raise AgentCommandError("dat_content_too_large")
+        return rows
+
+    @staticmethod
+    def _table_rows(operator, row_start, row_stop, column_start, column_stop):
+        return [
+            [str(operator[row, column].val) for column in range(column_start, column_stop)]
+            for row in range(row_start, row_stop)
+        ]
+
+    @staticmethod
+    def _write_table_rows(operator, rows):
+        operator.clear()
+        if not rows:
+            return
+        operator.setSize(len(rows), len(rows[0]))
+        for row_index, row in enumerate(rows):
+            for column_index, value in enumerate(row):
+                operator[row_index, column_index].val = value
+
+    @staticmethod
+    def _table_byte_count(rows):
+        return sum(len(cell.encode("utf-8")) for row in rows for cell in row)
+
+    @classmethod
+    def _complete_table_result(cls, path, rows):
+        return {
+            "operator_path": path,
+            "dat_kind": "table",
+            "total_rows": len(rows),
+            "total_columns": len(rows[0]) if rows else 0,
+            "rows": rows,
+            "utf8_bytes": cls._table_byte_count(rows),
+        }
+
+    def _get_operator_state(self, payload):
+        operator = self._operator(payload)
+        try:
+            state = self._operator_state(operator)
+        except Exception as error:
+            raise AgentCommandError("operator_state_unavailable") from error
+        return {"operator_path": str(operator.path), "state": state}
+
+    def _set_operator_state(self, payload):
+        operator = self._operator(payload)
+        path = str(operator.path)
+        self._require_mutable_path(path)
+        try:
+            before = self._operator_state(operator)
+        except Exception as error:
+            raise AgentCommandError("operator_state_unavailable") from error
+        applied_fields = []
+        try:
+            for field, _, _ in self.STATE_FIELDS:
+                value = payload.get(field)
+                if value is None:
+                    continue
+                applied_fields.append(field)
+                self._apply_operator_state_field(operator, field, value)
+            state = self._operator_state(operator)
+            if not self._state_matches_patch(state, payload):
+                raise AgentCommandError("operator_state_failed")
+        except Exception as error:
+            if self.operator_lookup(path) is None:
+                raise AgentCommandError("operator_state_outcome_unknown") from error
+            if not self._restore_operator_state(operator, before):
+                raise AgentCommandError("operator_state_rollback_failed") from error
+            if isinstance(error, AgentCommandError):
+                raise
+            raise AgentCommandError("operator_state_failed") from error
+        return {
+            "operator_path": path,
+            "applied_fields": applied_fields,
+            "state": state,
+        }
+
+    def _apply_operator_state_field(self, operator, field, value):
+        descriptor = next(item for item in self.STATE_FIELDS if item[0] == field)
+        _, attribute, kind = descriptor
+        if kind == "color":
+            value = (value["red"], value["green"], value["blue"])
+        setattr(operator, attribute, value)
+
+    def _restore_operator_state(self, operator, state):
+        try:
+            operator.lock = False
+            for field, _, _ in self.STATE_FIELDS:
+                if field != "lock":
+                    self._apply_operator_state_field(operator, field, state[field])
+            operator.lock = state["lock"]
+            return self._state_matches_patch(self._operator_state(operator), state)
+        except Exception:  # noqa: BLE001 - locked runtime can raise td-specific errors
+            return False
+
+    @staticmethod
+    def _state_matches_patch(state, payload):
+        for field, expected in payload.items():
+            if field == "operator_path" or expected is None:
+                continue
+            actual = state[field]
+            if field == "color":
+                if any(
+                    abs(actual[channel] - expected[channel]) > 0.000001
+                    for channel in ("red", "green", "blue")
+                ):
+                    return False
+            elif actual != expected:
+                return False
+        return True
+
+    @classmethod
+    def _operator_state(cls, operator):
+        state = {}
+        converters = {"integer": int, "string": str, "boolean": bool}
+        for field, attribute, kind in cls.STATE_FIELDS:
+            value = getattr(operator, attribute)
+            if kind == "color":
+                value = {
+                    "red": float(value[0]),
+                    "green": float(value[1]),
+                    "blue": float(value[2]),
+                }
+            else:
+                value = converters[kind](value)
+            state[field] = value
+        return state
 
     def _children(self, payload):
         operator = self._operator(payload)
@@ -82,6 +679,78 @@ class OperatorControl:
         if op_type is not None:
             children = [child for child in children if child["op_type"] == op_type]
         return sorted(children, key=lambda child: child["path"])
+
+    def _connections(self, payload):
+        operator = self._operator(payload)
+        count = len(self._regular_edges([operator]))
+        return self._connector_inventory(
+            operator,
+            operator.inputConnectors,
+            operator.outputConnectors,
+            count,
+            payload["max_connections"],
+        )
+
+    def _hierarchy_connections(self, payload):
+        operator = self._operator(payload)
+        kind = self._hierarchy_kind(operator)
+        edges = self._hierarchy_edges([operator])
+        input_connectors = getattr(operator, "inputCOMPConnectors", [])
+        for connector in input_connectors:
+            if len(connector.connections) > 1:
+                raise AgentCommandError("hierarchy_connector_state_ambiguous")
+        result = self._connector_inventory(
+            operator,
+            input_connectors,
+            getattr(operator, "outputCOMPConnectors", []),
+            len(edges),
+            payload["max_connections"],
+        )
+        result["hierarchy_kind"] = kind
+        return result
+
+    @staticmethod
+    def _connector_inventory(operator, input_connectors, output_connectors, count, maximum):
+        if count > maximum:
+            raise AgentCommandError("result_too_large")
+        inputs = []
+        for connector in input_connectors:
+            connection = connector.connections[0] if connector.connections else None
+            inputs.append(
+                {
+                    "input_index": int(connector.index),
+                    "description": str(getattr(connector, "description", "") or ""),
+                    "connection": (
+                        {
+                            "source_path": str(connection.owner.path),
+                            "output_index": int(connection.index),
+                        }
+                        if connection is not None
+                        else None
+                    ),
+                }
+            )
+        outputs = []
+        for connector in output_connectors:
+            outputs.append(
+                {
+                    "output_index": int(connector.index),
+                    "description": str(getattr(connector, "description", "") or ""),
+                    "connections": [
+                        {
+                            "target_path": str(connection.owner.path),
+                            "input_index": int(connection.index),
+                        }
+                        for connection in connector.connections
+                    ],
+                }
+            )
+        return {
+            "operator_path": str(operator.path),
+            "inputs": inputs,
+            "outputs": outputs,
+            "connection_count": count,
+        }
 
     def _rename_operator(self, payload):
         operator = self._operator(payload)
@@ -119,6 +788,598 @@ class OperatorControl:
             "name": new_name,
             "renamed": True,
         }
+
+    def _destroy_requested_operator(self, payload):
+        operator = self._operator(payload)
+        path = str(operator.path)
+        self._require_mutable_path(path)
+        subtree = self._bounded_subtree(operator, payload["max_operators"])
+        if len(subtree) > 1 and not payload["recursive"]:
+            raise AgentCommandError("operator_not_empty")
+        connections = self._subtree_connections(subtree)
+        if connections and not payload["allow_connected"]:
+            raise AgentCommandError("operator_connected")
+        try:
+            operator.destroy()
+        except Exception as error:
+            if self.operator_lookup(path) is None:
+                raise AgentCommandError("operator_destroy_outcome_unknown") from error
+            raise AgentCommandError("operator_destroy_failed") from error
+        if self.operator_lookup(path) is not None:
+            raise AgentCommandError("operator_destroy_failed")
+        return {
+            "operator_path": path,
+            "operator_count": len(subtree),
+            "detached_connections": connections,
+            "destroyed": True,
+        }
+
+    def _copy_operator(self, payload):
+        source = self.operator_lookup(payload["source_path"])
+        target_parent = self.operator_lookup(payload["target_parent_path"])
+        if source is None or target_parent is None:
+            raise AgentCommandError("operator_not_found")
+        self._require_mutable_path(str(source.path))
+        self._require_mutable_destination(str(target_parent.path))
+        if str(target_parent.family) != "COMP":
+            raise AgentCommandError("operator_parent_invalid")
+        expected_path = str(target_parent.path).rstrip("/") + "/" + payload["new_name"]
+        if self.operator_lookup(expected_path) is not None:
+            raise AgentCommandError("operator_already_exists")
+        source_subtree = self._bounded_subtree(source, payload["max_operators"])
+        if source.docked and not payload["include_docked"]:
+            raise AgentCommandError("operator_docked")
+        unreplicated = self._boundary_connections(source_subtree)
+        before = {str(child.path) for child in target_parent.children}
+        created = None
+        created_roots = []
+        try:
+            created = target_parent.copy(
+                source,
+                name=payload["new_name"],
+                includeDocked=payload["include_docked"],
+            )
+            created_roots = [
+                child for child in target_parent.children if str(child.path) not in before
+            ]
+            if (
+                str(created.path) != expected_path
+                or str(created.name) != payload["new_name"]
+                or str(created.OPType) != str(source.OPType)
+                or str(created.family) != str(source.family)
+            ):
+                raise AgentCommandError("operator_copy_failed")
+            affected = self._bounded_forest(created_roots, payload["max_operators"])
+            if created not in affected:
+                raise AgentCommandError("operator_copy_failed")
+            if payload.get("node_x") is not None:
+                created.nodeX = payload["node_x"]
+                if int(created.nodeX) != payload["node_x"]:
+                    raise AgentCommandError("operator_copy_failed")
+            if payload.get("node_y") is not None:
+                created.nodeY = payload["node_y"]
+                if int(created.nodeY) != payload["node_y"]:
+                    raise AgentCommandError("operator_copy_failed")
+        except Exception as error:
+            created_roots = [
+                child for child in target_parent.children if str(child.path) not in before
+            ]
+            if created is not None and created not in created_roots:
+                created_roots.append(created)
+            if not self._rollback_created(created_roots):
+                raise AgentCommandError("operator_copy_rollback_failed") from error
+            if isinstance(error, AgentCommandError):
+                raise
+            raise AgentCommandError("operator_copy_failed") from error
+        return {
+            "source_path": str(source.path),
+            **self._operator_result(created),
+            "operator_count": len(affected),
+            "include_docked": payload["include_docked"],
+            "unreplicated_connections": unreplicated,
+        }
+
+    def _move_operator(self, payload):
+        source = self.operator_lookup(payload["source_path"])
+        if source is None:
+            raise AgentCommandError("operator_not_found")
+        old_path = str(source.path)
+        target_parent_path = payload["target_parent_path"]
+        if target_parent_path.startswith(old_path.rstrip("/") + "/"):
+            raise AgentCommandError("operator_parent_invalid")
+        source_subtree = self._bounded_subtree(source, payload["max_operators"])
+        detached = self._boundary_connections(source_subtree)
+        if detached and not payload["allow_connected"]:
+            raise AgentCommandError("operator_connected")
+        copied = self._copy_operator(
+            {
+                "source_path": old_path,
+                "target_parent_path": target_parent_path,
+                "new_name": payload["new_name"],
+                "node_x": payload.get("node_x"),
+                "node_y": payload.get("node_y"),
+                "include_docked": False,
+                "max_operators": payload["max_operators"],
+            }
+        )
+        created = self.operator_lookup(copied["path"])
+        try:
+            source.destroy()
+        except Exception as error:
+            if self.operator_lookup(old_path) is not None:
+                if created is None or not self._rollback_created([created]):
+                    raise AgentCommandError("operator_move_rollback_failed") from error
+                raise AgentCommandError("operator_move_failed") from error
+        if self.operator_lookup(old_path) is not None:
+            if created is None or not self._rollback_created([created]):
+                raise AgentCommandError("operator_move_rollback_failed")
+            raise AgentCommandError("operator_move_failed")
+        if self.operator_lookup(copied["path"]) is None:
+            raise AgentCommandError("operator_move_outcome_unknown")
+        return {
+            "old_path": old_path,
+            "path": copied["path"],
+            "name": copied["name"],
+            "op_type": copied["op_type"],
+            "family": copied["family"],
+            "operator_count": copied["operator_count"],
+            "detached_connections": detached,
+            "identity_preserved": False,
+            "moved": True,
+        }
+
+    def _import_tox(self, payload):
+        if payload.get("trusted") not in (True, 1):
+            raise AgentCommandError("tox_trust_required")
+        source = self._preflight_tox_file(payload)
+        parent = self.operator_lookup(payload["parent_path"])
+        if parent is None or str(parent.path) != payload["parent_path"]:
+            raise AgentCommandError("operator_not_found")
+        if str(parent.family) != "COMP":
+            raise AgentCommandError("operator_parent_invalid")
+        self._require_tox_parent(str(parent.path))
+        destination_path = str(parent.path).rstrip("/") + "/" + payload["target_name"]
+        previous = self.operator_lookup(destination_path)
+        if previous is not None and not payload.get("replace", False):
+            raise AgentCommandError("tox_destination_exists")
+        previous_id = None if previous is None else int(previous.id)
+        stage = None
+        backup_stage = None
+        staged_root = None
+        backup = None
+        previous_manifest = None
+        old_destroyed = False
+        installed = None
+        try:
+            stage = self._create_tox_stage(parent, "stage")
+            staged_root = self._load_one_tox_root(stage, source["bytes"])
+            staged_manifest = self._tox_manifest(staged_root, payload["max_operators"])
+            self._require_tox_snapshot(staged_root)
+            self._require_exact_stage_root(stage, staged_root)
+            current = self.operator_lookup(destination_path)
+            if previous is None:
+                if current is not None:
+                    raise AgentCommandError("tox_destination_exists")
+            elif current is not previous or int(current.id) != previous_id:
+                raise AgentCommandError("tox_import_outcome_unknown")
+            if previous is not None:
+                previous_manifest = self._tox_manifest(
+                    previous, payload["max_operators"], include_linkage=True
+                )
+                try:
+                    backup = bytearray(previous.saveByteArray())
+                    backup_stage = self._create_tox_stage(parent, "backup")
+                    restored = self._load_one_tox_root(backup_stage, backup)
+                    if (
+                        self._tox_manifest(restored, payload["max_operators"], include_linkage=True)
+                        != previous_manifest
+                    ):
+                        raise RuntimeError("backup manifest mismatch")
+                    if not self._destroy_exact(backup_stage):
+                        raise RuntimeError("backup verification cleanup failed")
+                    backup_stage = None
+                except Exception as error:
+                    if (
+                        isinstance(error, AgentCommandError)
+                        and error.code == "tox_import_outcome_unknown"
+                    ):
+                        raise
+                    raise AgentCommandError("tox_backup_failed") from error
+                previous.destroy()
+                old_destroyed = True
+                if self.operator_lookup(destination_path) is not None:
+                    raise RuntimeError("old destination remained after destroy")
+            installed = parent.copy(staged_root, name=payload["target_name"], includeDocked=False)
+            if self.operator_lookup(destination_path) is not installed:
+                raise RuntimeError("installed identity mismatch")
+            installed_manifest = self._tox_manifest(installed, payload["max_operators"])
+            if installed_manifest != self._manifest_with_root_name(
+                staged_manifest, payload["target_name"]
+            ):
+                raise RuntimeError("installed manifest mismatch")
+            self._require_tox_snapshot(installed)
+            if self.operator_lookup(destination_path) is not installed:
+                raise AgentCommandError("tox_import_outcome_unknown")
+            if self._tox_manifest(installed, payload["max_operators"]) != installed_manifest:
+                raise AgentCommandError("tox_import_outcome_unknown")
+            if self.operator_lookup(destination_path) is not installed:
+                raise AgentCommandError("tox_import_outcome_unknown")
+            if not self._destroy_exact(stage):
+                raise AgentCommandError("tox_import_outcome_unknown")
+            return {
+                "parent_path": str(parent.path),
+                "path": str(installed.path),
+                "name": str(installed.name),
+                "op_type": str(installed.OPType),
+                "family": str(installed.family),
+                "operator_count": len(installed_manifest),
+                "inventory": installed_manifest,
+                "source_path": source["path"],
+                "file_bytes": source["size"],
+                "sha256": source["sha256"],
+                "trusted": True,
+                "replaced": previous is not None,
+                "rollback_performed": False,
+            }
+        except Exception as error:
+            if old_destroyed:
+                try:
+                    current = self.operator_lookup(destination_path)
+                    if current is not None:
+                        current.destroy()
+                    restored = parent.loadByteArray(backup, unwired=True, pattern=None)
+                    if restored is None:
+                        raise RuntimeError("rollback returned no root")
+                    restored.name = payload["target_name"]
+                    if (
+                        self.operator_lookup(destination_path) is not restored
+                        or self._tox_manifest(
+                            restored, payload["max_operators"], include_linkage=True
+                        )
+                        != previous_manifest
+                    ):
+                        raise RuntimeError("rollback verification failed")
+                except Exception as rollback_error:
+                    if self.operator_lookup(str(parent.path)) is not parent:
+                        raise AgentCommandError("tox_import_outcome_unknown") from rollback_error
+                    if not self._cleanup_tox_stages(stage, backup_stage):
+                        raise AgentCommandError("tox_import_outcome_unknown") from rollback_error
+                    raise AgentCommandError("tox_rollback_failed") from rollback_error
+                if not self._cleanup_tox_stages(stage, backup_stage):
+                    raise AgentCommandError("tox_import_outcome_unknown") from error
+                raise AgentCommandError("tox_commit_failed") from error
+            if (
+                installed is not None
+                and self.operator_lookup(destination_path) is installed
+                and not self._destroy_exact(installed)
+            ):
+                raise AgentCommandError("tox_import_outcome_unknown") from error
+            if not self._cleanup_tox_stages(stage, backup_stage):
+                raise AgentCommandError("tox_import_outcome_unknown") from error
+            if isinstance(error, AgentCommandError):
+                raise
+            raise AgentCommandError("tox_commit_failed") from error
+
+    def _preflight_tox_file(self, payload):
+        try:
+            requested = Path(payload["tox_path"])
+            allowed = Path(payload["allowlist_root"])
+            if (
+                not requested.is_absolute()
+                or not allowed.is_absolute()
+                or str(requested).startswith("\\\\")
+                or str(allowed).startswith("\\\\")
+                or ":" in str(requested)[2:]
+                or ":" in str(allowed)[2:]
+            ):
+                raise ValueError("not absolute")
+            requested_stat = requested.lstat()
+            allowed_stat = allowed.lstat()
+            reparse_flag = getattr(__import__("stat"), "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+            if (
+                not allowed.is_dir()
+                or not requested.is_file()
+                or requested.suffix.lower() != ".tox"
+                or getattr(requested_stat, "st_file_attributes", 0) & reparse_flag
+                or getattr(allowed_stat, "st_file_attributes", 0) & reparse_flag
+            ):
+                raise ValueError("unsupported file kind")
+            canonical = requested.resolve(strict=True)
+            canonical_root = allowed.resolve(strict=True)
+            if canonical.drive.lower() != canonical_root.drive.lower():
+                raise ValueError("different drive")
+            canonical.relative_to(canonical_root)
+            self._reject_reparse_path(canonical_root, canonical, reparse_flag)
+            size = int(requested_stat.st_size)
+            if size > payload["max_file_bytes"]:
+                raise AgentCommandError("tox_file_too_large")
+            with canonical.open("rb") as stream:
+                content = stream.read(payload["max_file_bytes"] + 1)
+            if len(content) > payload["max_file_bytes"]:
+                raise AgentCommandError("tox_file_too_large")
+            after = canonical.stat()
+            identity = (
+                requested_stat.st_dev,
+                requested_stat.st_ino,
+                size,
+                requested_stat.st_mtime_ns,
+            )
+            if identity != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns):
+                raise ValueError("file changed")
+            return {
+                "path": str(canonical),
+                "size": size,
+                "sha256": hashlib.sha256(content).hexdigest(),
+                "identity": identity,
+                "bytes": bytearray(content),
+            }
+        except AgentCommandError:
+            raise
+        except Exception as error:
+            raise AgentCommandError("tox_path_rejected") from error
+
+    @staticmethod
+    def _reject_reparse_path(root, path, reparse_flag):
+        current = root
+        candidates = [root]
+        for part in path.relative_to(root).parts:
+            current = current / part
+            candidates.append(current)
+        if any(
+            getattr(candidate.lstat(), "st_file_attributes", 0) & reparse_flag
+            for candidate in candidates
+        ):
+            raise ValueError("reparse point")
+
+    def _require_tox_parent(self, path):
+        protected = self.protected_path
+        if (
+            path == "/"
+            or protected is not None
+            and (
+                protected == path
+                or protected.startswith(path.rstrip("/") + "/")
+                or path.startswith(protected.rstrip("/") + "/")
+            )
+        ):
+            raise AgentCommandError("tox_parent_protected")
+
+    def _create_tox_stage(self, parent, purpose):
+        name = "tdcli_tox_" + purpose + "_" + uuid.uuid4().hex[:16]
+        path = str(parent.path).rstrip("/") + "/" + name
+        if self.operator_lookup(path) is not None:
+            raise AgentCommandError("tox_import_outcome_unknown")
+        try:
+            stage = parent.create("baseCOMP", name)
+        except Exception as error:
+            raise AgentCommandError("tox_load_failed") from error
+        if self.operator_lookup(path) is not stage or list(stage.children):
+            raise AgentCommandError("tox_import_outcome_unknown")
+        return stage
+
+    def _load_one_tox_root(self, stage, source):
+        before = {int(child.id) for child in stage.children}
+        try:
+            root = stage.loadByteArray(source, unwired=True, pattern=None)
+        except Exception as error:
+            raise AgentCommandError("tox_load_failed") from error
+        created = [child for child in stage.children if int(child.id) not in before]
+        if (
+            root is None
+            or len(created) != 1
+            or created[0] is not root
+            or str(root.family) != "COMP"
+            or self.operator_lookup(str(root.path)) is not root
+        ):
+            raise AgentCommandError("tox_load_failed")
+        return root
+
+    def _require_exact_stage_root(self, stage, root):
+        children = list(stage.children)
+        if len(children) != 1 or children[0] is not root:
+            raise AgentCommandError("tox_verification_failed")
+
+    def _tox_manifest(self, root, maximum, include_linkage=False):
+        try:
+            operators = self._bounded_subtree(root, maximum)
+            prefix = str(root.path).rstrip("/")
+            rows = []
+            for operator in operators:
+                path = str(operator.path)
+                if operator is not root and not path.startswith(prefix + "/"):
+                    raise RuntimeError("subtree escaped root")
+                op_type = str(operator.OPType)
+                entry = self.operator_catalog.entries.get(op_type)
+                if entry is None or entry.get("status") not in {"supported", "conditional"}:
+                    raise RuntimeError("unsupported Operator type")
+                relative = "." if operator is root else path[len(prefix) + 1 :]
+                if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", str(operator.name)) is None:
+                    raise RuntimeError("unsafe Operator name")
+                row = {
+                    "relative_path": relative,
+                    "name": str(operator.name),
+                    "op_type": op_type,
+                    "family": str(operator.family),
+                }
+                if include_linkage and str(operator.family) == "COMP":
+                    parameters = getattr(operator, "par", None)
+                    row["linkage"] = {
+                        "externaltox": self._tox_parameter(parameters, "externaltox", ""),
+                        "enableexternaltox": bool(
+                            self._tox_parameter(parameters, "enableexternaltox", False)
+                        ),
+                        "savebackup": bool(self._tox_parameter(parameters, "savebackup", False)),
+                        "subcompname": self._tox_parameter(parameters, "subcompname", ""),
+                        "relpath": self._tox_parameter(parameters, "relpath", "inherit"),
+                    }
+                rows.append(row)
+            rows.sort(key=lambda row: row["relative_path"])
+            if any(
+                self.operator_lookup(str(operator.path)) is not operator for operator in operators
+            ):
+                raise AgentCommandError("tox_import_outcome_unknown")
+            return rows
+        except AgentCommandError as error:
+            if error.code == "result_too_large":
+                raise AgentCommandError("tox_verification_failed") from error
+            raise
+        except Exception as error:
+            raise AgentCommandError("tox_verification_failed") from error
+
+    @staticmethod
+    def _tox_parameter(parameters, name, default):
+        parameter = getattr(parameters, name, None)
+        return default if parameter is None else parameter.eval()
+
+    @staticmethod
+    def _manifest_with_root_name(manifest, name):
+        return [
+            {**row, "name": name} if row["relative_path"] == "." else dict(row) for row in manifest
+        ]
+
+    def _require_tox_snapshot(self, root):
+        try:
+            for operator in self._bounded_subtree(root, 1000):
+                if str(operator.family) != "COMP":
+                    continue
+                parameters = getattr(operator, "par", None)
+                for parameter_name in ("externaltox", "subcompname"):
+                    parameter = getattr(parameters, parameter_name, None)
+                    if parameter is not None and str(parameter.eval() or ""):
+                        raise RuntimeError("external TOX linkage")
+                enabled = getattr(parameters, "enableexternaltox", None)
+                if enabled is not None and bool(enabled.eval()):
+                    raise RuntimeError("external TOX linkage enabled")
+                vfs = getattr(operator, "vfs", None)
+                if vfs is not None and len(vfs) != 0:
+                    raise RuntimeError("nonempty VFS")
+        except Exception as error:
+            if isinstance(error, AgentCommandError):
+                raise
+            raise AgentCommandError("tox_verification_failed") from error
+
+    def _destroy_exact(self, operator):
+        path = str(operator.path)
+        try:
+            operator.destroy()
+        except Exception:  # noqa: BLE001 - TouchDesigner raises tdError subclasses
+            return False
+        return self.operator_lookup(path) is None
+
+    def _cleanup_tox_stages(self, stage, backup_stage):
+        stage_clean = stage is None or self._destroy_exact(stage)
+        backup_clean = backup_stage is None or self._destroy_exact(backup_stage)
+        return stage_clean and backup_clean
+
+    def _require_mutable_path(self, path):
+        if path == "/":
+            raise AgentCommandError("operator_mutation_forbidden")
+        protected = self.protected_path
+        if protected is not None and (
+            protected == path
+            or protected.startswith(path + "/")
+            or path.startswith(protected + "/")
+        ):
+            raise AgentCommandError("operator_mutation_forbidden")
+
+    def _require_mutable_destination(self, path):
+        protected = self.protected_path
+        if protected is not None and (path == protected or path.startswith(protected + "/")):
+            raise AgentCommandError("operator_mutation_forbidden")
+
+    @staticmethod
+    def _bounded_subtree(root, maximum):
+        rows = []
+        queue = [root]
+        while queue:
+            operator = queue.pop(0)
+            if len(rows) >= maximum:
+                raise AgentCommandError("result_too_large")
+            rows.append(operator)
+            queue.extend(list(getattr(operator, "children", [])))
+        return rows
+
+    @classmethod
+    def _bounded_forest(cls, roots, maximum):
+        rows = []
+        for root in roots:
+            remaining = maximum - len(rows)
+            if remaining <= 0:
+                raise AgentCommandError("result_too_large")
+            rows.extend(cls._bounded_subtree(root, remaining))
+        return rows
+
+    @classmethod
+    def _subtree_connections(cls, subtree):
+        edges = cls._regular_edges(subtree)
+        edges.update(cls._hierarchy_edges(subtree))
+        rows = []
+        for kind, source_path, output_index, target_path, input_index in sorted(edges):
+            row = {
+                "source_path": source_path,
+                "output_index": output_index,
+                "target_path": target_path,
+                "input_index": input_index,
+            }
+            if kind == "hierarchy":
+                row["connection_kind"] = "hierarchy"
+            rows.append(row)
+        return rows
+
+    @staticmethod
+    def _regular_edges(subtree):
+        return OperatorControl._connector_edges(
+            subtree, "inputConnectors", "outputConnectors", "regular"
+        )
+
+    @staticmethod
+    def _hierarchy_edges(subtree):
+        return OperatorControl._connector_edges(
+            subtree, "inputCOMPConnectors", "outputCOMPConnectors", "hierarchy"
+        )
+
+    @staticmethod
+    def _connector_edges(subtree, input_attribute, output_attribute, kind):
+        edges = set()
+        for operator in subtree:
+            for connector in getattr(operator, input_attribute, []):
+                for connection in connector.connections:
+                    edges.add(
+                        (
+                            kind,
+                            str(connection.owner.path),
+                            int(connection.index),
+                            str(operator.path),
+                            int(connector.index),
+                        )
+                    )
+            for connector in getattr(operator, output_attribute, []):
+                for connection in connector.connections:
+                    edges.add(
+                        (
+                            kind,
+                            str(operator.path),
+                            int(connector.index),
+                            str(connection.owner.path),
+                            int(connection.index),
+                        )
+                    )
+        return edges
+
+    @classmethod
+    def _boundary_connections(cls, subtree):
+        paths = {str(operator.path) for operator in subtree}
+        return [
+            edge
+            for edge in cls._subtree_connections(subtree)
+            if (edge["source_path"] in paths) != (edge["target_path"] in paths)
+        ]
+
+    def _rollback_created(self, roots):
+        paths = [str(root.path) for root in roots]
+        for root in reversed(roots):
+            self._destroy_operator(root)
+        return all(self.operator_lookup(path) is None for path in paths)
 
     def _parameter_for_payload(self, payload):
         operator = self._operator(payload)
@@ -163,17 +1424,22 @@ class OperatorControl:
     def _parameter_metadata(cls, parameter, *, builtin, custom):
         value_kind = cls._parameter_value_kind(parameter)
         read_only = bool(getattr(parameter, "readOnly", False))
-        constant_supported = not read_only and value_kind in {
+        enabled = bool(getattr(parameter, "enable", True))
+        hidden = bool(getattr(parameter, "hidden", False))
+        page = getattr(parameter, "page", None)
+        internal = hasattr(parameter, "page") and page is None
+        writable = not read_only and enabled and not hidden and not internal
+        constant_supported = writable and value_kind in {
             "boolean",
             "integer",
             "number",
             "string",
             "menu",
             "operator",
+            "multi_operator",
         }
         expression_supported = constant_supported
-        pulse_supported = not read_only and value_kind == "pulse"
-        page = getattr(parameter, "page", None)
+        pulse_supported = writable and value_kind == "pulse"
         menu = value_kind == "menu"
         expression_source = getattr(parameter, "expr", None)
         return {
@@ -183,13 +1449,30 @@ class OperatorControl:
             "style": str(parameter.style),
             "builtin": bool(builtin),
             "custom": bool(custom),
-            "hidden": bool(getattr(parameter, "hidden", False)),
+            "hidden": hidden,
+            "enabled": enabled,
             "read_only": read_only,
             "mode": cls._parameter_mode(parameter),
             "value_kind": value_kind,
             "constant_supported": constant_supported,
             "expression_supported": expression_supported,
             "pulse_supported": pulse_supported,
+            "export_supported": writable and value_kind in {"boolean", "integer", "number"},
+            "bind_supported": writable
+            and value_kind not in {"pulse", "python", "sequence", "unknown"},
+            "unsupported_reason": cls._parameter_unsupported_reason(
+                value_kind,
+                read_only=read_only,
+                enabled=enabled,
+                hidden=hidden,
+                internal=internal,
+            ),
+            "sequence": cls._parameter_sequence_identity(parameter),
+            "source": cls._parameter_source(parameter, cls._parameter_mode(parameter)),
+            "bounds": cls._parameter_bounds(parameter, value_kind),
+            "max_operator_paths": cls.MAX_MULTI_OP_PATHS
+            if value_kind == "multi_operator"
+            else None,
             "expression": {
                 "supported": expression_supported,
                 "source": str(expression_source)
@@ -205,6 +1488,207 @@ class OperatorControl:
         }
 
     @staticmethod
+    def _parameter_bounds(parameter, value_kind):
+        if value_kind not in {"integer", "number"}:
+            return None
+        return {
+            "minimum": float(getattr(parameter, "min", 0)),
+            "maximum": float(getattr(parameter, "max", 1)),
+            "clamp_min": bool(getattr(parameter, "clampMin", False)),
+            "clamp_max": bool(getattr(parameter, "clampMax", False)),
+            "normal_minimum": float(getattr(parameter, "normMin", 0)),
+            "normal_maximum": float(getattr(parameter, "normMax", 1)),
+        }
+
+    @staticmethod
+    def _parameter_unsupported_reason(value_kind, *, read_only, enabled, hidden, internal):
+        if hidden:
+            return "obsolete"
+        if read_only:
+            return "read_only"
+        if not enabled:
+            return "disabled"
+        if internal:
+            return "internal"
+        if value_kind in {"python", "sequence", "unknown"}:
+            return "opaque_or_structural"
+        return None
+
+    @staticmethod
+    def _parameter_sequence_identity(parameter):
+        sequence = getattr(parameter, "sequence", None)
+        block = getattr(parameter, "sequenceBlock", None)
+        if sequence is None:
+            return None
+        return {
+            "name": str(sequence.name),
+            "block_index": int(block.index) if block is not None else None,
+        }
+
+    def _get_parameter_sequence(self, payload):
+        operator = self._operator(payload)
+        sequence = self._sequence(operator, payload["sequence"])
+        return self._sequence_result(
+            operator,
+            sequence,
+            max_blocks=payload.get("max_blocks", self.MAX_SEQUENCE_BLOCKS),
+            max_parameters=payload.get("max_parameters", self.MAX_SEQUENCE_PARAMETERS),
+        )
+
+    def _replace_parameter_sequence(self, payload):
+        operator = self._operator(payload)
+        operator_path = str(operator.path)
+        sequence = self._sequence(operator, payload["sequence"])
+        before = self._sequence_result(operator, sequence)
+        self._preflight_sequence_replace(operator, sequence, payload["blocks"], before)
+        try:
+            self._apply_sequence_blocks(sequence, payload["blocks"])
+            result = self._sequence_result(operator, sequence)
+            if result["blocks"] != payload["blocks"]:
+                raise RuntimeError("sequence readback mismatch")
+            return result
+        except Exception as error:
+            try:
+                current_operator = self.operator_lookup(operator_path)
+                if current_operator is None:
+                    raise AgentCommandError("parameter_sequence_not_found")
+                current = self._sequence(current_operator, payload["sequence"])
+                self._apply_sequence_blocks(current, before["blocks"])
+                if self._sequence_result(current_operator, current)["blocks"] != before["blocks"]:
+                    raise RuntimeError("sequence rollback mismatch")
+            except AgentCommandError as rollback_error:
+                if rollback_error.code in {"operator_not_found", "parameter_sequence_not_found"}:
+                    raise AgentCommandError("parameter_sequence_outcome_unknown") from error
+                raise AgentCommandError("parameter_sequence_rollback_failed") from rollback_error
+            except Exception as rollback_error:
+                raise AgentCommandError("parameter_sequence_rollback_failed") from rollback_error
+            raise AgentCommandError("parameter_sequence_write_failed") from error
+
+    @staticmethod
+    def _sequence(operator, name):
+        collection = getattr(operator, "seq", None)
+        try:
+            sequence = collection[name] if collection is not None else None
+        except Exception:  # noqa: BLE001 - TD collections may raise tdError subclasses
+            sequence = getattr(collection, name, None)
+        if sequence is None:
+            raise AgentCommandError("parameter_sequence_not_found")
+        return sequence
+
+    @classmethod
+    def _sequence_result(cls, operator, sequence, max_blocks=None, max_parameters=None):
+        max_blocks = cls.MAX_SEQUENCE_BLOCKS if max_blocks is None else max_blocks
+        max_parameters = cls.MAX_SEQUENCE_PARAMETERS if max_parameters is None else max_parameters
+        if len(sequence.blocks) > max_blocks:
+            raise AgentCommandError("parameter_sequence_too_large")
+        blocks = []
+        for block in list(sequence.blocks):
+            parameters = []
+            for group in list(block):
+                for parameter in list(group):
+                    if bool(getattr(parameter, "isSequence", False)):
+                        continue
+                    if getattr(block, "namePar", None) is not None and parameter.isSamePar(
+                        block.namePar
+                    ):
+                        continue
+                    item = cls._parameter_result(operator, str(parameter.name), parameter)
+                    prefix = f"{sequence.name}{int(block.index)}"
+                    local_name = str(parameter.name).removeprefix(prefix)
+                    descriptor = {
+                        "parameter": local_name,
+                        "mode": item["mode"],
+                        "value": item["value"]
+                        if item["mode"] in {"constant", "expression"}
+                        else None,
+                    }
+                    if item["source"] is not None:
+                        descriptor["source"] = item["source"]
+                    parameters.append(descriptor)
+                    if len(parameters) > max_parameters:
+                        raise AgentCommandError("parameter_sequence_too_large")
+            blocks.append(
+                {
+                    "name": str(block.name)
+                    if getattr(block, "namePar", None) is not None
+                    else None,
+                    "parameters": parameters,
+                }
+            )
+        return {
+            "operator_path": str(operator.path),
+            "sequence": str(sequence.name),
+            "block_size": int(sequence.blockSize),
+            "max_blocks": int(sequence.maxBlocks) if sequence.maxBlocks is not None else None,
+            "blocks": blocks,
+        }
+
+    def _preflight_sequence_replace(self, operator, sequence, blocks, before):
+        if len(blocks) > self.MAX_SEQUENCE_BLOCKS:
+            raise AgentCommandError("parameter_sequence_too_large")
+        if sequence.maxBlocks is not None and len(blocks) > int(sequence.maxBlocks):
+            raise AgentCommandError("parameter_sequence_too_large")
+        if blocks and not sequence.blocks:
+            raise AgentCommandError("parameter_sequence_not_writable")
+        template = before["blocks"][0] if before["blocks"] else None
+        expected_names = (
+            [item["parameter"] for item in template["parameters"]] if template is not None else []
+        )
+        for block_index, block_input in enumerate(blocks):
+            template_block = (
+                sequence.blocks[block_index]
+                if block_index < len(sequence.blocks)
+                else sequence.blocks[0]
+            )
+            names = [item["parameter"] for item in block_input["parameters"]]
+            if names != expected_names or len(names) > self.MAX_SEQUENCE_PARAMETERS:
+                raise AgentCommandError("parameter_sequence_shape_invalid")
+            if (
+                block_input.get("name") is not None
+                and getattr(template_block, "namePar", None) is None
+            ):
+                raise AgentCommandError("parameter_sequence_shape_invalid")
+            for item in block_input["parameters"]:
+                try:
+                    parameter = template_block.par[item["parameter"]]
+                except Exception as error:
+                    raise AgentCommandError("parameter_not_found") from error
+                parameter_payload = {
+                    "operator_path": str(operator.path),
+                    "parameter": str(parameter.name),
+                    "mode": item["mode"],
+                    "value": item.get("value"),
+                }
+                if item.get("source") is not None:
+                    parameter_payload["source"] = item["source"]
+                self._preflight_parameter("parameters.set", operator, parameter_payload, parameter)
+
+    def _apply_sequence_blocks(self, sequence, blocks):
+        if len(blocks) > self.MAX_SEQUENCE_BLOCKS:
+            raise AgentCommandError("parameter_sequence_too_large")
+        sequence.numBlocks = len(blocks)
+        if int(sequence.numBlocks) != len(blocks):
+            raise RuntimeError("sequence block count rejected")
+        for index, block_input in enumerate(blocks):
+            block = sequence.blocks[index]
+            if block_input.get("name") is not None:
+                block.name = block_input["name"]
+            for item in block_input["parameters"]:
+                try:
+                    parameter = block.par[item["parameter"]]
+                except Exception as error:
+                    raise AgentCommandError("parameter_not_found") from error
+                payload = {
+                    "operator_path": str(sequence.owner.path),
+                    "parameter": str(parameter.name),
+                    "mode": item["mode"],
+                    "value": item.get("value"),
+                }
+                if item.get("source") is not None:
+                    payload["source"] = item["source"]
+                self._set_parameter(payload)
+
+    @staticmethod
     def _parameter_mode(parameter):
         mode = str(parameter.mode).lower()
         for known in ("expression", "export", "bind"):
@@ -214,20 +1698,50 @@ class OperatorControl:
 
     @staticmethod
     def _parameter_value_kind(parameter):
+        style = str(getattr(parameter, "style", "")).lower()
         if bool(getattr(parameter, "isSequence", False)):
             return "sequence"
         if bool(getattr(parameter, "isPython", False)):
             return "python"
         if bool(getattr(parameter, "isOP", False)):
-            try:
-                if isinstance(parameter.eval(), (list, tuple)):
-                    return "unknown"
-            except Exception:  # noqa: BLE001 - TD parameter evaluation can be unavailable
-                return "unknown"
-            return "operator"
+            return "multi_operator" if "multi" in style else "operator"
+        style_kinds = {
+            "str": "string",
+            "file": "string",
+            "filesave": "string",
+            "folder": "string",
+            "header": "string",
+            "float": "number",
+            "rgba": "number",
+            "uvw": "number",
+            "wh": "number",
+            "xyzw": "number",
+            "int": "integer",
+            "toggle": "boolean",
+            "momentary": "boolean",
+            "pulse": "pulse",
+            "menu": "menu",
+            "strmenu": "menu",
+            "python": "python",
+            "sequence": "sequence",
+            "object": "operator",
+            "sop": "operator",
+            "pop": "operator",
+            "mat": "operator",
+            "chop": "operator",
+            "top": "operator",
+            "dat": "operator",
+            "panelcomp": "operator",
+            "comp": "operator",
+            "op": "operator",
+            "topmulti": "multi_operator",
+        }
+        if style in style_kinds:
+            return style_kinds[style]
         checks = (
             ("isPulse", "pulse"),
             ("isMenu", "menu"),
+            ("isMomentary", "boolean"),
             ("isToggle", "boolean"),
             ("isInt", "integer"),
             ("isFloat", "number"),
@@ -243,11 +1757,13 @@ class OperatorControl:
         name = command["name"]
         payload = command["input"]
         operator = self.operator_lookup(payload["operator_path"])
-        if operator is None:
+        if operator is None or str(operator.path) != payload["operator_path"]:
             raise AgentCommandError("operator_not_found")
         if name.startswith("parameters.") and "parameter" in payload:
             parameter = self._parameter(operator, payload["parameter"])
             self._preflight_parameter(name, operator, payload, parameter)
+        if name == "parameters.sequence.get":
+            self._get_parameter_sequence(payload)
 
     def _create_operator(self, payload):
         catalog_status = self.operator_catalog.require_creatable(
@@ -368,6 +1884,176 @@ class OperatorControl:
             "disconnected": True,
         }
 
+    def _connect_hierarchy(self, payload):
+        source, target, output_index, input_index = self._hierarchy_endpoints(payload)
+        if self._hierarchy_reachable(target, source):
+            raise AgentCommandError("hierarchy_cycle")
+        source_connector = source.outputCOMPConnectors[output_index]
+        target_connector = target.inputCOMPConnectors[input_index]
+        if len(target_connector.connections) > 1:
+            raise AgentCommandError("hierarchy_connector_state_ambiguous")
+        previous = target_connector.connections[0] if target_connector.connections else None
+        previous_connection = (
+            {"source_path": str(previous.owner.path), "output_index": int(previous.index)}
+            if previous is not None
+            else None
+        )
+        if previous is not None and self._connection_matches(previous, source, output_index):
+            if not self._hierarchy_identity_current(source, target):
+                raise AgentCommandError("hierarchy_connector_outcome_unknown")
+            if not self._hierarchy_edge_matches(source_connector, target, input_index):
+                raise AgentCommandError("hierarchy_connector_state_ambiguous")
+            return {
+                "source_path": str(source.path),
+                "target_path": str(target.path),
+                "output_index": output_index,
+                "input_index": input_index,
+                "connected": True,
+                "replaced": False,
+                "previous_connection": previous_connection,
+            }
+        if previous is not None and not payload.get("replace", False):
+            raise AgentCommandError("hierarchy_connector_occupied")
+        try:
+            source_connector.connect(target_connector)
+            if not self._hierarchy_identity_current(source, target):
+                raise AgentCommandError("hierarchy_connector_outcome_unknown")
+            if not self._hierarchy_connection_verified(source, target, output_index, input_index):
+                raise RuntimeError("hierarchy connection verification failed")
+        except Exception as error:
+            if not self._hierarchy_identity_current(source, target):
+                raise AgentCommandError("hierarchy_connector_outcome_unknown") from error
+            self._disconnect_connector(target_connector)
+            if previous is not None:
+                try:
+                    previous_source = self.operator_lookup(str(previous.owner.path))
+                    if previous_source is not previous.owner:
+                        raise AgentCommandError("hierarchy_connector_outcome_unknown")
+                    previous_output = previous_source.outputCOMPConnectors[int(previous.index)]
+                    previous_output.connect(target_connector)
+                    if not self._hierarchy_connection_verified(
+                        previous_source, target, int(previous.index), input_index
+                    ):
+                        raise RuntimeError("hierarchy rollback verification failed")
+                except AgentCommandError:
+                    raise
+                except Exception:  # noqa: BLE001 - uncertain hierarchy mutation outcome
+                    raise AgentCommandError(
+                        "hierarchy_connector_replace_rollback_failed"
+                    ) from error
+                raise AgentCommandError("hierarchy_connector_replace_failed") from error
+            if target_connector.connections or self._hierarchy_edge_matches(
+                source_connector, target, input_index
+            ):
+                raise AgentCommandError("hierarchy_connector_outcome_unknown") from error
+            raise AgentCommandError("hierarchy_connector_connect_failed") from error
+        return {
+            "source_path": str(source.path),
+            "target_path": str(target.path),
+            "output_index": output_index,
+            "input_index": input_index,
+            "connected": True,
+            "replaced": previous is not None,
+            "previous_connection": previous_connection,
+        }
+
+    def _disconnect_hierarchy(self, payload):
+        source, target, output_index, input_index = self._hierarchy_endpoints(payload)
+        source_connector = source.outputCOMPConnectors[output_index]
+        target_connector = target.inputCOMPConnectors[input_index]
+        if not self._hierarchy_connection_verified(source, target, output_index, input_index):
+            raise AgentCommandError("hierarchy_connection_not_found")
+        try:
+            target_connector.disconnect()
+        except Exception as error:
+            if not self._hierarchy_identity_current(source, target):
+                raise AgentCommandError("hierarchy_connector_outcome_unknown") from error
+            raise AgentCommandError("hierarchy_connector_disconnect_failed") from error
+        if not self._hierarchy_identity_current(source, target):
+            raise AgentCommandError("hierarchy_connector_outcome_unknown")
+        if target_connector.connections or self._hierarchy_edge_matches(
+            source_connector, target, input_index
+        ):
+            raise AgentCommandError("hierarchy_connector_disconnect_failed")
+        return {**payload, "disconnected": True}
+
+    def _hierarchy_endpoints(self, payload):
+        source = self.operator_lookup(payload["source_path"])
+        target = self.operator_lookup(payload["target_path"])
+        if (
+            source is None
+            or target is None
+            or str(source.path) != payload["source_path"]
+            or str(target.path) != payload["target_path"]
+        ):
+            raise AgentCommandError("operator_not_found")
+        self._require_mutable_path(str(source.path))
+        self._require_mutable_path(str(target.path))
+        source_kind = self._hierarchy_kind(source)
+        target_kind = self._hierarchy_kind(target)
+        if source_kind == "unsupported" or target_kind == "unsupported":
+            raise AgentCommandError("hierarchy_kind_unsupported")
+        if source_kind != target_kind:
+            raise AgentCommandError("hierarchy_kind_mismatch")
+        if str(source.parent().path) != str(target.parent().path):
+            raise AgentCommandError("hierarchy_parent_mismatch")
+        output_index = payload["output_index"]
+        input_index = payload["input_index"]
+        if output_index >= len(source.outputCOMPConnectors) or input_index >= len(
+            target.inputCOMPConnectors
+        ):
+            raise AgentCommandError("hierarchy_connector_not_found")
+        return source, target, output_index, input_index
+
+    def _hierarchy_reachable(self, start, desired):
+        queue = [start]
+        visited = set()
+        while queue:
+            operator = queue.pop(0)
+            path = str(operator.path)
+            if path in visited:
+                continue
+            visited.add(path)
+            if len(visited) > self.MAX_HIERARCHY_TRAVERSAL:
+                raise AgentCommandError("result_too_large")
+            if path == str(desired.path):
+                return True
+            for connector in getattr(operator, "outputCOMPConnectors", []):
+                queue.extend(connection.owner for connection in connector.connections)
+        return False
+
+    @staticmethod
+    def _hierarchy_kind(operator):
+        if str(getattr(operator, "family", "")) != "COMP":
+            raise AgentCommandError("hierarchy_comp_required")
+        if bool(getattr(operator, "isObject", False)):
+            return "object"
+        if bool(getattr(operator, "isPanel", False)):
+            return "panel"
+        return "unsupported"
+
+    def _hierarchy_identity_current(self, *operators):
+        return all(self.operator_lookup(str(operator.path)) is operator for operator in operators)
+
+    @classmethod
+    def _hierarchy_connection_verified(cls, source, target, output_index, input_index):
+        source_connector = source.outputCOMPConnectors[output_index]
+        target_connector = target.inputCOMPConnectors[input_index]
+        return (
+            len(target_connector.connections) == 1
+            and cls._connection_matches(target_connector.connections[0], source, output_index)
+            and cls._hierarchy_edge_matches(source_connector, target, input_index)
+        )
+
+    @staticmethod
+    def _hierarchy_edge_matches(source_connector, target, input_index):
+        return any(
+            str(connection.owner.path) == str(target.path)
+            and int(connection.index) == input_index
+            and bool(connection.isInput)
+            for connection in source_connector.connections
+        )
+
     def _connector_endpoints(self, payload):
         source = self.operator_lookup(payload["source_path"])
         target = self.operator_lookup(payload["target_path"])
@@ -402,8 +2088,8 @@ class OperatorControl:
         if name in {"parameters.get", "parameters.set"}:
             self._parameter_result(operator, payload["parameter"], parameter)
         if name == "parameters.set":
-            if getattr(parameter, "readOnly", False):
-                raise AgentCommandError("parameter_read_only")
+            self._require_parameter_writable(parameter)
+            self._validate_parameter_write(parameter, payload)
             if payload["mode"] == "expression":
                 try:
                     compile(payload["value"], "<parameter-expression>", "eval")
@@ -411,26 +2097,195 @@ class OperatorControl:
                     raise AgentCommandError("expression_invalid")
         if name == "parameters.pulse" and not getattr(parameter, "isPulse", False):
             raise AgentCommandError("parameter_not_pulseable")
+        if name == "parameters.pulse":
+            self._require_parameter_writable(parameter)
+
+    @staticmethod
+    def _require_parameter_writable(parameter):
+        if getattr(parameter, "readOnly", False):
+            raise AgentCommandError("parameter_read_only")
+        if not bool(getattr(parameter, "enable", True)):
+            raise AgentCommandError("parameter_disabled")
+        if bool(getattr(parameter, "hidden", False)):
+            raise AgentCommandError("parameter_obsolete")
+        if hasattr(parameter, "page") and getattr(parameter, "page", None) is None:
+            raise AgentCommandError("parameter_type_unsupported")
+
+    def _validate_parameter_write(self, parameter, payload):
+        kind = self._parameter_value_kind(parameter)
+        mode = payload["mode"]
+        if kind in {"pulse", "python", "sequence", "unknown"}:
+            raise AgentCommandError("parameter_type_unsupported")
+        if mode == "export" and kind not in {"boolean", "integer", "number"}:
+            raise AgentCommandError("parameter_type_unsupported")
+        value = payload.get("value")
+        if mode == "bind":
+            source = payload["source"]
+            source_operator = self.operator_lookup(source["operator_path"])
+            if source_operator is None or str(source_operator.path) != source["operator_path"]:
+                raise AgentCommandError("parameter_source_not_found")
+            self._parameter(source_operator, source["parameter"])
+        if mode == "export":
+            self._require_existing_export_source(parameter, payload["source"])
+        if mode == "constant" and kind in {"operator", "multi_operator"}:
+            self._parameter_constant_for_write(parameter, value)
+        if mode != "constant":
+            return
+        expected = {
+            "boolean": bool,
+            "integer": int,
+            "number": (int, float),
+            "string": str,
+            "menu": str,
+        }.get(kind)
+        if expected is not None and (
+            not isinstance(value, expected) or kind == "integer" and type(value) is bool
+        ):
+            raise AgentCommandError("parameter_value_invalid")
+        if kind == "menu" and value not in list(getattr(parameter, "menuNames", []) or []):
+            raise AgentCommandError("parameter_value_invalid")
 
     def _set_parameter(self, payload):
         operator, parameter = self._parameter_for_payload(payload)
+        operator_path = str(operator.path)
         self._preflight_parameter("parameters.set", operator, payload, parameter)
+        before = self._parameter_snapshot(parameter)
+        before_result = self._parameter_result(operator, payload["parameter"], parameter)
         try:
             if payload["mode"] == "expression":
                 parameter.expr = payload["value"]
+            elif payload["mode"] == "bind":
+                source = payload["source"]
+                source_operator = self.operator_lookup(source["operator_path"])
+                if (
+                    source_operator is None
+                    or self._parameter(source_operator, source["parameter"]) is None
+                ):
+                    raise AgentCommandError("parameter_source_not_found")
+                parameter.bindExpr = "op({!r}).par.{}".format(
+                    source["operator_path"], source["parameter"]
+                )
+            elif payload["mode"] == "export":
+                self._activate_parameter_export(parameter, payload["source"])
             else:
-                parameter.val = payload["value"]
-        except Exception:  # noqa: BLE001 - TouchDesigner raises tdError subclasses
+                parameter.val = self._parameter_constant_for_write(parameter, payload["value"])
+        except AgentCommandError:
+            raise
+        except Exception as error:
             code = (
                 "expression_invalid"
                 if payload["mode"] == "expression"
                 else "parameter_write_rejected"
             )
-            raise AgentCommandError(code)
-        result = self._parameter_result(operator, payload["parameter"], parameter)
-        if result["mode"] != payload["mode"] or result["value"] != payload["value"]:
-            raise AgentCommandError("parameter_write_rejected")
+            self._rollback_parameter(
+                operator_path, payload["parameter"], before, before_result, error
+            )
+            raise AgentCommandError(code) from error
+        try:
+            result = self._parameter_result(operator, payload["parameter"], parameter)
+            expected = (
+                self._canonical_parameter_source(payload.get("source"))
+                if payload["mode"] in {"export", "bind"}
+                else payload["value"]
+            )
+            actual = (
+                result.get("source") if payload["mode"] in {"export", "bind"} else result["value"]
+            )
+            if result["mode"] != payload["mode"] or actual != expected:
+                raise RuntimeError("parameter readback mismatch")
+        except Exception as error:
+            self._rollback_parameter(
+                operator_path, payload["parameter"], before, before_result, error
+            )
+            raise AgentCommandError("parameter_write_rejected") from error
         return result
+
+    @staticmethod
+    def _canonical_parameter_source(source):
+        if source is None:
+            return None
+        return {
+            "kind": source["kind"],
+            "operator_path": source["operator_path"],
+            "channel": source.get("channel"),
+            "parameter": source.get("parameter"),
+        }
+
+    def _parameter_constant_for_write(self, parameter, value):
+        kind = self._parameter_value_kind(parameter)
+        if kind not in {"operator", "multi_operator"}:
+            return value
+        paths = value if isinstance(value, list) else ([] if value is None else [value])
+        if kind == "operator" and len(paths) > 1:
+            raise AgentCommandError("parameter_value_invalid")
+        operators = []
+        for path in paths:
+            target = self.operator_lookup(path)
+            if target is None or str(target.path) != path:
+                raise AgentCommandError("parameter_source_not_found")
+            operators.append(target)
+        if kind == "multi_operator":
+            return operators
+        return operators[0] if operators else None
+
+    def _activate_parameter_export(self, parameter, source):
+        self._require_existing_export_source(parameter, source)
+        parameter.mode = getattr(getattr(builtins, "ParMode", None), "EXPORT", "export")
+
+    def _require_existing_export_source(self, parameter, source):
+        source_operator = self.operator_lookup(source["operator_path"])
+        if source_operator is None or str(source_operator.path) != source["operator_path"]:
+            raise AgentCommandError("parameter_source_not_found")
+        try:
+            channel = source_operator[source["channel"]]
+        except Exception as error:
+            raise AgentCommandError("parameter_source_not_found") from error
+        if channel is None:
+            raise AgentCommandError("parameter_source_not_found")
+        current = getattr(parameter, "exportSource", None)
+        current_owner = getattr(current, "owner", None)
+        if (
+            current is None
+            or current_owner is None
+            or str(current_owner.path) != source["operator_path"]
+            or str(current.name) != source["channel"]
+        ):
+            raise AgentCommandError("parameter_export_source_unavailable")
+
+    @classmethod
+    def _parameter_snapshot(cls, parameter):
+        return {
+            "mode": cls._parameter_mode(parameter),
+            "raw_mode": getattr(parameter, "mode", None),
+            "val": getattr(parameter, "val", None),
+            "expr": getattr(parameter, "expr", ""),
+            "bind_expr": getattr(parameter, "bindExpr", ""),
+        }
+
+    def _rollback_parameter(self, operator_path, name, before, before_result, cause):
+        try:
+            operator = self.operator_lookup(operator_path)
+            if operator is None or str(operator.path) != operator_path:
+                raise AgentCommandError("parameter_not_found")
+            parameter = self._parameter(operator, name)
+            mode = before["mode"]
+            if mode == "expression":
+                parameter.expr = before["expr"]
+            elif mode == "bind":
+                parameter.bindExpr = before["bind_expr"]
+            elif mode == "export":
+                parameter.mode = before["raw_mode"]
+            else:
+                parameter.val = before["val"]
+            restored = self._parameter_result(operator, name, parameter)
+            if restored != before_result:
+                raise RuntimeError("rollback readback mismatch")
+        except AgentCommandError as error:
+            if error.code == "parameter_not_found":
+                raise AgentCommandError("parameter_outcome_unknown") from cause
+            raise
+        except Exception as error:
+            raise AgentCommandError("parameter_rollback_failed") from error
 
     @staticmethod
     def _operator_result(operator):
@@ -454,8 +2309,30 @@ class OperatorControl:
     @classmethod
     def _parameter_result(cls, operator, name, parameter):
         mode = cls._parameter_mode(parameter)
-        value = parameter.expr if mode == "expression" else parameter.eval()
-        if type(value) is bool:
+        kind = cls._parameter_value_kind(parameter)
+        source = cls._parameter_source(parameter, mode)
+        if kind in {"python", "sequence", "unknown"}:
+            value = None
+        elif mode == "expression":
+            value = parameter.expr
+        elif kind in {"operator", "multi_operator"}:
+            try:
+                operators = list(parameter.evalOPs())
+            except Exception as error:
+                raise AgentCommandError("parameter_type_unsupported") from error
+            paths = [str(item.path) for item in operators]
+            if len(paths) > cls.MAX_MULTI_OP_PATHS:
+                raise AgentCommandError("parameter_value_too_large")
+            value = paths if kind == "multi_operator" else (paths[0] if paths else None)
+        else:
+            value = parameter.eval()
+        if kind in {"python", "sequence", "unknown"} and value is None:
+            value_type = kind
+        elif kind == "operator" and (value is None or type(value) is str):
+            value_type = "operator"
+        elif kind == "multi_operator" and isinstance(value, list):
+            value_type = "multi_operator"
+        elif type(value) is bool:
             value_type = "boolean"
         elif type(value) is int:
             value_type = "integer"
@@ -471,7 +2348,37 @@ class OperatorControl:
             "mode": mode,
             "value": value,
             "value_type": value_type,
+            "source": source,
+            "unsupported_reason": "opaque_or_structural"
+            if kind in {"python", "sequence", "unknown"}
+            else None,
         }
+
+    @staticmethod
+    def _parameter_source(parameter, mode):
+        if mode == "export":
+            source = getattr(parameter, "exportSource", None)
+            owner = getattr(source, "owner", None)
+            if source is None or owner is None:
+                return None
+            return {
+                "kind": "export_channel",
+                "operator_path": str(owner.path),
+                "channel": str(source.name),
+                "parameter": None,
+            }
+        if mode == "bind":
+            master = getattr(parameter, "bindMaster", None)
+            owner = getattr(master, "owner", None)
+            if master is None or owner is None:
+                return None
+            return {
+                "kind": "bind_parameter",
+                "operator_path": str(owner.path),
+                "channel": None,
+                "parameter": str(master.name),
+            }
+        return None
 
 
 class AgentExt:
@@ -506,7 +2413,12 @@ class AgentExt:
             raise RuntimeError("Operator catalog DAT is invalid") from error
         if operator_catalog.touchdesigner_build != str(self.app_info.build):
             raise RuntimeError("Operator catalog TouchDesigner build does not match runtime")
-        self.operator_control = OperatorControl(self.operator_lookup, operator_catalog)
+        self.operator_control = OperatorControl(
+            self.operator_lookup,
+            operator_catalog,
+            protected_path=owner_comp.path,
+            passive_lookup=getattr(_td_runtime, "passive", None),
+        )
         runtime_session_id = builtins._td_cli_runtime_session_id
         state = getattr(builtins, "_td_cli_agent_state", None)
         if state is None or state["runtime_session_id"] != runtime_session_id:

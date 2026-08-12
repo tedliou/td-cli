@@ -48,8 +48,32 @@ _Avoid_: script, arbitrary Python
 The canonical absolute TouchDesigner path of an Operator. Public Commands do not accept relative paths, shortcuts, patterns, or traversal segments.
 _Avoid_: relative OP path, OP shortcut
 
+**Regular Connection**:
+A left-to-right data wire between regular Operator input and output connectors. It is distinct from a COMP Hierarchy Connection.
+_Avoid_: hierarchy wire, parent connection
+
+**COMP Hierarchy Connection**:
+A top-to-bottom parent/child connection between compatible Object COMPs or compatible Panel COMPs. It is not a Regular Connection and never connects across the Object and Panel hierarchy kinds.
+_Avoid_: regular wire, COMP data connection
+
+**Operator Family Inspection**:
+A bounded, read-only snapshot of the latest cached CHOP, DAT, TOP, SOP, POP, or MAT family metadata for one Operator. It does not force a cook, return family content, or replace common Operator state, Parameter, connection, or DAT content Commands.
+_Avoid_: Operator dump, arbitrary attribute inspection, family content preview
+
+**Trusted TOX Import**:
+A bounded mutation that imports one caller-trusted local TOX as executable
+TouchDesigner project content beneath an exact parent Operator Path. It can
+recover the destination Operator graph after a failed replacement, but it does
+not sandbox the TOX or undo filesystem, network, process, or other out-of-graph
+side effects.
+_Avoid_: safe TOX import, sandboxed TOX, atomic external rollback
+
 **Parameter Value**:
-A typed boolean, integer, number, or string constant, or the source text of an expression, read from or written to one Operator Parameter. It is not an arbitrary Python object.
+A typed boolean, integer, number, string, one canonical Operator Path (or null),
+or a bounded ordered list of canonical Operator Paths, read from or written to
+one Operator Parameter. Expression source text is mode-specific. Export and
+Bind use typed source identities rather than Parameter Values. It is not an
+arbitrary Python object.
 _Avoid_: untyped value, serialized object
 
 **Request**:

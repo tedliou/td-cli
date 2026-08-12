@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 import zipfile
 from importlib.metadata import version
@@ -9,6 +10,13 @@ from pathlib import Path
 
 RELEASE_VERSION = version("touchdesigner-cli")
 LOCKED_TOUCHDESIGNER_VERSION = "2025.32050"
+PRE_1_RELEASE_VERSION = re.compile(
+    r"^0\.(?:[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9]\d*))?$"
+)
+
+
+def is_approved_release_version(value: str) -> bool:
+    return PRE_1_RELEASE_VERSION.fullmatch(value) is not None
 
 
 def _load_json(path: Path) -> dict[str, object]:

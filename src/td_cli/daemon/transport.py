@@ -14,6 +14,7 @@ from pathlib import Path
 import socketio
 from fastapi import HTTPException
 
+from td_cli.command_catalog import OPERATOR_STATE_BOOLEAN_FIELDS
 from td_cli.daemon.app import SubmitRequest, create_app
 from td_cli.release import LOCKED_TOUCHDESIGNER_VERSION
 
@@ -394,8 +395,46 @@ def _normalize_command_result(command: object, result: object) -> object:
                     nested_commands, nested_results, strict=False
                 )
             ]
-    elif name == "ops.connect":
+    elif name in {"ops.connect", "ops.hierarchy.connect"}:
         normalized.setdefault("previous_connection", None)
+    elif name in {"ops.connections", "ops.hierarchy.connections"} and isinstance(
+        normalized.get("inputs"), list
+    ):
+        normalized["inputs"] = [
+            {**item, "connection": item.get("connection")} if isinstance(item, dict) else item
+            for item in normalized["inputs"]
+        ]
+    elif name == "ops.copy" and "include_docked" in normalized:
+        normalized["include_docked"] = bool(normalized["include_docked"])
+    elif name == "ops.tox.import":
+        for field in ("trusted", "replaced", "rollback_performed"):
+            if field in normalized:
+                normalized[field] = bool(normalized[field])
+    elif name in {"ops.state.get", "ops.state.set"} and isinstance(normalized.get("state"), dict):
+        state = dict(normalized["state"])
+        for field in OPERATOR_STATE_BOOLEAN_FIELDS:
+            if field in state:
+                state[field] = bool(state[field])
+        normalized["state"] = state
+    elif name == "ops.inspect":
+        for section, fields in {
+            "cook": ("cooked_this_frame", "cooked_previous_frame"),
+            "flags": ("display", "render"),
+        }.items():
+            values = normalized.get(section)
+            if isinstance(values, dict):
+                normalized[section] = {
+                    **values,
+                    **{field: bool(values[field]) for field in fields if field in values},
+                }
+        details = normalized.get("details")
+        if isinstance(details, dict):
+            if normalized.get("family") == "DAT":
+                details.setdefault("editing_file", None)
+            for field in ("time_slice", "export", "editable", "template", "compare"):
+                if field in details:
+                    details[field] = bool(details[field])
+            normalized["details"] = details
     elif name == "parameters.list" and isinstance(normalized.get("parameters"), list):
         parameters = []
         for item in normalized["parameters"]:
@@ -404,6 +443,11 @@ def _normalize_command_result(command: object, result: object) -> object:
                 continue
             descriptor = dict(item)
             descriptor.setdefault("page", None)
+            descriptor.setdefault("unsupported_reason", None)
+            descriptor.setdefault("sequence", None)
+            descriptor.setdefault("source", None)
+            descriptor.setdefault("bounds", None)
+            descriptor.setdefault("max_operator_paths", None)
             expression = descriptor.get("expression")
             if isinstance(expression, dict):
                 descriptor["expression"] = {**expression, "source": expression.get("source")}
@@ -415,6 +459,20 @@ def _normalize_command_result(command: object, result: object) -> object:
                 descriptor.setdefault("menu_labels", None)
             parameters.append(descriptor)
         normalized["parameters"] = parameters
+    elif name in {"parameters.get", "parameters.set"}:
+        normalized.setdefault("source", None)
+        normalized.setdefault("unsupported_reason", None)
+        if normalized.get("value_type") in {"operator", "python", "sequence", "unknown"}:
+            normalized.setdefault("value", None)
+    elif name in {"parameters.sequence.get", "parameters.sequence.replace"}:
+        normalized.setdefault("max_blocks", None)
+        for block in normalized.get("blocks", []):
+            if not isinstance(block, dict):
+                continue
+            block.setdefault("name", None)
+            for parameter in block.get("parameters", []):
+                if isinstance(parameter, dict):
+                    parameter.setdefault("value", None)
     return normalized
 
 

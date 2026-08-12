@@ -14,12 +14,19 @@ from typer._click.exceptions import ClickException, UsageError
 
 from td_cli import __version__
 from td_cli.client import ClientError, DaemonClient
+from td_cli.command_catalog import MAX_DAT_CONTENT_BYTES, MAX_INSPECTION_ITEMS, MAX_TOX_FILE_BYTES
 from td_cli.protocol import Command
 
 app = typer.Typer(no_args_is_help=True)
 instances_app = typer.Typer()
 requests_app = typer.Typer()
 ops_app = typer.Typer()
+ops_state_app = typer.Typer()
+ops_hierarchy_app = typer.Typer()
+ops_tox_app = typer.Typer()
+dat_app = typer.Typer()
+dat_text_app = typer.Typer()
+dat_table_app = typer.Typer()
 parameters_app = typer.Typer()
 project_app = typer.Typer()
 binary_app = typer.Typer()
@@ -28,6 +35,12 @@ events_app = typer.Typer()
 app.add_typer(instances_app, name="instances")
 app.add_typer(requests_app, name="requests")
 app.add_typer(ops_app, name="ops")
+ops_app.add_typer(ops_state_app, name="state")
+ops_app.add_typer(ops_hierarchy_app, name="hierarchy")
+ops_app.add_typer(ops_tox_app, name="tox")
+app.add_typer(dat_app, name="dat")
+dat_app.add_typer(dat_text_app, name="text")
+dat_app.add_typer(dat_table_app, name="table")
 app.add_typer(parameters_app, name="parameters")
 app.add_typer(project_app, name="project")
 app.add_typer(binary_app, name="binary")
@@ -69,9 +82,9 @@ def _emit(ctx: typer.Context, data: object, *, request: dict[str, Any] | None = 
         envelope: dict[str, object] = {"protocol_version": 1, "data": data}
         if request is not None:
             envelope["request"] = {"request_id": request["request_id"], "status": request["status"]}
-        typer.echo(json.dumps(envelope, separators=(",", ":"), ensure_ascii=False))
+        typer.echo(json.dumps(envelope, separators=(",", ":"), ensure_ascii=True))
     else:
-        typer.echo(json.dumps(data, indent=2, ensure_ascii=False))
+        typer.echo(json.dumps(data, indent=2, ensure_ascii=True))
 
 
 def _fail(ctx: typer.Context, error: ClientError) -> None:
@@ -270,6 +283,91 @@ def _command(
     )
 
 
+def _structural_destination_input(
+    ctx: typer.Context,
+    source_path: str | None,
+    target_parent_path: str | None,
+    new_name: str | None,
+    node_x: int | None,
+    node_y: int | None,
+    max_operators: int | None,
+    *,
+    specific_requested: bool,
+    specific_input: dict[str, Any],
+) -> dict[str, Any] | None:
+    identity = (source_path, target_parent_path, new_name)
+    if any(value is not None for value in identity) and not all(
+        value is not None for value in identity
+    ):
+        _fail(ctx, ClientError("invalid_arguments"))
+    if (
+        node_x is not None or node_y is not None or specific_requested or max_operators is not None
+    ) and source_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    if source_path is None or target_parent_path is None or new_name is None:
+        return None
+    return {
+        "source_path": source_path,
+        "target_parent_path": target_parent_path,
+        "new_name": new_name,
+        "node_x": node_x,
+        "node_y": node_y,
+        "max_operators": max_operators if max_operators is not None else 256,
+        **specific_input,
+    }
+
+
+def _connector_input(
+    ctx: typer.Context,
+    source_path: str | None,
+    target_path: str | None,
+    output_index: int | None,
+    input_index: int | None,
+    replace: bool | None = None,
+) -> dict[str, object] | None:
+    if (source_path is None) != (target_path is None):
+        _fail(ctx, ClientError("invalid_arguments"))
+    if (
+        output_index is not None or input_index is not None or replace is True
+    ) and source_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    if source_path is None or target_path is None:
+        return None
+    result: dict[str, object] = {
+        "source_path": source_path,
+        "target_path": target_path,
+        "output_index": output_index or 0,
+        "input_index": input_index or 0,
+    }
+    if replace is not None:
+        result["replace"] = replace
+    return result
+
+
+def _json_rows(ctx: typer.Context, value: str | None) -> list[list[str]] | None:
+    if value is None:
+        return None
+    try:
+        decoded = json.loads(value)
+    except json.JSONDecodeError:
+        _fail(ctx, ClientError("invalid_arguments"))
+    if not isinstance(decoded, list):
+        _fail(ctx, ClientError("invalid_arguments"))
+    return decoded
+
+
+def _json_blocks(ctx: typer.Context, value: str | None) -> list[dict[str, Any]] | None:
+    if value is None:
+        return None
+    try:
+        decoded = json.loads(value)
+    except json.JSONDecodeError:
+        _fail(ctx, ClientError("invalid_arguments"))
+    if not isinstance(decoded, list) or any(not isinstance(item, dict) for item in decoded):
+        _fail(ctx, ClientError("invalid_arguments"))
+    return decoded
+
+
 @ops_app.command("get")
 def ops_get(
     ctx: typer.Context,
@@ -290,6 +388,214 @@ def ops_get(
     )
 
 
+@ops_app.command("inspect")
+def ops_inspect(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    max_items: Annotated[int | None, typer.Option("--max-items")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    if max_items is not None and operator_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = (
+        {
+            "operator_path": operator_path,
+            "max_items": max_items if max_items is not None else MAX_INSPECTION_ITEMS,
+        }
+        if operator_path is not None
+        else None
+    )
+    _command(ctx, "ops.inspect", dedicated, input, input_file, no_wait, request_id)
+
+
+@ops_state_app.command("get")
+def ops_state_get(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    _command(
+        ctx,
+        "ops.state.get",
+        {"operator_path": operator_path} if operator_path is not None else None,
+        input,
+        input_file,
+        no_wait,
+        request_id,
+    )
+
+
+@ops_state_app.command("set")
+def ops_state_set(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    node_x: Annotated[int | None, typer.Option("--node-x")] = None,
+    node_y: Annotated[int | None, typer.Option("--node-y")] = None,
+    node_width: Annotated[int | None, typer.Option("--node-width")] = None,
+    node_height: Annotated[int | None, typer.Option("--node-height")] = None,
+    color: Annotated[tuple[float, float, float] | None, typer.Option("--color")] = None,
+    comment: Annotated[str | None, typer.Option("--comment")] = None,
+    bypass: Annotated[bool | None, typer.Option("--bypass/--no-bypass")] = None,
+    lock: Annotated[bool | None, typer.Option("--lock/--no-lock")] = None,
+    viewer: Annotated[bool | None, typer.Option("--viewer/--no-viewer")] = None,
+    expose: Annotated[bool | None, typer.Option("--expose/--no-expose")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    patch = {
+        "node_x": node_x,
+        "node_y": node_y,
+        "node_width": node_width,
+        "node_height": node_height,
+        "color": (
+            {"red": color[0], "green": color[1], "blue": color[2]} if color is not None else None
+        ),
+        "comment": comment,
+        "bypass": bypass,
+        "lock": lock,
+        "viewer": viewer,
+        "expose": expose,
+    }
+    if any(value is not None for value in patch.values()) and operator_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = {"operator_path": operator_path, **patch} if operator_path is not None else None
+    _command(ctx, "ops.state.set", dedicated, input, input_file, no_wait, request_id)
+
+
+@dat_text_app.command("get")
+def dat_text_get(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    max_bytes: Annotated[int | None, typer.Option("--max-bytes")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    if max_bytes is not None and operator_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = (
+        {
+            "operator_path": operator_path,
+            "max_bytes": max_bytes if max_bytes is not None else MAX_DAT_CONTENT_BYTES,
+        }
+        if operator_path is not None
+        else None
+    )
+    _command(ctx, "dat.text.get", dedicated, input, input_file, no_wait, request_id)
+
+
+@dat_text_app.command("set")
+def dat_text_set(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    text: Annotated[str | None, typer.Argument()] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    if (operator_path is None) != (text is None):
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = (
+        {"operator_path": operator_path, "text": text} if operator_path is not None else None
+    )
+    _command(ctx, "dat.text.set", dedicated, input, input_file, no_wait, request_id)
+
+
+@dat_table_app.command("get")
+def dat_table_get(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    row_offset: Annotated[int | None, typer.Option("--row-offset")] = None,
+    column_offset: Annotated[int | None, typer.Option("--column-offset")] = None,
+    row_count: Annotated[int | None, typer.Option("--row-count")] = None,
+    column_count: Annotated[int | None, typer.Option("--column-count")] = None,
+    max_bytes: Annotated[int | None, typer.Option("--max-bytes")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    options = (row_offset, column_offset, row_count, column_count, max_bytes)
+    if any(value is not None for value in options) and operator_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = (
+        {
+            "operator_path": operator_path,
+            "row_offset": row_offset if row_offset is not None else 0,
+            "column_offset": column_offset if column_offset is not None else 0,
+            "row_count": row_count if row_count is not None else 64,
+            "column_count": column_count if column_count is not None else 64,
+            "max_bytes": max_bytes if max_bytes is not None else MAX_DAT_CONTENT_BYTES,
+        }
+        if operator_path is not None
+        else None
+    )
+    _command(ctx, "dat.table.get", dedicated, input, input_file, no_wait, request_id)
+
+
+@dat_table_app.command("replace")
+def dat_table_replace(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    rows: Annotated[str | None, typer.Argument()] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    if (operator_path is None) != (rows is None):
+        _fail(ctx, ClientError("invalid_arguments"))
+    decoded_rows = _json_rows(ctx, rows)
+    dedicated = (
+        {"operator_path": operator_path, "rows": decoded_rows}
+        if operator_path is not None
+        else None
+    )
+    _command(ctx, "dat.table.replace", dedicated, input, input_file, no_wait, request_id)
+
+
+@dat_table_app.command("patch")
+def dat_table_patch(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    rows: Annotated[str | None, typer.Argument()] = None,
+    row_offset: Annotated[int | None, typer.Option("--row-offset")] = None,
+    column_offset: Annotated[int | None, typer.Option("--column-offset")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    if (
+        (operator_path is None) != (rows is None)
+        or (row_offset is not None or column_offset is not None)
+        and operator_path is None
+    ):
+        _fail(ctx, ClientError("invalid_arguments"))
+    decoded_rows = _json_rows(ctx, rows)
+    dedicated = (
+        {
+            "operator_path": operator_path,
+            "row_offset": row_offset if row_offset is not None else 0,
+            "column_offset": column_offset if column_offset is not None else 0,
+            "rows": decoded_rows,
+        }
+        if operator_path is not None
+        else None
+    )
+    _command(ctx, "dat.table.patch", dedicated, input, input_file, no_wait, request_id)
+
+
 @ops_app.command("children")
 def ops_children(
     ctx: typer.Context,
@@ -306,6 +612,85 @@ def ops_children(
         {"operator_path": operator_path, "op_type": op_type} if operator_path is not None else None
     )
     _command(ctx, "ops.children", dedicated, input, input_file, no_wait, request_id)
+
+
+@ops_app.command("connections")
+def ops_connections(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    max_connections: Annotated[int | None, typer.Option("--max-connections")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    if max_connections is not None and operator_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = (
+        {
+            "operator_path": operator_path,
+            "max_connections": max_connections if max_connections is not None else 256,
+        }
+        if operator_path is not None
+        else None
+    )
+    _command(ctx, "ops.connections", dedicated, input, input_file, no_wait, request_id)
+
+
+@ops_hierarchy_app.command("connections")
+def ops_hierarchy_connections(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    max_connections: Annotated[int | None, typer.Option("--max-connections")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    if max_connections is not None and operator_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = (
+        {
+            "operator_path": operator_path,
+            "max_connections": max_connections if max_connections is not None else 256,
+        }
+        if operator_path is not None
+        else None
+    )
+    _command(ctx, "ops.hierarchy.connections", dedicated, input, input_file, no_wait, request_id)
+
+
+@ops_hierarchy_app.command("connect")
+def ops_hierarchy_connect(
+    ctx: typer.Context,
+    source_path: Annotated[str | None, typer.Argument()] = None,
+    target_path: Annotated[str | None, typer.Argument()] = None,
+    output_index: Annotated[int | None, typer.Option("--output-index")] = None,
+    input_index: Annotated[int | None, typer.Option("--input-index")] = None,
+    replace: Annotated[bool, typer.Option("--replace")] = False,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    dedicated = _connector_input(ctx, source_path, target_path, output_index, input_index, replace)
+    _command(ctx, "ops.hierarchy.connect", dedicated, input, input_file, no_wait, request_id)
+
+
+@ops_hierarchy_app.command("disconnect")
+def ops_hierarchy_disconnect(
+    ctx: typer.Context,
+    source_path: Annotated[str | None, typer.Argument()] = None,
+    target_path: Annotated[str | None, typer.Argument()] = None,
+    output_index: Annotated[int | None, typer.Option("--output-index")] = None,
+    input_index: Annotated[int | None, typer.Option("--input-index")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    dedicated = _connector_input(ctx, source_path, target_path, output_index, input_index)
+    _command(ctx, "ops.hierarchy.disconnect", dedicated, input, input_file, no_wait, request_id)
 
 
 @ops_app.command("create")
@@ -355,19 +740,7 @@ def ops_connect(
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
     request_id: Annotated[str | None, typer.Option("--request-id")] = None,
 ) -> None:
-    if (source_path is None) != (target_path is None):
-        _fail(ctx, ClientError("invalid_arguments"))
-    if (output_index is not None or input_index is not None or replace) and source_path is None:
-        _fail(ctx, ClientError("invalid_arguments"))
-    dedicated = None
-    if source_path is not None and target_path is not None:
-        dedicated = {
-            "source_path": source_path,
-            "target_path": target_path,
-            "output_index": output_index or 0,
-            "input_index": input_index or 0,
-            "replace": replace,
-        }
+    dedicated = _connector_input(ctx, source_path, target_path, output_index, input_index, replace)
     _command(ctx, "ops.connect", dedicated, input, input_file, no_wait, request_id)
 
 
@@ -391,6 +764,131 @@ def ops_rename(
     _command(ctx, "ops.rename", dedicated, input, input_file, no_wait, request_id)
 
 
+@ops_app.command("destroy")
+def ops_destroy(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    recursive: Annotated[bool, typer.Option("--recursive")] = False,
+    allow_connected: Annotated[bool, typer.Option("--allow-connected")] = False,
+    max_operators: Annotated[int | None, typer.Option("--max-operators")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    if (recursive or allow_connected or max_operators is not None) and operator_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = (
+        {
+            "operator_path": operator_path,
+            "recursive": recursive,
+            "allow_connected": allow_connected,
+            "max_operators": max_operators if max_operators is not None else 256,
+        }
+        if operator_path is not None
+        else None
+    )
+    _command(ctx, "ops.destroy", dedicated, input, input_file, no_wait, request_id)
+
+
+@ops_app.command("copy")
+def ops_copy(
+    ctx: typer.Context,
+    source_path: Annotated[str | None, typer.Argument()] = None,
+    target_parent_path: Annotated[str | None, typer.Argument()] = None,
+    new_name: Annotated[str | None, typer.Argument()] = None,
+    node_x: Annotated[int | None, typer.Option("--node-x")] = None,
+    node_y: Annotated[int | None, typer.Option("--node-y")] = None,
+    include_docked: Annotated[bool, typer.Option("--include-docked")] = False,
+    max_operators: Annotated[int | None, typer.Option("--max-operators")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    dedicated = _structural_destination_input(
+        ctx,
+        source_path,
+        target_parent_path,
+        new_name,
+        node_x,
+        node_y,
+        max_operators,
+        specific_requested=include_docked,
+        specific_input={"include_docked": include_docked},
+    )
+    _command(ctx, "ops.copy", dedicated, input, input_file, no_wait, request_id)
+
+
+@ops_app.command("move")
+def ops_move(
+    ctx: typer.Context,
+    source_path: Annotated[str | None, typer.Argument()] = None,
+    target_parent_path: Annotated[str | None, typer.Argument()] = None,
+    new_name: Annotated[str | None, typer.Argument()] = None,
+    node_x: Annotated[int | None, typer.Option("--node-x")] = None,
+    node_y: Annotated[int | None, typer.Option("--node-y")] = None,
+    allow_connected: Annotated[bool, typer.Option("--allow-connected")] = False,
+    max_operators: Annotated[int | None, typer.Option("--max-operators")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    dedicated = _structural_destination_input(
+        ctx,
+        source_path,
+        target_parent_path,
+        new_name,
+        node_x,
+        node_y,
+        max_operators,
+        specific_requested=allow_connected,
+        specific_input={"allow_connected": allow_connected},
+    )
+    _command(ctx, "ops.move", dedicated, input, input_file, no_wait, request_id)
+
+
+@ops_tox_app.command("import")
+def ops_tox_import(
+    ctx: typer.Context,
+    parent_path: Annotated[str | None, typer.Argument()] = None,
+    tox_path: Annotated[str | None, typer.Argument()] = None,
+    allowlist_root: Annotated[str | None, typer.Argument()] = None,
+    target_name: Annotated[str | None, typer.Argument()] = None,
+    trusted: Annotated[bool, typer.Option("--trusted")] = False,
+    replace: Annotated[bool, typer.Option("--replace")] = False,
+    max_file_bytes: Annotated[int | None, typer.Option("--max-file-bytes")] = None,
+    max_operators: Annotated[int | None, typer.Option("--max-operators")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    identity = (parent_path, tox_path, allowlist_root, target_name)
+    if any(value is not None for value in identity) and not all(
+        value is not None for value in identity
+    ):
+        _fail(ctx, ClientError("invalid_arguments"))
+    if (
+        trusted or replace or max_file_bytes is not None or max_operators is not None
+    ) and parent_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = None
+    if all(value is not None for value in identity):
+        dedicated = {
+            "parent_path": parent_path,
+            "tox_path": tox_path,
+            "allowlist_root": allowlist_root,
+            "target_name": target_name,
+            "trusted": trusted,
+            "replace": replace,
+            "max_file_bytes": max_file_bytes if max_file_bytes is not None else MAX_TOX_FILE_BYTES,
+            "max_operators": max_operators if max_operators is not None else 256,
+        }
+    _command(ctx, "ops.tox.import", dedicated, input, input_file, no_wait, request_id)
+
+
 @ops_app.command("disconnect")
 def ops_disconnect(
     ctx: typer.Context,
@@ -403,18 +901,7 @@ def ops_disconnect(
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
     request_id: Annotated[str | None, typer.Option("--request-id")] = None,
 ) -> None:
-    if (source_path is None) != (target_path is None):
-        _fail(ctx, ClientError("invalid_arguments"))
-    if (output_index is not None or input_index is not None) and source_path is None:
-        _fail(ctx, ClientError("invalid_arguments"))
-    dedicated = None
-    if source_path is not None and target_path is not None:
-        dedicated = {
-            "source_path": source_path,
-            "target_path": target_path,
-            "output_index": output_index or 0,
-            "input_index": input_index or 0,
-        }
+    dedicated = _connector_input(ctx, source_path, target_path, output_index, input_index)
     _command(ctx, "ops.disconnect", dedicated, input, input_file, no_wait, request_id)
 
 
@@ -487,23 +974,84 @@ def parameters_set(
     integer: Annotated[int | None, typer.Option("--integer")] = None,
     number: Annotated[float | None, typer.Option("--number")] = None,
     string: Annotated[str | None, typer.Option("--string")] = None,
+    operator_value: Annotated[str | None, typer.Option("--operator")] = None,
+    operators_json: Annotated[str | None, typer.Option("--operators-json")] = None,
     expression: Annotated[str | None, typer.Option("--expression")] = None,
+    export_source_operator: Annotated[str | None, typer.Option("--export-source-operator")] = None,
+    export_channel: Annotated[str | None, typer.Option("--export-channel")] = None,
+    bind_source_operator: Annotated[str | None, typer.Option("--bind-source-operator")] = None,
+    bind_parameter: Annotated[str | None, typer.Option("--bind-parameter")] = None,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
     request_id: Annotated[str | None, typer.Option("--request-id")] = None,
 ) -> None:
     any_value_option = any(
-        value is not None for value in (bool_value, integer, number, string, expression)
+        value is not None
+        for value in (
+            bool_value,
+            integer,
+            number,
+            string,
+            operator_value,
+            operators_json,
+            expression,
+            export_source_operator,
+            export_channel,
+            bind_source_operator,
+            bind_parameter,
+        )
     )
     any_dedicated = operator_path is not None or parameter is not None or any_value_option
-    values = [("constant", value) for value in (integer, number, string) if value is not None]
+    values: list[tuple[str, Any]] = [
+        ("constant", value) for value in (integer, number, string) if value is not None
+    ]
     if bool_value is not None:
         if bool_value not in {"true", "false"}:
             _fail(ctx, ClientError("invalid_arguments"))
         values.append(("constant", bool_value == "true"))
     if expression is not None:
         values.append(("expression", expression))
+    if operator_value is not None:
+        values.append(("constant", operator_value))
+    if operators_json is not None:
+        try:
+            operator_values = json.loads(operators_json)
+        except json.JSONDecodeError:
+            _fail(ctx, ClientError("invalid_arguments"))
+        if not isinstance(operator_values, list) or any(
+            not isinstance(value, str) for value in operator_values
+        ):
+            _fail(ctx, ClientError("invalid_arguments"))
+        values.append(("constant", operator_values))
+    export_requested = export_source_operator is not None or export_channel is not None
+    bind_requested = bind_source_operator is not None or bind_parameter is not None
+    if export_requested:
+        if export_source_operator is None or export_channel is None:
+            _fail(ctx, ClientError("invalid_arguments"))
+        values.append(
+            (
+                "export",
+                {
+                    "kind": "export_channel",
+                    "operator_path": export_source_operator,
+                    "channel": export_channel,
+                },
+            )
+        )
+    if bind_requested:
+        if bind_source_operator is None or bind_parameter is None:
+            _fail(ctx, ClientError("invalid_arguments"))
+        values.append(
+            (
+                "bind",
+                {
+                    "kind": "bind_parameter",
+                    "operator_path": bind_source_operator,
+                    "parameter": bind_parameter,
+                },
+            )
+        )
     if any_dedicated and (operator_path is None or parameter is None or len(values) != 1):
         _fail(ctx, ClientError("invalid_arguments"))
     dedicated = None
@@ -513,9 +1061,59 @@ def parameters_set(
             "operator_path": operator_path,
             "parameter": parameter,
             "mode": mode,
-            "value": value,
+            **({"source": value} if mode in {"export", "bind"} else {"value": value}),
         }
     _command(ctx, "parameters.set", dedicated, input, input_file, no_wait, request_id)
+
+
+@parameters_app.command("sequence-get")
+def parameters_sequence_get(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    sequence: Annotated[str | None, typer.Argument()] = None,
+    max_blocks: Annotated[int, typer.Option("--max-blocks", min=1, max=128)] = 128,
+    max_parameters: Annotated[int, typer.Option("--max-parameters", min=1, max=256)] = 256,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    if (operator_path is None) != (sequence is None):
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = (
+        {
+            "operator_path": operator_path,
+            "sequence": sequence,
+            "max_blocks": max_blocks,
+            "max_parameters": max_parameters,
+        }
+        if operator_path is not None and sequence is not None
+        else None
+    )
+    _command(ctx, "parameters.sequence.get", dedicated, input, input_file, no_wait, request_id)
+
+
+@parameters_app.command("sequence-replace")
+def parameters_sequence_replace(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    sequence: Annotated[str | None, typer.Argument()] = None,
+    blocks_json: Annotated[str | None, typer.Option("--blocks-json")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    blocks = _json_blocks(ctx, blocks_json)
+    any_dedicated = operator_path is not None or sequence is not None or blocks is not None
+    if any_dedicated and (operator_path is None or sequence is None or blocks is None):
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = (
+        {"operator_path": operator_path, "sequence": sequence, "blocks": blocks}
+        if operator_path is not None and sequence is not None and blocks is not None
+        else None
+    )
+    _command(ctx, "parameters.sequence.replace", dedicated, input, input_file, no_wait, request_id)
 
 
 @project_app.command("metadata")

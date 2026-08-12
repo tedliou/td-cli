@@ -155,6 +155,46 @@ class DaemonClient:
             "operator_rename_forbidden",
             "operator_rename_failed",
             "operator_rename_rollback_failed",
+            "operator_mutation_forbidden",
+            "operator_not_empty",
+            "operator_connected",
+            "operator_destroy_failed",
+            "operator_destroy_outcome_unknown",
+            "operator_copy_failed",
+            "operator_copy_rollback_failed",
+            "operator_docked",
+            "operator_move_failed",
+            "operator_move_rollback_failed",
+            "operator_move_outcome_unknown",
+            "tox_trust_required",
+            "tox_path_rejected",
+            "tox_file_too_large",
+            "tox_destination_exists",
+            "tox_parent_protected",
+            "tox_load_failed",
+            "tox_verification_failed",
+            "tox_backup_failed",
+            "tox_commit_failed",
+            "tox_rollback_failed",
+            "tox_import_outcome_unknown",
+            "operator_state_unavailable",
+            "operator_state_failed",
+            "operator_state_rollback_failed",
+            "operator_state_outcome_unknown",
+            "operator_family_unsupported",
+            "family_inspection_unavailable",
+            "family_inspection_outcome_unknown",
+            "dat_type_mismatch",
+            "dat_content_unavailable",
+            "dat_content_not_writable",
+            "dat_content_too_large",
+            "text_dat_write_failed",
+            "text_dat_rollback_failed",
+            "text_dat_outcome_unknown",
+            "table_dat_patch_out_of_bounds",
+            "table_dat_write_failed",
+            "table_dat_rollback_failed",
+            "table_dat_outcome_unknown",
             "operator_family_mismatch",
             "connector_not_found",
             "connector_occupied",
@@ -163,12 +203,41 @@ class DaemonClient:
             "connector_disconnect_failed",
             "connector_replace_failed",
             "connector_replace_rollback_failed",
+            "hierarchy_comp_required",
+            "hierarchy_kind_unsupported",
+            "hierarchy_kind_mismatch",
+            "hierarchy_connector_not_found",
+            "hierarchy_connector_state_ambiguous",
+            "hierarchy_connector_occupied",
+            "hierarchy_connection_not_found",
+            "hierarchy_connector_connect_failed",
+            "hierarchy_connector_disconnect_failed",
+            "hierarchy_connector_replace_failed",
+            "hierarchy_connector_replace_rollback_failed",
+            "hierarchy_connector_outcome_unknown",
+            "hierarchy_cycle",
+            "hierarchy_parent_mismatch",
             "result_too_large",
             "parameter_not_found",
             "parameter_read_only",
             "parameter_not_pulseable",
             "parameter_type_unsupported",
             "parameter_write_rejected",
+            "parameter_disabled",
+            "parameter_obsolete",
+            "parameter_value_invalid",
+            "parameter_source_not_found",
+            "parameter_export_source_unavailable",
+            "parameter_rollback_failed",
+            "parameter_outcome_unknown",
+            "parameter_sequence_not_found",
+            "parameter_sequence_too_large",
+            "parameter_sequence_not_writable",
+            "parameter_sequence_shape_invalid",
+            "parameter_value_too_large",
+            "parameter_sequence_write_failed",
+            "parameter_sequence_rollback_failed",
+            "parameter_sequence_outcome_unknown",
             "expression_invalid",
             "wait_timeout",
             "daemon_shutdown",
@@ -183,7 +252,18 @@ class DaemonClient:
             and isinstance(result, dict)
             and (
                 result.get("mode") not in {"constant", "expression", "export", "bind"}
-                or result.get("value_type") not in {"boolean", "integer", "number", "string"}
+                or result.get("value_type")
+                not in {
+                    "boolean",
+                    "integer",
+                    "number",
+                    "string",
+                    "operator",
+                    "multi_operator",
+                    "python",
+                    "sequence",
+                    "unknown",
+                }
             )
         ):
             raise ClientError("protocol_incompatible")
@@ -192,8 +272,9 @@ class DaemonClient:
             and command.get("name") == "parameters.set"
             and isinstance(result, dict)
             and (
-                result.get("mode") not in {"constant", "expression"}
-                or result.get("value_type") not in {"boolean", "integer", "number", "string"}
+                result.get("mode") not in {"constant", "expression", "export", "bind"}
+                or result.get("value_type")
+                not in {"boolean", "integer", "number", "string", "operator", "multi_operator"}
             )
         ):
             raise ClientError("protocol_incompatible")
@@ -214,6 +295,7 @@ class DaemonClient:
                     "string",
                     "menu",
                     "operator",
+                    "multi_operator",
                     "pulse",
                     "python",
                     "sequence",
@@ -222,6 +304,13 @@ class DaemonClient:
                 for parameter in parameters
             ):
                 raise ClientError("protocol_incompatible")
+        if (
+            isinstance(command, dict)
+            and command.get("name") in {"parameters.sequence.get", "parameters.sequence.replace"}
+            and isinstance(result, dict)
+            and not isinstance(result.get("blocks"), list)
+        ):
+            raise ClientError("protocol_incompatible")
         return snapshot
 
     def wait(self, request_id: str) -> dict[str, Any]:

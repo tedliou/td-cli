@@ -109,8 +109,152 @@ td --json --instance <selector> ops rename /project1/output renamed_output
 td --json --instance <selector> ops connect /project1/replacement /project1/renamed_output --replace
 td --json --instance <selector> ops disconnect /project1/replacement /project1/renamed_output
 td --json --instance <selector> ops children /project1 --op-type constantTOP
+td --json --instance <selector> ops inspect /project1/source --max-items 100
 td --json --instance <selector> parameters get /project1/source colorr
 ```
+
+`ops.inspect` is a passive, batchable Operator Family Inspection for CHOP, DAT,
+TOP, SOP, POP, and MAT. Its `family` discriminator selects a strict typed
+`details` object; common cached memory, cook timing, Display, and Render
+metadata is returned alongside it. Variable-length CHOP channel and SOP
+attribute/group names are bounded by `--max-items` (default 100, maximum 1000)
+and overflow fails without truncation. It never downloads pixels, geometry, POP
+buffers, DAT content, or arbitrary Python objects and never explicitly cooks an
+Operator. Existing dedicated Commands remain the content and mutation seams.
+
+Parameter inspection is style-driven and distinguishes booleans, integers,
+numbers, strings, menus, single-OP references, bounded ordered Multi-OP
+references, Pulse, Sequence headers, and opaque Python values. OP writes accept
+only exact canonical paths (or `null`); Multi-OP writes accept at most 256 exact
+paths. Python values are reported as explicitly unsupported without serializing
+the object. Disabled, read-only, hidden/obsolete, mismatched, and clamped writes
+are rejected before success is reported.
+
+```powershell
+td --json --instance <selector> parameters set /project1/target Targetop --operator /project1/source
+td --json --instance <selector> parameters set /project1/target Targets --operators-json '["/project1/a","/project1/b"]'
+td --json --instance <selector> parameters set /project1/target Gain --bind-source-operator /project1/source --bind-parameter Gain
+td --json --instance <selector> parameters sequence-get /project1/target Items
+td --json --instance <selector> parameters sequence-replace /project1/target Items --blocks-json '[{"name":"first","parameters":[{"parameter":"value","mode":"constant","value":1.5}]}]'
+```
+
+Bind sources are generated solely from a typed Operator/Parameter identity.
+Export mode accepts a typed CHOP Operator/channel identity only when that exact
+export already exists in TouchDesigner; Protocol v1 does not synthesize CHOP
+export tables or emulate an export with an expression. Sequence replacement is
+bounded to 128 blocks and 256 Parameters per block, reads back the complete
+ordered state, and restores the prior block count, order, names, modes, values,
+and sources if any mutation is rejected.
+
+Inspect every regular input and output connector before changing a graph. The
+inventory is bounded and fails rather than returning a truncated topology:
+
+```powershell
+td --json --instance <selector> ops connections /project1/source --max-connections 256
+```
+
+COMP Hierarchy Connections are a separate top-to-bottom connector model for
+compatible Object COMPs or compatible Panel COMPs. Inventory is bounded and
+reports the runtime hierarchy kind, every input, every output, and every exact
+endpoint. Connect rejects cross-kind, non-COMP, cyclic, missing, or occupied
+endpoints before mutation. `--replace` snapshots the prior input and restores
+it if the requested replacement cannot be verified:
+
+```powershell
+td --json --instance <selector> ops hierarchy connections /project1/geo1 --max-connections 256
+td --json --instance <selector> ops hierarchy connect /project1/geo1 /project1/geo2
+td --json --instance <selector> ops hierarchy disconnect /project1/geo1 /project1/geo2
+```
+
+Hierarchy reads are batchable; hierarchy mutations are not. The root, Agent
+Component, its ancestors, and descendants are protected. Distinct occupied,
+incompatible-kind, cycle, mutation-failed, rollback-failed, and
+uncertain-outcome errors preserve honest state.
+
+Structural mutations use exact paths and names. They reject the root, the
+Agent Component and its ancestors, automatic TouchDesigner names, collisions,
+and oversized subtrees. Destruction requires explicit opt-in for non-empty or
+connected Operators, including COMP Hierarchy Connections. Copy reports
+boundary wires that are not replicated and marks hierarchy edges explicitly.
+Move is a verified copy-then-destroy operation, changes Operator identity, and
+requires explicit opt-in before detaching boundary wires:
+
+```powershell
+td --json --instance <selector> ops copy /project1/source /project1/group copied
+td --json --instance <selector> ops move /project1/source /project1/group moved --allow-connected
+td --json --instance <selector> ops destroy /project1/group/moved --recursive --allow-connected
+```
+
+All three mutations default to a maximum affected subtree of 256 Operators
+(`--max-operators`, maximum 1000). `ops copy --include-docked` is required to
+copy externally docked Operators. Copy and move verify the exact result and
+remove the created copy on failure; a distinct rollback or uncertain-outcome
+error is returned when the requested final state cannot be proven. Neither
+operation promises to rewrite DAT string literals, external systems, or every
+path-bearing expression/reference.
+
+Trusted TOX Import accepts one existing absolute local `.tox` beneath an
+explicit allowlist root. The caller must pass `--trusted`: a TOX is executable
+TouchDesigner project content and may run callbacks while loading. td-cli does
+not sandbox it and cannot undo filesystem, network, process, or other
+out-of-graph side effects. It does bound and verify the destination Operator
+graph, rejects external TOX linkage and VFS content, and never saves the
+project:
+
+```powershell
+td --json --instance <selector> ops tox import /project1/imports C:\approved\asset.tox C:\approved asset --trusted
+```
+
+Collisions are rejected unless `--replace` is supplied. Replacement first
+creates an in-memory backup and independently restores and compares it in an
+isolated temporary namespace. Only then may it remove the old destination. A
+failed commit restores and verifies that backup; cleanup, disappearance, and
+unprovable identity failures use distinct rollback or uncertain-outcome
+errors. Files default to a 64 MiB maximum and inventories to 256 Operators
+(maximum 1000); every bound fails rather than truncates.
+
+Common Operator state has its own read and atomic partial-update Commands. The
+locked common subset is node position, size, RGB color, comment, and the
+Bypass, Lock, Viewer, and Expose flags. Every requested field is read back;
+TouchDesigner clamping or rejection rolls the whole patch back. Root and Agent
+Component protection is identical to structural mutation:
+
+```powershell
+td --json --instance <selector> ops state get /project1/source
+td --json --instance <selector> ops state set /project1/source --node-x -100 --node-width 140 --color 0.1 0.2 0.3 --comment "source" --bypass --no-expose
+```
+
+The update accepts at most a 4096-character comment, coordinates from -32768
+through 32767, positive dimensions up to 32767, and finite RGB components from
+0 through 1. Family-specific Display, Render, and Allow Cooking semantics,
+transient selection/current-viewer state, storage, arbitrary attributes, and
+Python objects are not exposed by these Commands. Distinct unavailable,
+failed, rollback-failed, and uncertain-outcome errors preserve honest state.
+
+Text DAT and Table DAT contents use separate typed Commands. Text reads and
+whole-content replacement preserve Unicode and empty text. Table reads return
+the total dimensions plus an explicit bounded rectangular window; replacement
+sets the complete table (including dimensions), while patch updates an exact
+rectangle without resizing:
+
+```powershell
+td --json --instance <selector> dat text get /project1/notes
+td --json --instance <selector> dat text set /project1/notes "繁體內容"
+td --json --instance <selector> dat table get /project1/grid --row-offset 0 --column-offset 0 --row-count 16 --column-count 16
+td --json --instance <selector> dat table replace /project1/grid '[["name","value"],["alpha",""]]'
+td --json --instance <selector> dat table patch /project1/grid '[["updated"]]' --row-offset 1 --column-offset 1
+```
+
+Only exact `textDAT` and `tableDAT` Operators are accepted. Mutation rejects a
+non-empty File parameter or enabled Sync File mode, root and Agent Component
+protected paths, non-rectangular/non-string cells, and patches outside current
+dimensions. Content is limited to 32 KiB of UTF-8, with at most 256 rows, 256
+columns, 4096 cells, and 16 KiB per cell. Reads fail instead of truncating when
+their explicit byte limit is exceeded. Every mutation reads back the exact
+complete content and dimensions, then restores and verifies the entire prior
+DAT on failure; distinct unavailable, non-writable, rollback-failed, and
+uncertain-outcome errors preserve honest state. These Commands never execute
+DATs, import modules, evaluate content, or accept filesystem paths.
 
 The locked TouchDesigner 2025.32050 catalog covers 680 built-in types across all
 seven Operator families: 478 are supported by default, 165 side-effect or

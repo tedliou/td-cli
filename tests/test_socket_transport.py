@@ -43,6 +43,11 @@ def test_locked_socketio_omissions_are_restored_at_the_public_result_boundary() 
         "name": "gain",
         "value_kind": "number",
         "page": None,
+        "unsupported_reason": None,
+        "sequence": None,
+        "source": None,
+        "bounds": None,
+        "max_operator_paths": None,
         "expression": {"supported": True, "source": None},
         "menu_names": None,
         "menu_labels": None,
@@ -50,6 +55,77 @@ def test_locked_socketio_omissions_are_restored_at_the_public_result_boundary() 
     assert listed["parameters"][1]["menu_names"] == []
     assert listed["parameters"][1]["menu_labels"] == []
     assert listed["items"] == [1, None, 2]
+
+    connections = _normalize_command_result(
+        {"name": "ops.connections"},
+        {
+            "operator_path": "/project1/source",
+            "inputs": [{"input_index": 0, "description": "Input"}],
+            "outputs": [],
+            "connection_count": 0,
+        },
+    )
+    assert connections["inputs"][0]["connection"] is None
+
+    hierarchy = _normalize_command_result(
+        {"name": "ops.hierarchy.connections"},
+        {
+            "operator_path": "/project1/child",
+            "hierarchy_kind": "object",
+            "inputs": [{"input_index": 0, "description": "parent"}],
+            "outputs": [],
+            "connection_count": 0,
+        },
+    )
+    hierarchy_connect = _normalize_command_result(
+        {"name": "ops.hierarchy.connect"},
+        {"connected": True, "replaced": False},
+    )
+    assert hierarchy["inputs"][0]["connection"] is None
+    assert hierarchy_connect["previous_connection"] is None
+
+    copied = _normalize_command_result(
+        {"name": "ops.copy"},
+        {"path": "/project1/copied", "include_docked": 0},
+    )
+    assert copied["include_docked"] is False
+
+    imported = _normalize_command_result(
+        {"name": "ops.tox.import"},
+        {"trusted": 1, "replaced": 0, "rollback_performed": 0},
+    )
+    assert imported == {"trusted": True, "replaced": False, "rollback_performed": False}
+
+    state = _normalize_command_result(
+        {"name": "ops.state.get"},
+        {
+            "operator_path": "/project1/source",
+            "state": {"bypass": 1, "lock": 0, "viewer": 1, "expose": 0},
+        },
+    )
+    assert state["state"] == {
+        "bypass": True,
+        "lock": False,
+        "viewer": True,
+        "expose": False,
+    }
+    assert state["state"]["bypass"] is True
+    assert state["state"]["lock"] is False
+    assert state["state"]["viewer"] is True
+    assert state["state"]["expose"] is False
+
+    inspection = _normalize_command_result(
+        {"name": "ops.inspect"},
+        {
+            "family": "DAT",
+            "cook": {"cooked_this_frame": 1, "cooked_previous_frame": 0},
+            "flags": {"display": 1, "render": 0},
+            "details": {"export": 1, "editable": 1},
+        },
+    )
+    assert inspection["cook"] == {"cooked_this_frame": True, "cooked_previous_frame": False}
+    assert inspection["flags"] == {"display": True, "render": False}
+    assert inspection["details"] == {"export": True, "editable": True, "editing_file": None}
 
     batched = _normalize_command_result(
         {
