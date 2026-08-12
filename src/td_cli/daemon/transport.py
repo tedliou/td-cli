@@ -425,6 +425,8 @@ def _normalize_command_result(command: object, result: object) -> object:
                 }
         details = normalized.get("details")
         if isinstance(details, dict):
+            if normalized.get("family") == "DAT":
+                details.setdefault("editing_file", None)
             for field in ("time_slice", "export", "editable", "template", "compare"):
                 if field in details:
                     details[field] = bool(details[field])

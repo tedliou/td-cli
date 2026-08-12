@@ -397,6 +397,7 @@ def test_family_inspection_returns_discriminated_results_for_all_six_families() 
     assert results["POP"]["details"]["allocated"] == {"points": 8, "primitives": 6, "vertices": 24}
     assert results["MAT"]["details"] == {}
     assert all(result["family"] == family for family, result in results.items())
+    assert all(result["snapshot"] == "passive" for result in results.values())
     assert all(
         result["memory"] == {"cpu_bytes": 100, "gpu_bytes": 200} for result in results.values()
     )

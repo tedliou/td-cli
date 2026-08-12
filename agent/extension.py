@@ -133,6 +133,7 @@ class OperatorControl:
                 "operator_path": str(operator.path),
                 "op_type": str(operator.OPType),
                 "family": family,
+                "snapshot": "passive",
                 "memory": {
                     "cpu_bytes": self._nonnegative_integer(inspected.cpuMemory),
                     "gpu_bytes": self._nonnegative_integer(inspected.gpuMemory),
