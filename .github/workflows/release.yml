@@ -30,7 +30,8 @@ jobs:
           $main = gh api "repos/$env:GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha
           if ($main -ne $env:SOURCE_COMMIT -or (git rev-parse HEAD) -ne $env:SOURCE_COMMIT) { throw 'Release source must be the current main tip' }
           $version = uv run python -c "from td_cli import __version__; print(__version__)"
-          if ($version -notmatch '^0\.[1-9]\d*\.\d+(-(alpha|beta|rc)\.\d+)?$') { throw 'Release Version must be an approved pre-1.0 SemVer' }
+          uv run python -c "import sys; from td_cli.release import is_approved_release_version; sys.exit(0 if is_approved_release_version(sys.argv[1]) else 1)" $version
+          if ($LASTEXITCODE -ne 0) { throw 'Release Version must be an approved pre-1.0 SemVer' }
       - name: Download immutable Agent Component stage by ID
         shell: pwsh
         env:

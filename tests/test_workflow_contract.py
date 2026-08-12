@@ -1,11 +1,15 @@
 from pathlib import Path
 
+import pytest
+
+from td_cli.release import is_approved_release_version
+
 
 def test_release_workflow_gates_publication_on_main_and_remote_digests() -> None:
     workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
     assert "Release source must be the current main tip" in workflow
     assert "Release Version must be an approved pre-1.0 SemVer" in workflow
-    assert "^0\\.[1-9]\\d*\\.\\d+" in workflow
+    assert "is_approved_release_version" in workflow
     assert "Remote asset digest mismatch" in workflow
     assert "SHA256SUMS does not match remote asset" in workflow
     assert workflow.index("Remote asset digest mismatch") < workflow.index("--draft=false")
@@ -14,6 +18,30 @@ def test_release_workflow_gates_publication_on_main_and_remote_digests() -> None
     assert 'GH_TOKEN: "${{ github.token }}"' in workflow
     assert "create-github-app-token" not in workflow
     assert "RELEASE_APP_" not in workflow
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["0.1.2", "0.2.0", "0.2.1", "0.2.0-alpha.0", "0.2.0-beta.1", "0.2.0-rc.2"],
+)
+def test_release_version_policy_accepts_supported_pre_1_semver(value: str) -> None:
+    assert is_approved_release_version(value)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "0.0.1",
+        "0.02.0",
+        "0.2.00",
+        "0.2.0-rc.01",
+        "0.2.0-preview.1",
+        "0.2.0+build.1",
+        "1.0.0",
+    ],
+)
+def test_release_version_policy_rejects_unapproved_or_noncanonical_versions(value: str) -> None:
+    assert not is_approved_release_version(value)
 
 
 def test_release_workflow_bootstraps_tag_identity_and_handles_missing_draft() -> None:
