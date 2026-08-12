@@ -37,9 +37,9 @@ Source-first acceptance ran in TouchDesigner 2025.32050 using only `tdcli_`
 artifacts in an unsaved `Sample.toe` session:
 
 - Canonical Agent source revision:
-  `7e200c9f555ebf4667d3de9c86d83ab2fa6ce5ed547ccca1c1a2c54ada6ceda3`
+  `40b449606114e73fc64ade2e28027e2033eef88fb4135bfa70e0879e3a12545a`
 - Local derived artifact SHA-256:
-  `d7e2a1ad89da4c0aa41080bf4c6209aeb5006f1d965b765ddb9ee32a1a13e8be`
+  `8bda527409d05a3cec6c77a4b663581e98738346bba8916bb2859a00fbf319b2`
 - Artifact topology: all eight required Operators passed independent inspection.
 - Advertised capabilities: all 33 public Commands, including
   `ops.tox.import`.
@@ -63,7 +63,27 @@ its out-of-graph effects would not be recoverable.
 whose `externaltox` survived serialization was rejected with the same typed
 verification error. Import beneath `/` returned `tox_parent_protected`.
 
+The hardened byte path repeated fresh import by loading the exact bounded
+bytearray whose SHA-256 is returned, rather than reopening the path inside TD.
+A replacement target with root `externaltox='source.tox'` returned
+`tox_backup_failed` before mutation because `saveByteArray` restoration clears
+that field; this proves the private backup manifest now compares critical COMP
+linkage state instead of accepting a lossy backup.
+
 The first live submission exposed that SocketIO DAT materializes JSON `true`
 as numeric `1`; the independent Agent adapter now accepts only `True/1` after
 the daemon's strict Protocol validation, and a regression test locks that
 transport seam. No security or product contract was relaxed.
+
+## Regression and package gates
+
+- `uv run pytest -q`: `384 passed` (one third-party Starlette deprecation
+  warning).
+- `uv run ruff check .`: passed.
+- `uv run ruff format --check .`: passed.
+- `uv run mypy src`: passed with 16 source files checked.
+- `git diff --check`: passed.
+
+Final packaged Windows CLI smoke and archive hashes are recorded after the
+review fixes are committed so the staged Agent source commit and package
+identity match the final branch tip.
