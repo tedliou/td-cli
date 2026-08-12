@@ -109,8 +109,18 @@ td --json --instance <selector> ops rename /project1/output renamed_output
 td --json --instance <selector> ops connect /project1/replacement /project1/renamed_output --replace
 td --json --instance <selector> ops disconnect /project1/replacement /project1/renamed_output
 td --json --instance <selector> ops children /project1 --op-type constantTOP
+td --json --instance <selector> ops inspect /project1/source --max-items 100
 td --json --instance <selector> parameters get /project1/source colorr
 ```
+
+`ops.inspect` is a passive, batchable Operator Family Inspection for CHOP, DAT,
+TOP, SOP, POP, and MAT. Its `family` discriminator selects a strict typed
+`details` object; common cached memory, cook timing, Display, and Render
+metadata is returned alongside it. Variable-length CHOP channel and SOP
+attribute/group names are bounded by `--max-items` (default 100, maximum 1000)
+and overflow fails without truncation. It never downloads pixels, geometry, POP
+buffers, DAT content, or arbitrary Python objects and never explicitly cooks an
+Operator. Existing dedicated Commands remain the content and mutation seams.
 
 Parameter inspection is style-driven and distinguishes booleans, integers,
 numbers, strings, menus, single-OP references, bounded ordered Multi-OP

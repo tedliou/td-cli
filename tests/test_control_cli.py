@@ -63,6 +63,20 @@ def test_ops_get_submits_typed_command_and_emits_protocol_envelope(monkeypatch) 
     }
 
 
+def test_ops_inspect_submits_bounded_family_inspection(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+
+    result = CliRunner().invoke(
+        cli.app, ["--json", "ops", "inspect", "/project1/source", "--max-items", "12"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert FakeDaemonClient.submitted == {
+        "name": "ops.inspect",
+        "input": {"operator_path": "/project1/source", "max_items": 12},
+    }
+
+
 def test_json_output_is_ascii_portable_and_unicode_lossless(monkeypatch) -> None:
     class UnicodeDaemonClient(FakeDaemonClient):
         def wait(self, request_id):

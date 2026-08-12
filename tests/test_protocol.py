@@ -19,6 +19,21 @@ def test_command_catalog_is_the_single_command_contract() -> None:
         Command.model_validate({"name": "future.command", "input": {"operator_path": "/project1"}})
 
 
+def test_family_inspection_input_is_strict_bounded_and_batchable() -> None:
+    assert COMMAND_CATALOG.validate_input("ops.inspect", {"operator_path": "/project1/source"}) == {
+        "operator_path": "/project1/source",
+        "max_items": 100,
+    }
+    assert "ops.inspect" in COMMAND_CATALOG.batch_names
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {
+                "name": "ops.inspect",
+                "input": {"operator_path": "/project1/source", "max_items": 1001},
+            }
+        )
+
+
 def test_protocol_rejects_unknown_and_coerced_command_input_fields() -> None:
     with pytest.raises(ValidationError):
         OperatorInput.model_validate({"operator_path": 12})

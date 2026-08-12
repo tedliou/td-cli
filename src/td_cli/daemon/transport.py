@@ -412,6 +412,25 @@ def _normalize_command_result(command: object, result: object) -> object:
             if field in state:
                 state[field] = bool(state[field])
         normalized["state"] = state
+    elif name == "ops.inspect":
+        for section, fields in {
+            "cook": ("cooked_this_frame", "cooked_previous_frame"),
+            "flags": ("display", "render"),
+        }.items():
+            values = normalized.get(section)
+            if isinstance(values, dict):
+                normalized[section] = {
+                    **values,
+                    **{field: bool(values[field]) for field in fields if field in values},
+                }
+        details = normalized.get("details")
+        if isinstance(details, dict):
+            if normalized.get("family") == "DAT":
+                details.setdefault("editing_file", None)
+            for field in ("time_slice", "export", "editable", "template", "compare"):
+                if field in details:
+                    details[field] = bool(details[field])
+            normalized["details"] = details
     elif name == "parameters.list" and isinstance(normalized.get("parameters"), list):
         parameters = []
         for item in normalized["parameters"]:

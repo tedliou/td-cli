@@ -10,6 +10,7 @@ import pytest
 from td_cli.command_catalog import (
     COMMAND_CATALOG,
     MAX_DAT_CONTENT_BYTES,
+    MAX_INSPECTION_STRING_BYTES,
     MAX_MULTI_OP_PATHS,
     MAX_SEQUENCE_BLOCKS,
     MAX_SEQUENCE_PARAMETERS,
@@ -49,6 +50,7 @@ def test_operator_state_fields_match_between_canonical_and_agent_contracts() -> 
 
 def test_dat_bounds_match_between_canonical_and_agent_contracts() -> None:
     assert OperatorControl.MAX_DAT_CONTENT_BYTES == MAX_DAT_CONTENT_BYTES
+    assert OperatorControl.MAX_INSPECTION_STRING_BYTES == MAX_INSPECTION_STRING_BYTES
     assert OperatorControl.MAX_TABLE_ROWS == MAX_TABLE_ROWS
     assert OperatorControl.MAX_TABLE_COLUMNS == MAX_TABLE_COLUMNS
     assert OperatorControl.MAX_TABLE_CELLS == MAX_TABLE_CELLS
@@ -321,6 +323,186 @@ def test_operator_control_is_the_touchdesigner_graph_interface() -> None:
     }
     with pytest.raises(module.AgentCommandError, match="operator_not_found"):
         control.execute({"name": "ops.get", "input": {"operator_path": "/missing"}})
+
+
+class FakeAttribute:
+    def __init__(self, name: str, size: int, value_type=float) -> None:
+        self.name = name
+        self.size = size
+        self.type = value_type
+        self.isArray = False
+        self.arraySize = 0
+        self.numMatRows = 0
+        self.numMatCols = 0
+
+
+def inspection_operator(path: str, family: str):
+    operator = FakeOperator(path, op_type=f"sample{family}", family=family)
+    operator.cpuMemory = 100
+    operator.gpuMemory = 200
+    operator.cpuCookTime = 1.25
+    operator.gpuCookTime = 2.5
+    operator.cookedThisFrame = True
+    operator.cookedPreviousFrame = False
+    operator.display = True
+    operator.render = False
+    return operator
+
+
+def test_family_inspection_returns_discriminated_results_for_all_six_families() -> None:
+    chop = inspection_operator("/project1/chop", "CHOP")
+    chop.numChans, chop.numSamples, chop.rate = 2, 60, 60.0
+    chop.start, chop.end, chop.isTimeSlice, chop.export = 0.0, 59.0, False, True
+    chop.exportChanges = 3
+    chop.chans = lambda: [SimpleNamespace(name="tx"), SimpleNamespace(name="ty")]
+
+    dat = inspection_operator("/project1/dat", "DAT")
+    dat.isTable, dat.isText, dat.isEditable = True, False, True
+    dat.numRows, dat.numCols, dat.export, dat.editingFile = 3, 2, False, None
+
+    top = inspection_operator("/project1/top", "TOP")
+    top.width, top.height, top.depth = 1920, 1080, 1
+    top.aspect, top.pixelFormat, top.pixelFormatName = 16 / 9, "8-bit fixed (RGBA)", "rgba8fixed"
+    top.aspectWidth, top.aspectHeight, top.curPass, top.newestSliceWOffset = (
+        16.0,
+        9.0,
+        0,
+        0.25,
+    )
+
+    sop = inspection_operator("/project1/sop", "SOP")
+    sop.numPoints, sop.numPrims, sop.numVertices = 8, 6, 24
+    sop.min, sop.max, sop.center, sop.size = (-0.5,) * 3, (0.5,) * 3, (0.0,) * 3, (1.0,) * 3
+    sop.pointAttribs = [FakeAttribute("P", 3)]
+    sop.vertexAttribs = [FakeAttribute("uv", 3)]
+    sop.primAttribs = []
+    sop.pointGroups, sop.primGroups = {"selected": object()}, {}
+    sop.template, sop.compare = False, False
+
+    pop = inspection_operator("/project1/pop", "POP")
+    pop.dimension = [8]
+    pop.maxVertsPerLineStrip = 0
+    pop_count_calls = []
+
+    def allocated_count(kind, value):
+        def count(**kwargs):
+            pop_count_calls.append((kind, kwargs))
+            return value
+
+        return count
+
+    pop.numPoints = allocated_count("points", 8)
+    pop.numPrims = allocated_count("primitives", 6)
+    pop.numVerts = allocated_count("vertices", 24)
+    pop.template, pop.compare = False, False
+
+    mat = inspection_operator("/project1/mat", "MAT")
+    operators = {item.path: item for item in (chop, dat, top, sop, pop, mat)}
+    control = make_control(operators.get)
+    results = {
+        family: control.execute(
+            {"name": "ops.inspect", "input": {"operator_path": operator.path, "max_items": 8}}
+        )
+        for family, operator in zip(("CHOP", "DAT", "TOP", "SOP", "POP", "MAT"), operators.values())
+    }
+
+    assert results["CHOP"]["details"]["channel_names"] == ["tx", "ty"]
+    assert results["DAT"]["details"]["dat_kind"] == "table"
+    assert results["TOP"]["details"]["resolution"] == {"width": 1920, "height": 1080, "depth": 1}
+    assert results["TOP"]["details"]["newest_slice_w_offset"] == 0.25
+    assert results["SOP"]["details"]["attributes"]["point"][0]["name"] == "P"
+    assert results["POP"]["details"]["allocated"] == {"points": 8, "primitives": 6, "vertices": 24}
+    assert pop_count_calls == [
+        ("points", {"max": True}),
+        ("primitives", {"max": True}),
+        ("vertices", {"max": True}),
+    ]
+    assert results["MAT"]["details"] == {}
+    assert all(result["family"] == family for family, result in results.items())
+    assert all(result["snapshot"] == "passive" for result in results.values())
+    assert all(
+        result["memory"] == {"cpu_bytes": 100, "gpu_bytes": 200} for result in results.values()
+    )
+
+
+def test_family_inspection_rejects_unsupported_unavailable_and_overflow() -> None:
+    comp = inspection_operator("/project1/comp", "COMP")
+    chop = inspection_operator("/project1/chop", "CHOP")
+    chop.numChans, chop.numSamples, chop.rate = 2, 1, 60.0
+    chop.start, chop.end, chop.isTimeSlice, chop.export = 0.0, 0.0, False, False
+    chop.exportChanges = 0
+    chop.chans = lambda: [SimpleNamespace(name="a"), SimpleNamespace(name="b")]
+    broken = inspection_operator("/project1/broken", "TOP")
+    control = make_control({item.path: item for item in (comp, chop, broken)}.get)
+
+    with pytest.raises(module.AgentCommandError, match="operator_family_unsupported"):
+        control.execute(
+            {"name": "ops.inspect", "input": {"operator_path": comp.path, "max_items": 8}}
+        )
+    with pytest.raises(module.AgentCommandError, match="result_too_large"):
+        control.execute(
+            {"name": "ops.inspect", "input": {"operator_path": chop.path, "max_items": 1}}
+        )
+    with pytest.raises(module.AgentCommandError, match="family_inspection_unavailable"):
+        control.execute(
+            {"name": "ops.inspect", "input": {"operator_path": broken.path, "max_items": 8}}
+        )
+
+
+def test_family_inspection_bounds_each_string_and_pop_dimension() -> None:
+    chop = inspection_operator("/project1/chop", "CHOP")
+    chop.numChans, chop.numSamples, chop.rate = 1, 1, 60.0
+    chop.start, chop.end, chop.isTimeSlice, chop.export = 0.0, 0.0, False, False
+    chop.exportChanges = 0
+    chop.chans = lambda: [SimpleNamespace(name="x" * (MAX_INSPECTION_STRING_BYTES + 1))]
+
+    pop = inspection_operator("/project1/pop", "POP")
+    pop.dimension = [1, 2]
+    control = make_control({chop.path: chop, pop.path: pop}.get)
+
+    with pytest.raises(module.AgentCommandError, match="result_too_large"):
+        control.execute(
+            {"name": "ops.inspect", "input": {"operator_path": chop.path, "max_items": 1}}
+        )
+    with pytest.raises(module.AgentCommandError, match="result_too_large"):
+        control.execute(
+            {"name": "ops.inspect", "input": {"operator_path": pop.path, "max_items": 1}}
+        )
+
+
+def test_family_inspection_detects_operator_disappearance_during_read() -> None:
+    operator = inspection_operator("/project1/top", "TOP")
+    operator.width, operator.height, operator.depth = 1, 1, 1
+    operator.aspect, operator.aspectWidth, operator.aspectHeight = 1.0, 1.0, 1.0
+    operator.pixelFormat, operator.pixelFormatName = "8-bit fixed (RGBA)", "rgba8fixed"
+    operator.curPass, operator.newestSliceWOffset = 0, 0
+    calls = 0
+
+    def lookup(_path):
+        nonlocal calls
+        calls += 1
+        return operator if calls == 1 else None
+
+    with pytest.raises(module.AgentCommandError, match="family_inspection_outcome_unknown"):
+        make_control(lookup).execute(
+            {"name": "ops.inspect", "input": {"operator_path": operator.path, "max_items": 8}}
+        )
+
+
+def test_family_inspection_uses_touchdesigner_passive_lookup() -> None:
+    operator = inspection_operator("/project1/mat", "MAT")
+    calls = []
+    control = OperatorControl(
+        {operator.path: operator}.get,
+        RUNTIME_OPERATOR_CATALOG,
+        passive_lookup=lambda value: calls.append(value) or value,
+    )
+
+    control.execute(
+        {"name": "ops.inspect", "input": {"operator_path": operator.path, "max_items": 8}}
+    )
+
+    assert calls == [operator]
 
 
 def test_operator_state_get_returns_only_the_locked_common_state_contract() -> None:
