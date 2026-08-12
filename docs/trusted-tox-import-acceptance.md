@@ -37,9 +37,9 @@ Source-first acceptance ran in TouchDesigner 2025.32050 using only `tdcli_`
 artifacts in an unsaved `Sample.toe` session:
 
 - Canonical Agent source revision:
-  `3ebe2a6c595ad5f2b9304e2c1f15a49d24862b809c86fe4a074ed2b5bec07c66`
+  `7e200c9f555ebf4667d3de9c86d83ab2fa6ce5ed547ccca1c1a2c54ada6ceda3`
 - Local derived artifact SHA-256:
-  `dfb1c75a75e1e6a18ed8632a78585d487a759fcd073ca2d19369beb2d823d39a`
+  `d7e2a1ad89da4c0aa41080bf4c6209aeb5006f1d965b765ddb9ee32a1a13e8be`
 - Artifact topology: all eight required Operators passed independent inspection.
 - Advertised capabilities: all 33 public Commands, including
   `ops.tox.import`.
