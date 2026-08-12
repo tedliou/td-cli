@@ -42,6 +42,7 @@ class ConnectionsInput(OperatorInput):
 
 
 MAX_INSPECTION_ITEMS = 100
+MAX_INSPECTION_STRING_BYTES = 4096
 
 
 class InspectOperatorInput(OperatorInput):

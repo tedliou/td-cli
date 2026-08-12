@@ -10,6 +10,7 @@ import pytest
 from td_cli.command_catalog import (
     COMMAND_CATALOG,
     MAX_DAT_CONTENT_BYTES,
+    MAX_INSPECTION_STRING_BYTES,
     MAX_MULTI_OP_PATHS,
     MAX_SEQUENCE_BLOCKS,
     MAX_SEQUENCE_PARAMETERS,
@@ -49,6 +50,7 @@ def test_operator_state_fields_match_between_canonical_and_agent_contracts() -> 
 
 def test_dat_bounds_match_between_canonical_and_agent_contracts() -> None:
     assert OperatorControl.MAX_DAT_CONTENT_BYTES == MAX_DAT_CONTENT_BYTES
+    assert OperatorControl.MAX_INSPECTION_STRING_BYTES == MAX_INSPECTION_STRING_BYTES
     assert OperatorControl.MAX_TABLE_ROWS == MAX_TABLE_ROWS
     assert OperatorControl.MAX_TABLE_COLUMNS == MAX_TABLE_COLUMNS
     assert OperatorControl.MAX_TABLE_CELLS == MAX_TABLE_CELLS
@@ -380,9 +382,18 @@ def test_family_inspection_returns_discriminated_results_for_all_six_families() 
     pop = inspection_operator("/project1/pop", "POP")
     pop.dimension = [8]
     pop.maxVertsPerLineStrip = 0
-    pop.numPoints = lambda **kwargs: 8
-    pop.numPrims = lambda **kwargs: 6
-    pop.numVerts = lambda **kwargs: 24
+    pop_count_calls = []
+
+    def allocated_count(kind, value):
+        def count(**kwargs):
+            pop_count_calls.append((kind, kwargs))
+            return value
+
+        return count
+
+    pop.numPoints = allocated_count("points", 8)
+    pop.numPrims = allocated_count("primitives", 6)
+    pop.numVerts = allocated_count("vertices", 24)
     pop.template, pop.compare = False, False
 
     mat = inspection_operator("/project1/mat", "MAT")
@@ -401,6 +412,11 @@ def test_family_inspection_returns_discriminated_results_for_all_six_families() 
     assert results["TOP"]["details"]["newest_slice_w_offset"] == 0.25
     assert results["SOP"]["details"]["attributes"]["point"][0]["name"] == "P"
     assert results["POP"]["details"]["allocated"] == {"points": 8, "primitives": 6, "vertices": 24}
+    assert pop_count_calls == [
+        ("points", {"max": True}),
+        ("primitives", {"max": True}),
+        ("vertices", {"max": True}),
+    ]
     assert results["MAT"]["details"] == {}
     assert all(result["family"] == family for family, result in results.items())
     assert all(result["snapshot"] == "passive" for result in results.values())
@@ -430,6 +446,27 @@ def test_family_inspection_rejects_unsupported_unavailable_and_overflow() -> Non
     with pytest.raises(module.AgentCommandError, match="family_inspection_unavailable"):
         control.execute(
             {"name": "ops.inspect", "input": {"operator_path": broken.path, "max_items": 8}}
+        )
+
+
+def test_family_inspection_bounds_each_string_and_pop_dimension() -> None:
+    chop = inspection_operator("/project1/chop", "CHOP")
+    chop.numChans, chop.numSamples, chop.rate = 1, 1, 60.0
+    chop.start, chop.end, chop.isTimeSlice, chop.export = 0.0, 0.0, False, False
+    chop.exportChanges = 0
+    chop.chans = lambda: [SimpleNamespace(name="x" * (MAX_INSPECTION_STRING_BYTES + 1))]
+
+    pop = inspection_operator("/project1/pop", "POP")
+    pop.dimension = [1, 2]
+    control = make_control({chop.path: chop, pop.path: pop}.get)
+
+    with pytest.raises(module.AgentCommandError, match="result_too_large"):
+        control.execute(
+            {"name": "ops.inspect", "input": {"operator_path": chop.path, "max_items": 1}}
+        )
+    with pytest.raises(module.AgentCommandError, match="result_too_large"):
+        control.execute(
+            {"name": "ops.inspect", "input": {"operator_path": pop.path, "max_items": 1}}
         )
 
 

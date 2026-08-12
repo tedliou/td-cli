@@ -28,8 +28,8 @@ from the installed, build-locked TDI files.
 
 ## Recommended contract
 
-Expose one discriminated result with `family` equal to `chop`, `dat`, `top`,
-`sop`, `pop`, or `mat`, plus a family-specific `details` object. Inspect one
+Expose one discriminated result with `family` equal to `CHOP`, `DAT`, `TOP`,
+`SOP`, `POP`, or `MAT`, matching TouchDesigner's runtime family names, plus a family-specific `details` object. Inspect one
 canonical OP path per request. Never return TouchDesigner proxy objects: convert
 positions to finite three-number arrays, enum-like values to strings, and
 attribute/group/channel names to strings. A missing/destroyed/wrong-family OP is
@@ -45,13 +45,16 @@ must never call `OP.cook()`.
 Use these request-wide limits:
 
 - `max_items`: integer 1..1000, default 100, applied independently to every
-  variable-length name collection. Return `total` and `items` only when the
-  complete collection fits; otherwise fail with the existing
+  variable-length name collection. Return the complete collection only when it
+  fits (its list length is therefore the exact total); otherwise fail with the existing
   `result_too_large` typed error. Do not silently truncate a requested snapshot.
+- Every string within family-specific details is independently limited to 4096
+  UTF-8 bytes and fails with `result_too_large`; this includes channel,
+  attribute and group names, DAT editing paths, and TOP pixel-format labels.
 - `max_text_bytes`: integer 1..1,048,576 only if a later explicit DAT content
   preview is added. The initial inspector should not return DAT content.
 - Reject non-finite floats during serialization. Catch each family property read
-  and return a typed `family_inspection_failed`; do not silently omit a field.
+  and return the typed `family_inspection_unavailable`; do not silently omit a field.
 - Do not call `cook()`, `numpyArray()`, `sample()`, `vals()`, `points()`,
   `prims()`, or `verts()` in the default inspector.
 

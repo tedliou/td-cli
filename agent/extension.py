@@ -97,6 +97,7 @@ class OperatorControl:
     MAX_SEQUENCE_BLOCKS = 128
     MAX_SEQUENCE_PARAMETERS = 256
     MAX_HIERARCHY_TRAVERSAL = 1000
+    MAX_INSPECTION_STRING_BYTES = 4096
     INSPECTION_FAMILIES = ("CHOP", "DAT", "TOP", "SOP", "POP", "MAT")
 
     def __init__(self, operator_lookup, operator_catalog, protected_path=None, passive_lookup=None):
@@ -170,7 +171,7 @@ class OperatorControl:
             raise AgentCommandError("family_inspection_unavailable")
         return {
             "channel_count": channel_count,
-            "channel_names": [str(channel.name) for channel in channels],
+            "channel_names": [self._inspection_string(channel.name) for channel in channels],
             "sample_count": self._nonnegative_integer(operator.numSamples),
             "sample_rate": self._finite_number(operator.rate),
             "start_index": self._finite_number(operator.start),
@@ -192,7 +193,7 @@ class OperatorControl:
             "row_count": self._nonnegative_integer(operator.numRows),
             "column_count": self._nonnegative_integer(operator.numCols),
             "export": bool(operator.export),
-            "editing_file": None if editing_file is None else str(editing_file),
+            "editing_file": None if editing_file is None else self._inspection_string(editing_file),
         }
 
     def _inspect_top(self, operator, _max_items):
@@ -205,8 +206,8 @@ class OperatorControl:
             "aspect": self._finite_number(operator.aspect),
             "aspect_width": self._finite_number(operator.aspectWidth),
             "aspect_height": self._finite_number(operator.aspectHeight),
-            "pixel_format": str(operator.pixelFormat),
-            "pixel_format_name": str(operator.pixelFormatName),
+            "pixel_format": self._inspection_string(operator.pixelFormat),
+            "pixel_format_name": self._inspection_string(operator.pixelFormatName),
             "current_pass": self._integer(operator.curPass),
             "newest_slice_w_offset": self._finite_number(operator.newestSliceWOffset),
         }
@@ -232,9 +233,11 @@ class OperatorControl:
             "compare": bool(operator.compare),
         }
 
-    def _inspect_pop(self, operator, _max_items):
+    def _inspect_pop(self, operator, max_items):
+        dimension = list(operator.dimension)
+        self._require_inspection_bound(len(dimension), max_items)
         return {
-            "dimension": [self._nonnegative_integer(value) for value in list(operator.dimension)],
+            "dimension": [self._nonnegative_integer(value) for value in dimension],
             "max_vertices_per_line_strip": self._nonnegative_integer(operator.maxVertsPerLineStrip),
             "allocated": {
                 "points": self._nonnegative_integer(operator.numPoints(max=True)),
@@ -267,8 +270,10 @@ class OperatorControl:
             raise AgentCommandError("family_inspection_unavailable")
         return [
             {
-                "name": str(attribute.name),
-                "value_type": getattr(attribute.type, "__name__", str(attribute.type)),
+                "name": cls._inspection_string(attribute.name),
+                "value_type": cls._inspection_string(
+                    getattr(attribute.type, "__name__", str(attribute.type))
+                ),
                 "size": cls._nonnegative_integer(attribute.size),
                 "is_array": bool(attribute.isArray),
                 "array_size": cls._nonnegative_integer(attribute.arraySize),
@@ -282,7 +287,14 @@ class OperatorControl:
     def _inspection_names(cls, values, max_items):
         names = list(values.keys()) if isinstance(values, dict) else list(values)
         cls._require_inspection_bound(len(names), max_items)
-        return sorted(str(name) for name in names)
+        return sorted(cls._inspection_string(name) for name in names)
+
+    @classmethod
+    def _inspection_string(cls, value):
+        text = str(value)
+        if len(text.encode("utf-8")) > cls.MAX_INSPECTION_STRING_BYTES:
+            raise AgentCommandError("result_too_large")
+        return text
 
     @staticmethod
     def _require_inspection_bound(count, max_items):
