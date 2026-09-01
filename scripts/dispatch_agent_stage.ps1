@@ -18,11 +18,12 @@ try {
     Compress-Archive -LiteralPath ($required | ForEach-Object { Join-Path $resolvedStage $_ }) -DestinationPath $archive
     $digest = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
     $payload = [Convert]::ToBase64String([IO.File]::ReadAllBytes($archive))
-    gh workflow run stage-agent-component.yml --ref main `
-        -f "source_commit=$SourceCommit" `
-        -f "version=$Version" `
-        -f "stage_archive_base64=$payload" `
-        -f "stage_archive_sha256=$digest"
+    @{
+        source_commit = $SourceCommit
+        version = $Version
+        stage_archive_base64 = $payload
+        stage_archive_sha256 = $digest
+    } | ConvertTo-Json -Compress | gh workflow run stage-agent-component.yml --ref main --json
     if ($LASTEXITCODE -ne 0) { throw 'Failed to dispatch Stage Agent Component' }
     Write-Output "STAGE_DISPATCHED source_commit=$SourceCommit sha256=$digest"
 }
