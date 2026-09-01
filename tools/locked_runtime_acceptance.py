@@ -139,15 +139,26 @@ def _run_probe_inner(scheduled_at, scheduled_frame):
             },
         },
     }
-    evidence["execution_classes"] = {
-        name: _measure(agent, command, repetitions=3 if name == "trusted_asset_mutation" else 11)
-        for name, command in cases.items()
-    }
-    performance.cook(force=True)
-    evidence["perform_chop"] = {
-        str(channel.name): float(channel.eval()) for channel in performance.chans()
-    }
-    evidence["frame_budget_ms_at_60_fps"] = round(1000 / 60, 3)
+    frame_budget_ms = 1000 / 60
+    evidence["frame_budget_ms_at_60_fps"] = round(frame_budget_ms, 3)
+    evidence["execution_classes"] = {}
+    for name, command in cases.items():
+        performance.cook(force=True)
+        fps_before = float(performance["fps"].eval())
+        measurement = _measure(
+            agent,
+            command,
+            repetitions=3 if name == "trusted_asset_mutation" else 11,
+        )
+        performance.cook(force=True)
+        measurement["perform_fps_before"] = fps_before
+        measurement["perform_fps_after"] = float(performance["fps"].eval())
+        measurement["dropped_frames_available"] = False
+        measurement["max_frame_budget_occupancy"] = round(
+            measurement["max_ms"] / frame_budget_ms,
+            3,
+        )
+        evidence["execution_classes"][name] = measurement
 
     agent.connection_id = agent.connection_id or "acceptance-connection"
     request_id = "00000000-0000-7000-8000-000000000090"

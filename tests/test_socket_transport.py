@@ -10,11 +10,38 @@ import socketio
 import uvicorn
 from aiohttp import ClientSession
 
-from td_cli.daemon.transport import create_transport_app
+from td_cli.daemon.transport import _cancel_and_wait, _run_cleanup_steps, create_transport_app
 
 TOKEN = "b" * 64
 INSTANCE_ID = "8cf81688-b9a4-4c39-9f92-31c77319c761"
 REQUEST_ID = "018f47ec-7f3b-7a34-8f31-2ad70b6f6e2a"
+
+
+@pytest.mark.asyncio
+async def test_cleanup_runs_every_step_after_owned_task_failure() -> None:
+    calls: list[str] = []
+
+    async def failed_owner() -> None:
+        raise RuntimeError("deadline failed")
+
+    async def record(name: str) -> None:
+        calls.append(name)
+
+    owner = asyncio.create_task(failed_owner())
+    await asyncio.sleep(0)
+
+    with pytest.raises(RuntimeError, match="deadline failed"):
+        await _run_cleanup_steps(
+            [
+                lambda: _cancel_and_wait(owner),
+                lambda: record("lifecycle"),
+                lambda: record("effect"),
+                lambda: record("sender-one"),
+                lambda: record("sender-two"),
+            ]
+        )
+
+    assert calls == ["lifecycle", "effect", "sender-one", "sender-two"]
 
 
 def unused_port() -> int:

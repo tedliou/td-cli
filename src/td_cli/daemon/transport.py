@@ -7,9 +7,10 @@ import logging
 import secrets
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from pathlib import Path
 from typing import Any, cast
 
@@ -111,20 +112,15 @@ def create_transport_app(
     async def teardown() -> None:
         nonlocal stopping
         stopping = True
+        cleanup: list[Callable[[], Awaitable[None]]] = []
         if deadline_task is not None:
-            deadline_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await deadline_task
-        try:
-            if lifecycle is not None:
-                await lifecycle.close()
-        finally:
-            if effect_task is not None:
-                effect_task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await effect_task
-            for adapter in list(connections.values()):
-                await stop_sender(adapter)
+            cleanup.append(partial(_cancel_and_wait, deadline_task))
+        if lifecycle is not None:
+            cleanup.append(lifecycle.close)
+        if effect_task is not None:
+            cleanup.append(partial(_cancel_and_wait, effect_task))
+        cleanup.extend(partial(stop_sender, adapter) for adapter in list(connections.values()))
+        await _run_cleanup_steps(cleanup)
 
     def healthy() -> bool:
         external = runtime_health() if runtime_health is not None else True
@@ -487,6 +483,28 @@ def create_transport_app(
             await stop_sender(adapter)
 
     return socketio.ASGIApp(sio, other_asgi_app=management)
+
+
+async def _cancel_and_wait(task: asyncio.Task[None]) -> None:
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+
+
+async def _run_cleanup_steps(steps: Iterable[Callable[[], Awaitable[None]]]) -> None:
+    """Run every owned cleanup step, then surface the first failure."""
+    first_failure: BaseException | None = None
+    for step in steps:
+        try:
+            await step()
+        except asyncio.CancelledError as error:
+            if first_failure is None:
+                first_failure = error
+        except Exception as error:  # noqa: BLE001 - cleanup must continue through failure
+            if first_failure is None:
+                first_failure = error
+    if first_failure is not None:
+        raise first_failure
 
 
 def _effect_outbound(effect: LifecycleEffect, drain_timeout: float) -> _Outbound | None:

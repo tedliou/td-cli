@@ -26,7 +26,14 @@ def _write_agent_stage(root: Path, *, source_commit: str = "a" * 40) -> None:
     }
     (root / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     (root / "verification.json").write_text(
-        json.dumps({"validated": True, "source_commit": source_commit}), encoding="utf-8"
+        json.dumps(
+            {
+                "validated": True,
+                "source_commit": source_commit,
+                "artifact_sha256": hashlib.sha256(b"tox").hexdigest(),
+            }
+        ),
+        encoding="utf-8",
     )
 
 
@@ -85,4 +92,14 @@ def test_agent_stage_rejects_wrong_commit_or_touchdesigner_build(tmp_path: Path)
     manifest["locked_touchdesigner_version"] = "2025.99999"
     (tmp_path / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     with pytest.raises(ValueError, match="TouchDesigner"):
+        validate_agent_stage(tmp_path, expected_commit="a" * 40)
+
+
+def test_agent_stage_rejects_verification_for_another_artifact(tmp_path: Path) -> None:
+    _write_agent_stage(tmp_path)
+    verification = json.loads((tmp_path / "verification.json").read_text(encoding="utf-8"))
+    verification["artifact_sha256"] = hashlib.sha256(b"old").hexdigest()
+    (tmp_path / "verification.json").write_text(json.dumps(verification), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="artifact digest"):
         validate_agent_stage(tmp_path, expected_commit="a" * 40)

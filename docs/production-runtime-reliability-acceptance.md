@@ -27,7 +27,7 @@ with TouchDesigner **2025.32050**, the root timeline paused, and no Operator
 errors. Final canonical source revision
 `a4b30d7e81920c2f3014ffb31705d664a7a5cfd3682bc0e9bd831fdb69eb5eea`
 produced local artifact SHA-256
-`f4dc954e56d6339fcb48861cf099dc6755b8c546d007771e27dc4cb225588d21`.
+`b0b87a53200f1f5470a12237a8519958429a1481a8ca7db5fe0e316f08cf7785`.
 It proved:
 
 - the scheduled probe progressed on `TDResources` time while the timeline was
@@ -47,18 +47,19 @@ It proved:
 Maximum-input synchronous measurements (11 samples except trusted import with
 3) were:
 
-| Execution class | Locked maximum |
-| --- | ---: |
-| `fast_read` | 0.028 ms |
-| `bounded_scan_or_export` | 3.081 ms |
-| `bounded_mutation` | 30.055 ms |
-| `trusted_asset_mutation` | 192.138 ms |
+| Execution class | Cold | Warm median | Maximum | Perform FPS before/after | 60 FPS budgets at maximum |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `fast_read` | 0.020 ms | 0.004 ms | 0.020 ms | 23 / 23 | 0.001 |
+| `bounded_scan_or_export` | 2.130 ms | 1.602 ms | 2.130 ms | 23 / 23 | 0.128 |
+| `bounded_mutation` | 16.183 ms | 18.355 ms | 18.437 ms | 23 / 23 | 1.106 |
+| `trusted_asset_mutation` | 89.107 ms | 133.029 ms | 133.494 ms | 23 / 23 | 8.010 |
 
 Every case had a zero frame delta while executing: the main thread could not
-advance during the synchronous call. The official Perform CHOP reported 7 FPS
-after the maximum-input matrix. At the project's 60 FPS target, the 192.138 ms
-trusted mutation occupied 11.53 frame budgets; no separate dropped-frame
-channel was exposed by the locked Perform CHOP while the timeline was paused.
+advance during the synchronous call. The locked Perform CHOP was forcibly
+cooked immediately before and after each class. It exposed `fps=23` but no
+separate dropped-frame channel while the root timeline was paused. Therefore
+the report records the directly observed FPS and derives blocked 60 FPS frame
+budgets from wall time; it does not claim a rendered dropped-frame count.
 Default leases use three 2-second heartbeat
 intervals plus `ceil(10 * locked_max_seconds)`: 7 seconds for the first three
 classes and 8 seconds for trusted asset mutation. This derives the fault
@@ -92,25 +93,50 @@ reconnect path while the root timeline remained paused.
 The locked commands used for the final artifact and runtime evidence were:
 
 ```powershell
-Start-Process 'C:\Program Files\Derivative\TouchDesigner\bin\TouchDesigner.exe' `
-  'C:\Users\Ted\AppData\Local\Temp\td-cli-runtime-acceptance\Setfps.toe'
+$tdProcess = Start-Process `
+  'C:\Program Files\Derivative\TouchDesigner\bin\TouchDesigner.exe' `
+  "$env:TEMP\td-cli-runtime-acceptance\Setfps.toe" -PassThru
 Get-Content .tmp-locked-runtime-acceptance.json
 Get-Content .tmp-locked-runtime-reinit.json
 uv run td-daemon stop
 uv run td-daemon status
 uv run td-daemon start
 uv run td --json instances list
-Copy-Item td-agent.tox $env:TEMP\td-cli-artifact-inspect\artifact.tox
-Push-Location $env:TEMP\td-cli-artifact-inspect
+Copy-Item td-agent.tox $env:TEMP\td-cli-artifact-inspect-final\artifact.tox
+Push-Location $env:TEMP\td-cli-artifact-inspect-final
 & 'C:\Program Files\Derivative\TouchDesigner\bin\toeexpand.exe' .\artifact.tox
 Pop-Location
+$artifactAuth = Get-ChildItem $env:TEMP\td-cli-artifact-inspect-final `
+  -Recurse -File | Where-Object Name -eq 'auth_table.table'
+$artifactAuth.Length
+[Convert]::ToHexString([IO.File]::ReadAllBytes($artifactAuth.FullName))
+Get-ChildItem $env:TEMP\td-cli-artifact-inspect-final -Recurse -File |
+  Select-String '\b[0-9a-fA-F]{64}\b'
 ```
 
-The Daemon crash probe submitted `ops.tox.import` with `--no-wait`, waited 50
-ms, terminated the PID recorded in
-`%LOCALAPPDATA%\touchdesigner-cli\run\daemon.json`, restarted with
-`td-daemon start`, then queried the same Request ID. The repeatable automated
-queued/dispatched/running process boundary is:
+The exact 50 ms Daemon crash probe for the artifact above was:
+
+```powershell
+$requestId = '0199a111-2222-7333-8444-555566667778'
+uv run td --json --instance 82d2 ops tox import `
+  /project1/runtime_acceptance E:\td-cli\.tmp-runtime-acceptance-source.tox `
+  E:\td-cli crash_replay_final_2 --trusted --replace --max-operators 1000 `
+  --no-wait --request-id $requestId
+Start-Sleep -Milliseconds 50
+$state = Get-Content `
+  $env:LOCALAPPDATA\touchdesigner-cli\run\daemon.json -Raw | ConvertFrom-Json
+$process = Get-CimInstance Win32_Process -Filter "ProcessId = $($state.pid)"
+if ($process.CommandLine -notmatch 'td_cli\.daemon\.cli serve') {
+  throw 'Daemon PID identity check failed'
+}
+Stop-Process -Id $state.pid
+uv run td-daemon start
+uv run td --json requests get $requestId
+```
+
+It returned `succeeded` with 1,000 inventory entries, then the Agent evidence
+showed zero retained records and the Instance Online on the new Connection ID.
+The repeatable automated queued/dispatched/running process boundary is:
 
 ```powershell
 uv run pytest -q tests/test_process_crash_integration.py
@@ -121,6 +147,25 @@ Run the standard contribution gate plus:
 ```powershell
 uv run pytest -q tests/test_agent_runtime.py tests/test_agent_callbacks.py tests/test_socket_transport.py
 uv run python -m td_cli.agent_tool inspect-source agent
+```
+
+The final release gate prepares only verification whose `artifact_sha256`
+matches both the structural manifest and artifact bytes, builds all three clean
+executables, runs their clean-working-directory version smokes, and packages
+the four documented ZIP layouts:
+
+```powershell
+$sourceCommit = git rev-parse HEAD
+$sourceEpoch = git show -s --format=%ct HEAD
+uv run python scripts/prepare_agent_stage.py --artifact td-agent.tox `
+  --source agent --source-commit $sourceCommit `
+  --verification .tmp-locked-verification.json `
+  --output $env:TEMP\td-cli-agent-stage-final-3
+uv run python scripts/build_release.py `
+  --agent-stage $env:TEMP\td-cli-agent-stage-final-3 `
+  --output $env:TEMP\td-cli-release-final-3 `
+  --source-epoch $sourceEpoch --source-commit $sourceCommit
+Get-FileHash $env:TEMP\td-cli-release-final-3\*.zip -Algorithm SHA256
 ```
 
 Locked evidence requires the disposable Execute DAT wrapper
