@@ -22,3 +22,9 @@ Issue 與規格均使用 GitHub Issues 管理。詳見 `docs/agents/issue-tracke
 - Grilling 是代理內部設計審查。主 session 依專案證據與權威文件作最終決策，不把可自行查明或裁決的問題退回使用者。
 - 子代理只用於技能明確要求、grilling，或需要獨立第三方 review；主控制與產品實作留在主 session。
 - 每個階段開始前先提交既有變更並確認工作區乾淨；每輪產品變更使用獨立分支。
+
+### Runtime reliability
+
+變更 Protocol、Daemon transport、RequestLifecycle、RequestStore、Agent callback／scheduler、
+Socket.IO integration 或 locked TouchDesigner acceptance 時，必須先讀取並遵循
+`.agents/skills/td-runtime-reliability/SKILL.md`。

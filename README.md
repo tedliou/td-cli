@@ -1,15 +1,23 @@
 # td-cli
 
+[English](README.md) | [正體中文](README.zh-TW.md) | [简体中文](README.zh-CN.md)
+
+<!-- doc-section: overview -->
+
 Prototype of a local, authenticated control path between Codex and a
 TouchDesigner Instance. The public `td` surface provides typed Operator and
 Parameter control plus bounded project observation, binary export, batch
 execution, project metadata, and event/error observation. It never exposes
 arbitrary Python or remote network control.
 
+<!-- doc-section: requirements -->
+
 ## Requirements
 
 - Windows x86-64
 - TouchDesigner `2025.32050`
+
+<!-- doc-section: install -->
 
 ## Install and first use
 
@@ -45,6 +53,8 @@ and TouchDesigner projects:
 irm https://github.com/tedliou/td-cli/releases/latest/download/uninstall.ps1 | iex
 ```
 
+<!-- doc-section: development -->
+
 ## Development
 
 Python 3.11 and [uv](https://docs.astral.sh/uv/) are required.
@@ -55,6 +65,12 @@ uv run pytest
 uv run ruff check .
 uv run ruff format --check .
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete contribution workflow. Changes to the
+Protocol, Daemon runtime, RequestStore, Agent scheduler, or locked TouchDesigner acceptance must
+follow the [td-runtime-reliability skill](.agents/skills/td-runtime-reliability/SKILL.md).
+
+<!-- doc-section: daemon -->
 
 ## Daemon
 
@@ -74,6 +90,8 @@ The fixed layout contains `state\daemon.db`, `state\auth.token`,
 Deleting `state\auth.token` while the Daemon is stopped performs manual token
 recovery; every Agent Component must reconnect afterward.
 
+<!-- doc-section: agent-component -->
+
 ## Agent Component
 
 Reviewable files under `agent/` are canonical. `td-agent.tox` is a derived local
@@ -90,6 +108,8 @@ Artifact inspection requires the adjacent
 the artifact to the canonical source revision, TouchDesigner `2025.32050`, and
 the required DAT/operator topology. Actual `.tox` creation and Online Instance
 validation are performed locally in the locked TouchDesigner environment.
+
+<!-- doc-section: operator-control -->
 
 ## Basic network control
 
@@ -122,6 +142,8 @@ and overflow fails without truncation. It never downloads pixels, geometry, POP
 buffers, DAT content, or arbitrary Python objects and never explicitly cooks an
 Operator. Existing dedicated Commands remain the content and mutation seams.
 
+<!-- doc-section: parameter-control -->
+
 Parameter inspection is style-driven and distinguishes booleans, integers,
 numbers, strings, menus, single-OP references, bounded ordered Multi-OP
 references, Pulse, Sequence headers, and opaque Python values. OP writes accept
@@ -146,12 +168,16 @@ bounded to 128 blocks and 256 Parameters per block, reads back the complete
 ordered state, and restores the prior block count, order, names, modes, values,
 and sources if any mutation is rejected.
 
+<!-- doc-section: regular-connections -->
+
 Inspect every regular input and output connector before changing a graph. The
 inventory is bounded and fails rather than returning a truncated topology:
 
 ```powershell
 td --json --instance <selector> ops connections /project1/source --max-connections 256
 ```
+
+<!-- doc-section: hierarchy-connections -->
 
 COMP Hierarchy Connections are a separate top-to-bottom connector model for
 compatible Object COMPs or compatible Panel COMPs. Inventory is bounded and
@@ -170,6 +196,8 @@ Hierarchy reads are batchable; hierarchy mutations are not. The root, Agent
 Component, its ancestors, and descendants are protected. Distinct occupied,
 incompatible-kind, cycle, mutation-failed, rollback-failed, and
 uncertain-outcome errors preserve honest state.
+
+<!-- doc-section: structural-mutations -->
 
 Structural mutations use exact paths and names. They reject the root, the
 Agent Component and its ancestors, automatic TouchDesigner names, collisions,
@@ -193,6 +221,8 @@ error is returned when the requested final state cannot be proven. Neither
 operation promises to rewrite DAT string literals, external systems, or every
 path-bearing expression/reference.
 
+<!-- doc-section: trusted-tox-import -->
+
 Trusted TOX Import accepts one existing absolute local `.tox` beneath an
 explicit allowlist root. The caller must pass `--trusted`: a TOX is executable
 TouchDesigner project content and may run callbacks while loading. td-cli does
@@ -213,6 +243,8 @@ unprovable identity failures use distinct rollback or uncertain-outcome
 errors. Files default to a 64 MiB maximum and inventories to 256 Operators
 (maximum 1000); every bound fails rather than truncates.
 
+<!-- doc-section: operator-state -->
+
 Common Operator state has its own read and atomic partial-update Commands. The
 locked common subset is node position, size, RGB color, comment, and the
 Bypass, Lock, Viewer, and Expose flags. Every requested field is read back;
@@ -230,6 +262,8 @@ through 32767, positive dimensions up to 32767, and finite RGB components from
 transient selection/current-viewer state, storage, arbitrary attributes, and
 Python objects are not exposed by these Commands. Distinct unavailable,
 failed, rollback-failed, and uncertain-outcome errors preserve honest state.
+
+<!-- doc-section: dat-content -->
 
 Text DAT and Table DAT contents use separate typed Commands. Text reads and
 whole-content replacement preserve Unicode and empty text. Table reads return
@@ -255,6 +289,8 @@ complete content and dimensions, then restores and verifies the entire prior
 DAT on failure; distinct unavailable, non-writable, rollback-failed, and
 uncertain-outcome errors preserve honest state. These Commands never execute
 DATs, import modules, evaluate content, or accept filesystem paths.
+
+<!-- doc-section: operator-catalog -->
 
 The locked TouchDesigner 2025.32050 catalog covers 680 built-in types across all
 seven Operator families: 478 are supported by default, 165 side-effect or
