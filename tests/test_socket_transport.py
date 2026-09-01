@@ -54,7 +54,7 @@ def registration_payload() -> dict[str, object]:
     return {
         "instance_id": INSTANCE_ID,
         "protocol_versions": [2],
-        "agent_version": "0.2.0",
+        "agent_version": "0.3.0",
         "td_build": "2025.32050",
         "capabilities": ["ops.get"],
     }
