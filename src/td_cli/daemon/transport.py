@@ -88,12 +88,16 @@ def create_transport_app(
         ):
             return
         snapshot = queues[instance_id].popleft()
-        in_flight[instance_id] = snapshot
         assert management is not None
-        management.state.request_store.update(
-            str(snapshot["request_id"]), status="dispatched", dispatched_at=_now()
+        dispatched = await management.state.request_store.compare_and_set(
+            str(snapshot["request_id"]),
+            expected_statuses={"queued"},
+            changes={"status": "dispatched", "dispatched_at": _now()},
         )
-        await sio.emit("request_dispatch", snapshot, to=registration.sid)
+        if dispatched is None:
+            return
+        in_flight[instance_id] = dispatched
+        await sio.emit("request_dispatch", dispatched, to=registration.sid)
 
     def instance_snapshots() -> list[dict[str, object]]:
         ids = sorted(registrations)
@@ -130,9 +134,9 @@ def create_transport_app(
             await asyncio.sleep(0.05)
         for instance_id, queue in queues.items():
             while queue:
-                terminal_request(queue.popleft(), "daemon_shutdown", "daemon_shutdown")
+                await terminal_request(queue.popleft(), "daemon_shutdown", "daemon_shutdown")
         for instance_id, snapshot in list(in_flight.items()):
-            terminal_request(snapshot, "unknown", "request_outcome_unknown")
+            await terminal_request(snapshot, "unknown", "request_outcome_unknown")
             in_flight.pop(instance_id, None)
         if shutdown is not None:
             shutdown()
@@ -244,7 +248,7 @@ def create_transport_app(
             )
             current = in_flight.pop(instance_id, None)
             if current is not None:
-                terminal_request(current, "unknown", "request_outcome_unknown")
+                await terminal_request(current, "unknown", "request_outcome_unknown")
             sio.start_background_task(expire_offline, instance_id, registration.connection_id)
             break
 
@@ -256,7 +260,7 @@ def create_transport_app(
         if registration.status == InstanceStatus.OFFLINE:
             registrations.pop(instance_id, None)
             while queues[instance_id]:
-                terminal_request(
+                await terminal_request(
                     queues[instance_id].popleft(), "instance_offline", "instance_offline"
                 )
 
@@ -290,12 +294,15 @@ def create_transport_app(
         registrations.pop(str(data["instance_id"]), None)
         await sio.disconnect(sid)
 
-    def terminal_request(snapshot: dict[str, object], status: str, code: str) -> None:
-        management.state.request_store.update(
+    async def terminal_request(snapshot: dict[str, object], status: str, code: str) -> None:
+        await management.state.request_store.compare_and_set(
             str(snapshot["request_id"]),
-            status=status,
-            error={"code": code, "message": code, "details": {}, "retryable": False},
-            completed_at=_now(),
+            expected_statuses={str(snapshot["status"])},
+            changes={
+                "status": status,
+                "error": {"code": code, "message": code, "details": {}, "retryable": False},
+                "completed_at": _now(),
+            },
         )
 
     async def advance(instance_id: str) -> None:
@@ -319,7 +326,11 @@ def create_transport_app(
         if current is None or current["request_id"] != data.get("request_id"):
             return
         store = management.state.request_store
-        store.update(str(data.get("request_id")), status="running", execute_authorized_at=_now())
+        await store.compare_and_set(
+            str(data.get("request_id")),
+            expected_statuses={"dispatched"},
+            changes={"status": "running", "execute_authorized_at": _now()},
+        )
 
     @sio.event
     async def request_result(sid: str, data: object) -> None:
@@ -327,7 +338,7 @@ def create_transport_app(
             return
         request_id = str(data.get("request_id", ""))
         store = management.state.request_store
-        existing = store.get(request_id)
+        existing = await store.get(request_id)
         if (
             existing is None
             or existing["instance_id"] != data["instance_id"]
@@ -335,12 +346,15 @@ def create_transport_app(
         ):
             return
         result = _normalize_command_result(existing.get("command"), data.get("result"))
-        snapshot = store.update(
+        snapshot = await store.compare_and_set(
             request_id,
-            status="succeeded",
-            result=result,
-            error=None,
-            completed_at=_now(),
+            expected_statuses={"dispatched", "running", "unknown"},
+            changes={
+                "status": "succeeded",
+                "result": result,
+                "error": None,
+                "completed_at": _now(),
+            },
         )
         if snapshot is not None:
             await sio.emit("result_recorded", {"request_id": request_id}, to=sid)
@@ -355,17 +369,20 @@ def create_transport_app(
         current = in_flight.get(instance_id)
         if current is None or current["request_id"] != request_id:
             return
-        snapshot = management.state.request_store.update(
+        snapshot = await management.state.request_store.compare_and_set(
             request_id,
-            status="failed",
-            result=None,
-            error={
-                "code": str(data.get("code", "request_rejected")),
-                "message": str(data.get("code", "request_rejected")),
-                "details": {},
-                "retryable": data.get("code") == "result_buffer_full",
+            expected_statuses={str(current["status"])},
+            changes={
+                "status": "failed",
+                "result": None,
+                "error": {
+                    "code": str(data.get("code", "request_rejected")),
+                    "message": str(data.get("code", "request_rejected")),
+                    "details": {},
+                    "retryable": data.get("code") == "result_buffer_full",
+                },
+                "completed_at": _now(),
             },
-            completed_at=_now(),
         )
         if snapshot is not None:
             await advance(instance_id)

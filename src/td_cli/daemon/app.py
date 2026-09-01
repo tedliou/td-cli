@@ -14,7 +14,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from pydantic import field_validator
 
 from td_cli import __version__
-from td_cli.daemon.storage import RequestStore
+from td_cli.daemon.storage import RequestIdentityConflict, RequestStore
 from td_cli.protocol import PROTOCOL_VERSIONS, Command, RequestSnapshot, StrictModel
 
 
@@ -57,14 +57,15 @@ def create_app(
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         nonlocal store
-        store = RequestStore(state / "daemon.db")
+        store = await RequestStore.open(state / "daemon.db")
+        await _recover_requests(store)
         app.state.request_store = store
         cleanup_task = asyncio.create_task(_hourly_cleanup(store))
         try:
             yield
         finally:
             cleanup_task.cancel()
-            store.close()
+            await store.close()
 
     app = FastAPI(lifespan=lifespan)
 
@@ -81,7 +82,7 @@ def create_app(
             "logging_healthy": logging_healthy,
             "release_version": __version__,
             "protocol_versions": list(PROTOCOL_VERSIONS),
-            "schema_version": 1,
+            "schema_version": 2,
         }
 
     @app.get("/v2/instances", dependencies=[Depends(authenticate)])
@@ -99,33 +100,36 @@ def create_app(
     @app.post("/v2/requests", status_code=201, dependencies=[Depends(authenticate)])
     async def submit(payload: SubmitRequest, response: Response) -> dict[str, object]:
         assert store is not None
-        existing = store.get(payload.request_id)
-        if existing is not None:
-            existing_command = Command.model_validate(existing["command"])
-            if (
-                existing["instance_id"] != payload.instance_id
-                or existing_command.canonical_json() != payload.command.canonical_json()
-            ):
-                raise HTTPException(status_code=409, detail="request_id_conflict")
-            response.status_code = 200
-            return existing
-        if preflight is not None:
-            await preflight(payload)
         snapshot = RequestSnapshot.pending(
             request_id=payload.request_id,
             instance_id=payload.instance_id,
             command=payload.command,
             submitted_at=_now(),
         ).model_dump(mode="json")
-        store.insert(snapshot)
+        if await store.get(payload.request_id) is not None:
+            try:
+                persisted, _ = await store.create_or_get(snapshot)
+            except RequestIdentityConflict as error:
+                raise HTTPException(status_code=409, detail="request_id_conflict") from error
+            response.status_code = 200
+            return persisted
+        if preflight is not None:
+            await preflight(payload)
+        try:
+            persisted, created = await store.create_or_get(snapshot)
+        except RequestIdentityConflict as error:
+            raise HTTPException(status_code=409, detail="request_id_conflict") from error
+        if not created:
+            response.status_code = 200
+            return persisted
         if dispatch is not None:
-            await dispatch(snapshot)
-        return snapshot
+            await dispatch(persisted)
+        return persisted
 
     @app.get("/v2/requests/{request_id}", dependencies=[Depends(authenticate)])
-    def get_request(request_id: str) -> dict[str, object]:
+    async def get_request(request_id: str) -> dict[str, object]:
         assert store is not None
-        snapshot = store.get(request_id)
+        snapshot = await store.get(request_id)
         if snapshot is None:
             raise HTTPException(status_code=404, detail="request_not_found")
         return snapshot
@@ -135,6 +139,29 @@ def create_app(
 
 async def _hourly_cleanup(store: RequestStore) -> None:
     while True:
-        while store.cleanup() == 1000:
+        while await store.cleanup() == 1000:
             await asyncio.sleep(0)
         await asyncio.sleep(3600)
+
+
+async def _recover_requests(store: RequestStore) -> None:
+    policies = (
+        ({"queued", "dispatched", "accepted"}, "daemon_shutdown", "daemon_shutdown"),
+        ({"running"}, "unknown", "request_outcome_unknown"),
+    )
+    for statuses, target, code in policies:
+        for snapshot in await store.find_by_statuses(statuses):
+            await store.compare_and_set(
+                str(snapshot["request_id"]),
+                expected_statuses={str(snapshot["status"])},
+                changes={
+                    "status": target,
+                    "error": {
+                        "code": code,
+                        "message": code,
+                        "details": {},
+                        "retryable": False,
+                    },
+                    "completed_at": _now(),
+                },
+            )

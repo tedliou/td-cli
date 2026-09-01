@@ -297,7 +297,7 @@ def test_phase_3_commands_are_strict_and_bounded() -> None:
             "input": {
                 "commands": [
                     {"name": "ops.get", "input": {"operator_path": "/project1"}},
-                        {"name": "ops.state.get", "input": {"operator_path": "/project1"}},
+                    {"name": "ops.state.get", "input": {"operator_path": "/project1"}},
                 ]
             },
         }

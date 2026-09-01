@@ -61,6 +61,7 @@ class RequestSnapshot(StrictModel):
     instance_id: str
     command: Command
     status: RequestStatus
+    execution_id: str | None
     submitted_at: str
     dispatched_at: str | None
     accepted_at: str | None
@@ -78,6 +79,7 @@ class RequestSnapshot(StrictModel):
             instance_id=instance_id,
             command=command,
             status=RequestStatus.QUEUED,
+            execution_id=None,
             submitted_at=submitted_at,
             dispatched_at=None,
             accepted_at=None,
