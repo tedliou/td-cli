@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import sqlite3
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -11,6 +12,7 @@ from typing import Any, TypeVar
 
 T = TypeVar("T")
 SCHEMA_VERSION = 2
+LOGGER = logging.getLogger("td_cli.store")
 _MUTABLE_COLUMNS = {
     "status": "status",
     "execution_id": "execution_id",
@@ -297,6 +299,17 @@ def _compare_and_set(
         )
         result = _get(connection, request_id) if cursor.rowcount == 1 else None
         connection.execute("COMMIT")
+        LOGGER.info(
+            _json(
+                {
+                    "event": "request.cas",
+                    "request_id": request_id,
+                    "expected_statuses": statuses,
+                    "to_status": changes.get("status"),
+                    "applied": cursor.rowcount == 1,
+                }
+            )
+        )
         return result
     except BaseException:
         connection.execute("ROLLBACK")

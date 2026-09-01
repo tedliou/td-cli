@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import inspect
 import secrets
 import uuid
@@ -45,11 +46,13 @@ def create_app(
     root: Path,
     *,
     token: str,
-    preflight: Callable[[SubmitRequest], Awaitable[None]] | None = None,
-    dispatch: Callable[[dict[str, object]], Awaitable[None]] | None = None,
-    instances: Callable[[], list[dict[str, object]]] | None = None,
+    admit: Callable[[dict[str, object]], Awaitable[tuple[dict[str, object], bool]]] | None = None,
+    instances: Callable[[], list[dict[str, object]] | Awaitable[list[dict[str, object]]]]
+    | None = None,
     shutdown: Callable[[], Awaitable[None] | None] | None = None,
     runtime_health: Callable[[], bool] | None = None,
+    startup: Callable[[RequestStore], Awaitable[None]] | None = None,
+    teardown: Callable[[], Awaitable[None]] | None = None,
 ) -> FastAPI:
     state = root / "state"
     store: RequestStore | None = None
@@ -58,13 +61,20 @@ def create_app(
     async def lifespan(_: FastAPI):
         nonlocal store
         store = await RequestStore.open(state / "daemon.db")
-        await _recover_requests(store)
+        if startup is None:
+            await _recover_requests(store)
+        else:
+            await startup(store)
         app.state.request_store = store
         cleanup_task = asyncio.create_task(_hourly_cleanup(store))
         try:
             yield
         finally:
             cleanup_task.cancel()
+            if teardown is not None:
+                await teardown()
+            with contextlib.suppress(asyncio.CancelledError):
+                await cleanup_task
             await store.close()
 
     app = FastAPI(lifespan=lifespan)
@@ -86,8 +96,11 @@ def create_app(
         }
 
     @app.get("/v2/instances", dependencies=[Depends(authenticate)])
-    def list_instances() -> list[dict[str, object]]:
-        return instances() if instances is not None else []
+    async def list_instances() -> list[dict[str, object]]:
+        if instances is None:
+            return []
+        result = instances()
+        return await result if inspect.isawaitable(result) else result
 
     @app.post("/v2/shutdown", status_code=202, dependencies=[Depends(authenticate)])
     async def request_shutdown() -> dict[str, bool]:
@@ -106,24 +119,16 @@ def create_app(
             command=payload.command,
             submitted_at=_now(),
         ).model_dump(mode="json")
-        if await store.get(payload.request_id) is not None:
-            try:
-                persisted, _ = await store.create_or_get(snapshot)
-            except RequestIdentityConflict as error:
-                raise HTTPException(status_code=409, detail="request_id_conflict") from error
-            response.status_code = 200
-            return persisted
-        if preflight is not None:
-            await preflight(payload)
         try:
-            persisted, created = await store.create_or_get(snapshot)
+            if admit is None:
+                persisted, created = await store.create_or_get(snapshot)
+            else:
+                persisted, created = await admit(snapshot)
         except RequestIdentityConflict as error:
             raise HTTPException(status_code=409, detail="request_id_conflict") from error
         if not created:
             response.status_code = 200
             return persisted
-        if dispatch is not None:
-            await dispatch(persisted)
         return persisted
 
     @app.get("/v2/requests/{request_id}", dependencies=[Depends(authenticate)])

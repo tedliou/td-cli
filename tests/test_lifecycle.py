@@ -283,10 +283,13 @@ async def test_lane_capacity_is_bounded_before_persistence() -> None:
     lifecycle = RequestLifecycle(store, lane_capacity=1)
     await lifecycle.start()
     try:
+        await lifecycle.register(INSTANCE_ID, CONNECTION_ID, {"ops.get"})
+        await effect(lifecycle, "registered")
         await lifecycle.submit(request(1))
         with pytest.raises(LifecycleBusy, match="lane is full"):
             await lifecycle.submit(request(2))
         assert len(store.requests) == 1
+        assert (await lifecycle.snapshot())["ready"] is True
     finally:
         await lifecycle.close()
 

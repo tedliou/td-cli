@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from typing import Any, Literal, Protocol, TypeAlias
 
 from td_cli.command_catalog import COMMAND_CATALOG
+from td_cli.daemon.storage import RequestIdentityConflict
 
 
 class LifecycleStore(Protocol):
@@ -42,6 +43,7 @@ class _Connection:
     connection_id: str
     capabilities: frozenset[str]
     synchronized: bool = False
+    draining: bool = False
     heartbeat_deadline: float | None = None
     lease_deadline: float | None = None
 
@@ -61,6 +63,14 @@ class _Call:
 
 class LifecycleBusy(RuntimeError):
     """The bounded Lifecycle inbox cannot accept more work."""
+
+
+class AdmissionRejected(RuntimeError):
+    """A Request cannot enter its target Instance lane."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
 
 
 class RequestLifecycle:
@@ -114,8 +124,21 @@ class RequestLifecycle:
         await self._task
         self._task = None
 
-    async def register(self, instance_id: str, connection_id: str, capabilities: set[str]) -> None:
-        await self._call("register", instance_id, connection_id, frozenset(capabilities))
+    async def register(
+        self,
+        instance_id: str,
+        connection_id: str,
+        capabilities: set[str],
+        *,
+        pending_connection_id: str | None = None,
+    ) -> None:
+        await self._call(
+            "register",
+            instance_id,
+            connection_id,
+            frozenset(capabilities),
+            pending_connection_id,
+        )
 
     async def connected(self, connection_id: str) -> None:
         await self._call("connected", connection_id)
@@ -128,11 +151,16 @@ class RequestLifecycle:
     ) -> None:
         await self._call("synchronized", instance_id, connection_id, records or [])
 
-    async def submit(self, snapshot: dict[str, Any]) -> dict[str, Any]:
+    async def submit(self, snapshot: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         return await self._call("submit", snapshot)
 
     async def accepted(self, instance_id: str, connection_id: str, request_id: str) -> None:
         await self._call("accepted", instance_id, connection_id, request_id)
+
+    async def rejected(
+        self, instance_id: str, connection_id: str, request_id: str, code: str
+    ) -> None:
+        await self._call("rejected", instance_id, connection_id, request_id, code)
 
     async def authorize(self, instance_id: str, connection_id: str, request_id: str) -> None:
         await self._call("authorize", instance_id, connection_id, request_id)
@@ -165,11 +193,17 @@ class RequestLifecycle:
     async def heartbeat(self, instance_id: str, connection_id: str) -> None:
         await self._call("heartbeat", instance_id, connection_id)
 
+    async def set_draining(self, instance_id: str, connection_id: str) -> None:
+        await self._call("set_draining", instance_id, connection_id)
+
     async def expire_deadlines(self) -> None:
         await self._call("expire_deadlines")
 
     async def drain(self) -> None:
         await self._call("shutdown", True)
+
+    async def fail(self, code: str) -> None:
+        await self._call("fail", code)
 
     async def snapshot(self) -> dict[str, Any]:
         return await self._call("snapshot")
@@ -196,6 +230,8 @@ class RequestLifecycle:
             stop = call.operation == "shutdown" and not bool(call.arguments[0])
             try:
                 result = await self._handle(call.operation, call.arguments)
+            except (AdmissionRejected, LifecycleBusy, RequestIdentityConflict) as error:
+                call.response.set_exception(error)
             except Exception as error:  # noqa: BLE001 - owner boundary converts dependency failure
                 await self._fatal(error)
                 if not call.response.done():
@@ -218,6 +254,8 @@ class RequestLifecycle:
             return await self._submit(*arguments)
         if operation == "accepted":
             return await self._accepted(*arguments)
+        if operation == "rejected":
+            return await self._rejected(*arguments)
         if operation == "authorize":
             return await self._authorize(*arguments)
         if operation == "outcome":
@@ -226,18 +264,26 @@ class RequestLifecycle:
             return await self._disconnect(*arguments)
         if operation == "heartbeat":
             return self._heartbeat(*arguments)
+        if operation == "set_draining":
+            return self._set_draining(*arguments)
         if operation == "expire_deadlines":
             return await self._expire_deadlines()
         if operation == "snapshot":
             return self._snapshot()
         if operation == "shutdown":
             return await self._shutdown(controlled=bool(arguments[0]))
+        if operation == "fail":
+            return await self._fatal(RuntimeError(str(arguments[0])))
         raise ValueError(f"unknown Lifecycle operation: {operation}")
 
     async def _register(
-        self, instance_id: str, connection_id: str, capabilities: frozenset[str]
+        self,
+        instance_id: str,
+        connection_id: str,
+        capabilities: frozenset[str],
+        pending_connection_id: str | None,
     ) -> None:
-        self._registration_deadlines.pop(connection_id, None)
+        self._registration_deadlines.pop(pending_connection_id or connection_id, None)
         existing = self._connections.get(instance_id)
         if existing is not None and existing.connection_id != connection_id:
             await self._disconnect(instance_id, existing.connection_id)
@@ -320,10 +366,22 @@ class RequestLifecycle:
         connection.synchronized = True
         await self._dispatch_next(instance_id)
 
-    async def _submit(self, snapshot: dict[str, Any]) -> dict[str, Any]:
+    async def _submit(self, snapshot: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+        request_id = str(snapshot["request_id"])
+        if await self._store.get(request_id) is not None:
+            return await self._store.create_or_get(snapshot)
         if not self.accepting:
-            raise RuntimeError("Lifecycle is not accepting Requests")
+            raise AdmissionRejected("daemon_shutdown")
         instance_id = str(snapshot["instance_id"])
+        connection = self._connections.get(instance_id)
+        if connection is None:
+            raise AdmissionRejected("instance_offline")
+        if connection.draining:
+            raise AdmissionRejected("instance_draining")
+        command = snapshot.get("command")
+        name = command.get("name") if isinstance(command, dict) else None
+        if name not in connection.capabilities:
+            raise AdmissionRejected("command_unsupported")
         if (
             len(self._lanes[instance_id]) + int(instance_id in self._in_flight)
             >= self._lane_capacity
@@ -341,7 +399,7 @@ class RequestLifecycle:
         ):
             self._lanes[instance_id].append(persisted)
         await self._dispatch_next(instance_id)
-        return persisted
+        return persisted, created
 
     async def _dispatch_next(self, instance_id: str) -> None:
         connection = self._connections.get(instance_id)
@@ -397,6 +455,27 @@ class RequestLifecycle:
         )
         if accepted is not None:
             self._in_flight[instance_id] = accepted
+
+    async def _rejected(
+        self, instance_id: str, connection_id: str, request_id: str, code: str
+    ) -> None:
+        if self._current(instance_id, connection_id) is None:
+            return
+        current = self._in_flight.get(instance_id)
+        if current is None or current["request_id"] != request_id:
+            return
+        failed = await self._store.compare_and_set(
+            request_id,
+            expected_statuses={"dispatched"},
+            changes={
+                "status": "failed",
+                "error": _error(code),
+                "completed_at": self._now(),
+            },
+        )
+        if failed is not None:
+            self._in_flight.pop(instance_id, None)
+            await self._dispatch_next(instance_id)
 
     async def _authorize(self, instance_id: str, connection_id: str, request_id: str) -> None:
         connection = self._current(instance_id, connection_id)
@@ -457,7 +536,7 @@ class RequestLifecycle:
             expected_statuses={"running", "unknown"},
             changes={
                 "status": status,
-                "result": result,
+                "result": COMMAND_CATALOG.normalize_result(stored["command"], result),
                 "error": error,
                 "completed_at": self._now(),
             },
@@ -520,6 +599,11 @@ class RequestLifecycle:
         if connection is not None:
             connection.heartbeat_deadline = self._monotonic() + self._heartbeat_timeout
 
+    def _set_draining(self, instance_id: str, connection_id: str) -> None:
+        connection = self._current(instance_id, connection_id)
+        if connection is not None:
+            connection.draining = True
+
     async def _expire_deadlines(self) -> None:
         current_time = self._monotonic()
         for connection_id, registration_deadline in list(self._registration_deadlines.items()):
@@ -570,22 +654,45 @@ class RequestLifecycle:
         self._in_flight.clear()
 
     def _snapshot(self) -> dict[str, Any]:
+        instances = {
+            instance_id: {
+                "connection_id": connection.connection_id,
+                "status": (
+                    "draining"
+                    if connection.draining
+                    else "online"
+                    if connection.synchronized
+                    else "synchronizing"
+                ),
+                "synchronized": connection.synchronized,
+                "queue_depth": len(self._lanes[instance_id]),
+                "in_flight_request_id": (
+                    self._in_flight[instance_id]["request_id"]
+                    if instance_id in self._in_flight
+                    else None
+                ),
+                "offline_expires_at": None,
+            }
+            for instance_id, connection in self._connections.items()
+        }
+        instances.update(
+            {
+                instance_id: {
+                    "connection_id": offline.connection_id,
+                    "status": "offline",
+                    "synchronized": False,
+                    "queue_depth": len(self._lanes[instance_id]),
+                    "in_flight_request_id": None,
+                    "offline_expires_at": offline.deadline,
+                }
+                for instance_id, offline in self._offline.items()
+                if instance_id not in instances
+            }
+        )
         return {
             "ready": self.ready,
             "accepting": self.accepting,
-            "instances": {
-                instance_id: {
-                    "connection_id": connection.connection_id,
-                    "synchronized": connection.synchronized,
-                    "queue_depth": len(self._lanes[instance_id]),
-                    "in_flight_request_id": (
-                        self._in_flight[instance_id]["request_id"]
-                        if instance_id in self._in_flight
-                        else None
-                    ),
-                }
-                for instance_id, connection in self._connections.items()
-            },
+            "instances": instances,
         }
 
     def _current(self, instance_id: str, connection_id: str) -> _Connection | None:
@@ -640,11 +747,14 @@ LifecycleOperation: TypeAlias = Literal[
     "synchronized",
     "submit",
     "accepted",
+    "rejected",
     "authorize",
     "outcome",
     "disconnect",
     "heartbeat",
+    "set_draining",
     "expire_deadlines",
     "snapshot",
     "shutdown",
+    "fail",
 ]
