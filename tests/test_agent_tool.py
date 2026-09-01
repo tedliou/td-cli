@@ -38,7 +38,7 @@ def test_canonical_agent_sources_pass_structural_inspection() -> None:
     assert report == {
         "agent_version": "0.2.0",
         "locked_touchdesigner_version": "2025.32050",
-        "protocol_versions": [1],
+        "protocol_versions": [2],
         "required_files": [
             "extension.py",
             "socket_callbacks.py",
@@ -56,7 +56,7 @@ def test_inspection_rejects_source_that_does_not_match_manifest(tmp_path: Path) 
             {
                 "agent_version": "0.1.0",
                 "locked_touchdesigner_version": "2025.32050",
-                "protocol_versions": [1],
+                "protocol_versions": [2],
                 "required_files": ["missing.py"],
             }
         ),

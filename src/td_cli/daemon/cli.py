@@ -77,12 +77,12 @@ def _probe(root: Path) -> dict[str, object] | None:
         if token is None:
             return None
         response = httpx.get(
-            f"{ENDPOINT}/v1/health",
+            f"{ENDPOINT}/v2/health",
             headers={"Authorization": f"Bearer {token}"},
             timeout=0.5,
         )
         payload = response.json() if response.status_code == 200 else None
-        return payload if payload and 1 in payload.get("protocol_versions", []) else None
+        return payload if payload and 2 in payload.get("protocol_versions", []) else None
     except (OSError, RuntimeError, httpx.HTTPError):
         return None
 
@@ -142,7 +142,7 @@ def serve() -> None:
             .replace("+00:00", "Z"),
             "endpoint": "127.0.0.1:9982",
             "release_version": __version__,
-            "protocol_versions": [1],
+            "protocol_versions": [2],
         }
         run_path = root / "run" / "daemon.json"
         temporary = run_path.with_suffix(".tmp")
@@ -215,7 +215,7 @@ def stop() -> None:
         return
     try:
         httpx.post(
-            f"{ENDPOINT}/v1/shutdown", headers={"Authorization": f"Bearer {token}"}, timeout=6
+            f"{ENDPOINT}/v2/shutdown", headers={"Authorization": f"Bearer {token}"}, timeout=6
         )
     except httpx.HTTPError:
         raise typer.Exit(3) from None
@@ -259,7 +259,7 @@ def _install_windows_shutdown_handler(server: uvicorn.Server, token: str) -> obj
 def _request_orderly_shutdown(server: uvicorn.Server, token: str) -> None:
     try:
         httpx.post(
-            f"{ENDPOINT}/v1/shutdown",
+            f"{ENDPOINT}/v2/shutdown",
             headers={"Authorization": f"Bearer {token}"},
             timeout=6,
         )

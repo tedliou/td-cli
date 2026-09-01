@@ -40,6 +40,7 @@ class AgentParameters:
         self.ext0object = None
         self.ext0name = ""
         self.ext0promote = False
+        self.initextonstart = False
         self.reinitextensions = PulseParameter(lambda: initialize_extension(agent))
 
 
@@ -47,11 +48,12 @@ class GuardedRuntimeParameters:
     def __init__(self, agent) -> None:
         object.__setattr__(self, "agent", agent)
         object.__setattr__(self, "start", False)
+        object.__setattr__(self, "create", False)
         object.__setattr__(self, "framestart", False)
         object.__setattr__(self, "active", False)
 
     def __setattr__(self, name: str, value: object) -> None:
-        if name in {"start", "framestart", "active"} and value:
+        if name in {"start", "create", "framestart", "active"} and value:
             assert hasattr(self.agent.ext, "Agent"), f"{name} enabled before Agent extension"
         object.__setattr__(self, name, value)
 
@@ -84,7 +86,7 @@ class FakeAgentComponent:
         self.par = AgentParameters(self)
 
 
-def test_runtime_callbacks_start_only_after_promoted_agent_is_ready() -> None:
+def test_builder_configures_inactive_runtime_without_initializing_extension() -> None:
     builder = load_builder()
     agent = FakeAgentComponent()
     heartbeat = SimpleNamespace(par=GuardedRuntimeParameters(agent))
@@ -92,7 +94,7 @@ def test_runtime_callbacks_start_only_after_promoted_agent_is_ready() -> None:
     extension_dat = object()
     auth_table = object()
 
-    builder["activate_agent_runtime"](
+    builder["configure_agent_runtime"](
         agent=agent,
         extension_dat=extension_dat,
         heartbeat_dat=heartbeat,
@@ -102,12 +104,14 @@ def test_runtime_callbacks_start_only_after_promoted_agent_is_ready() -> None:
 
     assert agent.par.ext0name == "Agent"
     assert agent.par.ext0promote is True
+    assert agent.par.initextonstart is True
     assert not hasattr(agent, "Agent")
-    assert agent.extensions[0] is agent.ext.Agent
-    assert agent.ext.Agent.auth_table is auth_table
-    assert heartbeat.par.start is True
-    assert heartbeat.par.framestart is True
-    assert socket.par.active is True
+    assert not hasattr(agent.ext, "Agent")
+    assert agent.extensions == []
+    assert heartbeat.par.start is False
+    assert heartbeat.par.create is False
+    assert heartbeat.par.framestart is False
+    assert socket.par.active is False
 
 
 def test_extension_object_expression_instantiates_agent_extension() -> None:
@@ -117,7 +121,7 @@ def test_extension_object_expression_instantiates_agent_extension() -> None:
     socket = SimpleNamespace(par=GuardedRuntimeParameters(agent))
     extension_dat = SimpleNamespace(module=ExtensionModule)
 
-    builder["activate_agent_runtime"](
+    builder["configure_agent_runtime"](
         agent=agent,
         extension_dat=extension_dat,
         heartbeat_dat=heartbeat,
@@ -214,7 +218,9 @@ def test_canonical_build_removes_unused_generated_socket_callbacks(tmp_path: Pat
         ["registered"],
         ["registration_error"],
         ["request_dispatch"],
-        ["result_recorded"],
+        ["request_execute"],
+        ["outcome_recorded"],
+        ["record_release"],
         ["daemon_draining"],
     ]
     assert evidence["operators"] == [

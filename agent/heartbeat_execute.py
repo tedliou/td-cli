@@ -1,15 +1,29 @@
-"""Execute DAT callbacks that maintain auth readiness and a 2-second heartbeat."""
+"""Independent-time Agent scheduler using TouchDesigner's official run delay reference."""
 
 
-def onStart():
-    parent().ext.Agent.refresh_auth(op("auth_table"))
-    return
+def startScheduler():
+    generation = parent().ext.Agent.start_heartbeat()
+    scheduleTick(generation)
 
 
-def onFrameStart(frame):
-    del frame
+def stopScheduler():
+    parent().ext.Agent.stop_heartbeat()
+
+
+def scheduleTick(generation):
+    run(
+        schedulerTick,
+        generation,
+        delayMilliSeconds=2000,
+        delayRef=op.TDResources,
+    )
+
+
+def schedulerTick(generation):
     agent = parent().ext.Agent
-    if agent.connection_id and absTime.seconds - agent.last_heartbeat_at >= 2:
+    if not agent.heartbeat_active(generation):
+        return
+    if agent.connection_id:
+        agent.mark_heartbeat()
         op("socketio1").emit("heartbeat", data=agent.heartbeat_payload())
-        agent.last_heartbeat_at = absTime.seconds
-    return
+    scheduleTick(generation)

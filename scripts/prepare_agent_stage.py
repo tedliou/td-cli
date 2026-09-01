@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 from pathlib import Path
@@ -28,6 +29,12 @@ def main() -> None:
         raise SystemExit("artifact was built with an unlocked TouchDesigner version")
     if verification.get("validated") is not True:
         raise SystemExit("locked TouchDesigner verification did not pass")
+    artifact_digest = hashlib.sha256(args.artifact.read_bytes()).hexdigest()
+    if (
+        evidence.get("artifact_sha256") != artifact_digest
+        or verification.get("artifact_sha256") != artifact_digest
+    ):
+        raise SystemExit("locked TouchDesigner verification does not match the Agent artifact")
     args.output.mkdir(parents=True, exist_ok=False)
     shutil.copyfile(args.artifact, args.output / "td-agent.tox")
     manifest = {
