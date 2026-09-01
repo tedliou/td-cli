@@ -2,7 +2,6 @@
 
 # ruff: noqa: F821 - TouchDesigner injects its Python API names at runtime.
 
-import hashlib
 import json
 import time
 import traceback
@@ -12,6 +11,9 @@ REPOSITORY = Path(r"E:\td-cli")
 SOURCE = REPOSITORY / "agent"
 ARTIFACT = REPOSITORY / "td-agent.tox"
 RESULT = REPOSITORY / ".tmp-locked-runtime-bootstrap.json"
+source_revision = __import__("runpy").run_path(
+    str(REPOSITORY / "tools" / "runtime_acceptance_common.py")
+)["source_revision"]
 
 
 def _table_has_content(table):
@@ -20,17 +22,6 @@ def _table_has_content(table):
         for row in range(int(table.numRows))
         for column in range(int(table.numCols))
     )
-
-
-def _source_revision():
-    manifest = json.loads((SOURCE / "manifest.json").read_text(encoding="utf-8"))
-    digest = hashlib.sha256()
-    for name in sorted(["manifest.json", *manifest["required_files"]]):
-        digest.update(name.encode("utf-8"))
-        digest.update(b"\0")
-        digest.update((SOURCE / name).read_text(encoding="utf-8").encode("utf-8"))
-        digest.update(b"\0")
-    return digest.hexdigest()
 
 
 def _fail(error):
@@ -51,7 +42,7 @@ def _fail(error):
 def _build_and_load():
     try:
         builder = __import__("runpy").run_path(str(SOURCE / "build_td.py"), init_globals=globals())
-        artifact = builder["build"](str(SOURCE), str(ARTIFACT), _source_revision())
+        artifact = builder["build"](str(SOURCE), str(ARTIFACT), source_revision(SOURCE))
         built = op("/project1/td_agent")
         built_auth = built.op("auth_table")
         saved_state = {

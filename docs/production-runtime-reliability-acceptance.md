@@ -40,6 +40,8 @@ It proved:
 - ten consecutive Extension reinitializations ended Online with one current
   Connection, an empty auth table, no Operator errors, and exactly three
   heartbeat emissions in a 6.5-second observation window (one scheduler loop);
+- saving the Online disposable project and expanding that `.toe` with official
+  `toeexpand` produced a 19-byte empty Table DAT encoding with no 64-hex token;
 - Power Off is unsupported because it stops communication and clocks.
 
 Maximum-input synchronous measurements (11 samples except trusted import with
@@ -47,13 +49,17 @@ Maximum-input synchronous measurements (11 samples except trusted import with
 
 | Execution class | Locked maximum |
 | --- | ---: |
-| `fast_read` | 0.025 ms |
-| `bounded_scan_or_export` | 2.082 ms |
-| `bounded_mutation` | 18.526 ms |
-| `trusted_asset_mutation` | 135.947 ms |
+| `fast_read` | 0.028 ms |
+| `bounded_scan_or_export` | 3.081 ms |
+| `bounded_mutation` | 30.055 ms |
+| `trusted_asset_mutation` | 192.138 ms |
 
-Every case had a zero frame delta while executing, which is expected for a
-synchronous main-thread call. Default leases use three 2-second heartbeat
+Every case had a zero frame delta while executing: the main thread could not
+advance during the synchronous call. The official Perform CHOP reported 7 FPS
+after the maximum-input matrix. At the project's 60 FPS target, the 192.138 ms
+trusted mutation occupied 11.53 frame budgets; no separate dropped-frame
+channel was exposed by the locked Perform CHOP while the timeline was paused.
+Default leases use three 2-second heartbeat
 intervals plus `ceil(10 * locked_max_seconds)`: 7 seconds for the first three
 classes and 8 seconds for trusted asset mutation. This derives the fault
 containment budget from observed legal work while allowing three heartbeat
@@ -75,7 +81,40 @@ persisted Request from `unknown` to `succeeded`, preserved the complete 1,000
 entry inventory, removed the Agent record only after acknowledgment, and left
 the Instance Online. No automatic mutation retry occurred.
 
+An orderly `td-daemon stop` then produced a null Agent Connection ID and an
+empty retained-record set. `td-daemon start` reconnected the same runtime with
+a new Connection ID and returned the Instance to Online. This exercised the
+`daemon_draining`, unregister, independent resume timer, and official SocketIO
+reconnect path while the root timeline remained paused.
+
 ## Reproducible gates
+
+The locked commands used for the final artifact and runtime evidence were:
+
+```powershell
+Start-Process 'C:\Program Files\Derivative\TouchDesigner\bin\TouchDesigner.exe' `
+  'C:\Users\Ted\AppData\Local\Temp\td-cli-runtime-acceptance\Setfps.toe'
+Get-Content .tmp-locked-runtime-acceptance.json
+Get-Content .tmp-locked-runtime-reinit.json
+uv run td-daemon stop
+uv run td-daemon status
+uv run td-daemon start
+uv run td --json instances list
+Copy-Item td-agent.tox $env:TEMP\td-cli-artifact-inspect\artifact.tox
+Push-Location $env:TEMP\td-cli-artifact-inspect
+& 'C:\Program Files\Derivative\TouchDesigner\bin\toeexpand.exe' .\artifact.tox
+Pop-Location
+```
+
+The Daemon crash probe submitted `ops.tox.import` with `--no-wait`, waited 50
+ms, terminated the PID recorded in
+`%LOCALAPPDATA%\touchdesigner-cli\run\daemon.json`, restarted with
+`td-daemon start`, then queried the same Request ID. The repeatable automated
+queued/dispatched/running process boundary is:
+
+```powershell
+uv run pytest -q tests/test_process_crash_integration.py
+```
 
 Run the standard contribution gate plus:
 
@@ -87,3 +126,16 @@ uv run python -m td_cli.agent_tool inspect-source agent
 Locked evidence requires the disposable Execute DAT wrapper
 `tools/locked_runtime_execute_dat.py`; the generated `.toe`, `.tox`, JSON
 evidence, and auth material are local test artifacts and are not committed.
+
+## Limitations
+
+- Evidence is from one Windows host and locked TouchDesigner 2025.32050; a
+  different build must rerun the gate rather than reuse these numbers.
+- Perform CHOP exposed FPS but no dropped-frame channel while the root timeline
+  was paused, so blocked frame budgets are derived from measured main-thread
+  wall time and the 60 FPS project rate rather than claimed as rendered drops.
+- Power Off deliberately remains unsupported because it stops clocks and
+  communication; no fallback transport or scheduler exists.
+- Generated acceptance projects and JSON are disposable local evidence. The
+  canonical committed evidence is this report plus the deterministic automated
+  tests; Release publication remains a separate maintainer action.

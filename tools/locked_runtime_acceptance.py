@@ -7,7 +7,6 @@ scheduler; it is not imported by the shipped Agent Component.
 
 # ruff: noqa: F821 - TouchDesigner injects its Python API names at runtime.
 
-import hashlib
 import json
 import statistics
 import threading
@@ -22,18 +21,11 @@ ACCEPTANCE_TOX = REPOSITORY / ".tmp-runtime-acceptance-source.tox"
 RESULT = REPOSITORY / ".tmp-locked-runtime-acceptance.json"
 AGENT_STATE = REPOSITORY / ".tmp-locked-runtime-agent-state.json"
 REINIT_RESULT = REPOSITORY / ".tmp-locked-runtime-reinit.json"
+SAVED_PROJECT = Path(r"C:\Users\Ted\AppData\Local\Temp\td-cli-runtime-acceptance\saved-online.toe")
 LOCKED_BUILD = "2025.32050"
-
-
-def _source_revision():
-    manifest = json.loads((SOURCE / "manifest.json").read_text(encoding="utf-8"))
-    digest = hashlib.sha256()
-    for name in sorted(["manifest.json", *manifest["required_files"]]):
-        digest.update(name.encode("utf-8"))
-        digest.update(b"\0")
-        digest.update((SOURCE / name).read_text(encoding="utf-8").encode("utf-8"))
-        digest.update(b"\0")
-    return digest.hexdigest()
+source_revision = __import__("runpy").run_path(
+    str(REPOSITORY / "tools" / "runtime_acceptance_common.py")
+)["source_revision"]
 
 
 def _measure(agent, command, repetitions=11):
@@ -59,15 +51,17 @@ def _measure(agent, command, repetitions=11):
 
 def _build_graph():
     project = op("/project1")  # type: ignore[name-defined]
-    old = project.op("runtime_acceptance")
-    if old is not None:
-        old.destroy()
+    for name in ("runtime_acceptance", "runtime_acceptance_perform"):
+        old = project.op(name)
+        if old is not None:
+            old.destroy()
     holder = project.create(baseCOMP, "runtime_acceptance")  # type: ignore[name-defined]
     for index in range(999):
         holder.create(nullDAT, f"n{index:03d}")  # type: ignore[name-defined]
     holder.save(str(ACCEPTANCE_TOX))
     table = project.create(tableDAT, "runtime_acceptance_table")  # type: ignore[name-defined]
-    return holder, table
+    performance = project.create(performCHOP, "runtime_acceptance_perform")  # type: ignore[name-defined]
+    return holder, table, performance
 
 
 def _run_probe(scheduled_at, scheduled_frame):
@@ -103,7 +97,7 @@ def _run_probe_inner(scheduled_at, scheduled_frame):
 
     build_module = __import__("runpy").run_path(str(SOURCE / "build_td.py"), init_globals=globals())
     build_started = time.perf_counter()
-    artifact = build_module["build"](str(SOURCE), str(ARTIFACT), _source_revision())
+    artifact = build_module["build"](str(SOURCE), str(ARTIFACT), source_revision(SOURCE))
     evidence["artifact"] = artifact
     evidence["artifact"]["build_ms"] = round((time.perf_counter() - build_started) * 1000, 3)
 
@@ -115,7 +109,7 @@ def _run_probe_inner(scheduled_at, scheduled_frame):
     if agent_comp is None or str(agent_comp.path) != "/project1/td_agent":
         raise RuntimeError("locked artifact did not load as /project1/td_agent")
     agent = agent_comp.ext.Agent
-    holder, table = _build_graph()
+    holder, table, performance = _build_graph()
     rows = [["abcdefgh" for _ in range(64)] for _ in range(64)]
     cases = {
         "fast_read": {"name": "ops.get", "input": {"operator_path": "/project1"}},
@@ -149,6 +143,11 @@ def _run_probe_inner(scheduled_at, scheduled_frame):
         name: _measure(agent, command, repetitions=3 if name == "trusted_asset_mutation" else 11)
         for name, command in cases.items()
     }
+    performance.cook(force=True)
+    evidence["perform_chop"] = {
+        str(channel.name): float(channel.eval()) for channel in performance.chans()
+    }
+    evidence["frame_budget_ms_at_60_fps"] = round(1000 / 60, 3)
 
     agent.connection_id = agent.connection_id or "acceptance-connection"
     request_id = "00000000-0000-7000-8000-000000000090"
@@ -275,6 +274,7 @@ def _finish_reinit_probe(initial_emissions):
         for item in [agent_comp, *agent_comp.findChildren()]
         if item.errors()
     ]
+    saved = bool(project.save(str(SAVED_PROJECT)))  # type: ignore[name-defined]
     REINIT_RESULT.write_text(
         json.dumps(
             {
@@ -285,6 +285,8 @@ def _finish_reinit_probe(initial_emissions):
                 - initial_emissions,
                 "operator_errors": errors,
                 "runtime_active": agent.runtime_active,
+                "saved_online_project": saved,
+                "saved_project_path": str(SAVED_PROJECT),
                 "socket_active": bool(agent_comp.op("socketio1").par.active),
                 "timeline_paused": not bool(root.time.play),  # type: ignore[name-defined]
             },
@@ -302,6 +304,8 @@ def start():
         AGENT_STATE.unlink()
     if REINIT_RESULT.exists():
         REINIT_RESULT.unlink()
+    if SAVED_PROJECT.exists():
+        SAVED_PROJECT.unlink()
     root.time.play = False  # type: ignore[name-defined]
     scheduled_at = time.perf_counter()
     scheduled_frame = int(absTime.frame)  # type: ignore[name-defined]

@@ -111,16 +111,20 @@ def create_transport_app(
     async def teardown() -> None:
         nonlocal stopping
         stopping = True
-        if lifecycle is not None:
-            await lifecycle.close()
-        await asyncio.sleep(0)
-        for task in (deadline_task, effect_task):
-            if task is not None:
-                task.cancel()
+        if deadline_task is not None:
+            deadline_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await deadline_task
+        try:
+            if lifecycle is not None:
+                await lifecycle.close()
+        finally:
+            if effect_task is not None:
+                effect_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
-                    await task
-        for adapter in list(connections.values()):
-            await stop_sender(adapter)
+                    await effect_task
+            for adapter in list(connections.values()):
+                await stop_sender(adapter)
 
     def healthy() -> bool:
         external = runtime_health() if runtime_health is not None else True
@@ -229,11 +233,14 @@ def create_transport_app(
             adapter.queue.put_nowait(outbound)
         except asyncio.QueueFull:
             await require_lifecycle().fail("outbound_queue_saturated")
+            if outbound.completed is not None:
+                raise RuntimeError("outbound queue saturated")
             return
         if outbound.completed is not None:
             await outbound.completed
 
     async def sender(adapter: _ConnectionAdapter) -> None:
+        outbound: _Outbound | None = None
         try:
             while True:
                 outbound = await adapter.queue.get()
@@ -249,11 +256,24 @@ def create_transport_app(
                     outbound.completed.set_result(None)
                 if outbound.disconnect:
                     return
+                outbound = None
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 - sender is a fatal task boundary
             if not stopping:
                 await require_lifecycle().fail("outbound_sender_failed")
+        finally:
+            failure = RuntimeError("outbound sender stopped")
+            if (
+                outbound is not None
+                and outbound.completed is not None
+                and not outbound.completed.done()
+            ):
+                outbound.completed.set_exception(failure)
+            while not adapter.queue.empty():
+                queued = adapter.queue.get_nowait()
+                if queued.completed is not None and not queued.completed.done():
+                    queued.completed.set_exception(failure)
 
     async def stop_sender(adapter: _ConnectionAdapter) -> None:
         if adapter.task is None:

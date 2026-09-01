@@ -115,15 +115,16 @@ def test_submission_requires_uuid7_request_id(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_cancelled_http_admission_does_not_create_partial_request(tmp_path: Path) -> None:
+async def test_cancelled_http_admission_completes_persistence_after_lifecycle_admission(
+    tmp_path: Path,
+) -> None:
     entered = asyncio.Event()
     release = asyncio.Event()
 
     async def blocked_admission(snapshot):
-        del snapshot
         entered.set()
         await release.wait()
-        raise AssertionError("cancelled admission resumed")
+        return await app.state.request_store.create_or_get(snapshot)
 
     app = create_app(tmp_path, token=TOKEN, admit=blocked_admission)
     async with (
@@ -145,4 +146,11 @@ async def test_cancelled_http_admission_does_not_create_partial_request(tmp_path
         submission.cancel()
         with pytest.raises(asyncio.CancelledError):
             await submission
-        assert await app.state.request_store.get(REQUEST_ID) is None
+        release.set()
+        for _ in range(50):
+            persisted = await app.state.request_store.get(REQUEST_ID)
+            if persisted is not None:
+                break
+            await asyncio.sleep(0.01)
+        assert persisted is not None
+        assert persisted["status"] == "queued"

@@ -21,7 +21,7 @@ def test_all_executable_interfaces_report_the_release_version() -> None:
 
     result = CliRunner().invoke(cli_app, ["--version"])
     assert result.exit_code == 0, result.output
-    assert result.stdout.strip() == f"td {expected} (protocol 1)"
+    assert result.stdout.strip() == f"td {expected} (protocol 2)"
 
 
 def test_agent_manifest_uses_the_release_version() -> None:

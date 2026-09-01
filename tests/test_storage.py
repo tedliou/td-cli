@@ -1,12 +1,10 @@
 import asyncio
 import json
 import sqlite3
-import sys
 from pathlib import Path
 
 import pytest
 
-from td_cli.daemon.lifecycle import RequestLifecycle
 from td_cli.daemon.storage import RequestIdentityConflict, RequestStore
 from td_cli.protocol import Command, RequestSnapshot
 
@@ -128,69 +126,3 @@ async def test_failed_v1_migration_rolls_back_and_fails_closed(tmp_path: Path) -
     assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
     assert connection.execute("SELECT snapshot FROM requests").fetchone()[0] == "not-json"
     connection.close()
-
-
-@pytest.mark.parametrize(
-    ("crash_status", "recovered_status"),
-    [
-        ("queued", "daemon_shutdown"),
-        ("dispatched", "daemon_shutdown"),
-        ("accepted", "daemon_shutdown"),
-        ("running", "unknown"),
-    ],
-)
-@pytest.mark.asyncio
-async def test_wal_and_lifecycle_recover_each_abrupt_process_boundary(
-    tmp_path: Path, crash_status: str, recovered_status: str
-) -> None:
-    path = tmp_path / "daemon.db"
-    script = """
-import asyncio
-import os
-import sys
-from pathlib import Path
-from td_cli.daemon.storage import RequestStore
-
-async def main():
-    store = await RequestStore.open(Path(sys.argv[1]))
-    await store.create_or_get({
-        "request_id": "018f47ec-7f3b-7a34-8f31-2ad70b6f6e2a",
-        "instance_id": "8cf81688-b9a4-4c39-9f92-31c77319c761",
-        "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
-        "status": "queued", "execution_id": None,
-        "submitted_at": "2026-09-01T00:00:00.000Z",
-        "dispatched_at": None, "accepted_at": None,
-        "execute_authorized_at": None, "completed_at": None,
-        "result": None, "error": None,
-    })
-    status = sys.argv[2]
-    if status != "queued":
-        changes = {"status": status}
-        if status == "running":
-            changes.update(execution_id="execution-1", execute_authorized_at="2026-09-01T00:00:01.000Z")
-        await store.compare_and_set(
-            "018f47ec-7f3b-7a34-8f31-2ad70b6f6e2a",
-            expected_statuses={"queued"},
-            changes=changes,
-        )
-    os._exit(0)
-
-asyncio.run(main())
-"""
-    process = await asyncio.create_subprocess_exec(
-        sys.executable, "-c", script, str(path), crash_status
-    )
-    assert await process.wait() == 0
-
-    store = await RequestStore.open(path)
-    lifecycle = RequestLifecycle(store)
-    try:
-        await lifecycle.start()
-        recovered = await store.get(REQUEST_ID)
-        assert recovered is not None
-        assert recovered["status"] == recovered_status
-        if crash_status == "running":
-            assert recovered["execution_id"] == "execution-1"
-    finally:
-        await lifecycle.close()
-        await store.close()

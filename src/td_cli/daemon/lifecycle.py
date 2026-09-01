@@ -222,7 +222,7 @@ class RequestLifecycle:
             self._inbox.put_nowait(_Call(operation, arguments, response))
         except asyncio.QueueFull as error:
             raise LifecycleBusy("RequestLifecycle inbox is full") from error
-        return await response
+        return await asyncio.shield(response)
 
     async def _run(self) -> None:
         while True:
@@ -231,13 +231,15 @@ class RequestLifecycle:
             try:
                 result = await self._handle(call.operation, call.arguments)
             except (AdmissionRejected, LifecycleBusy, RequestIdentityConflict) as error:
-                call.response.set_exception(error)
+                if not call.response.done():
+                    call.response.set_exception(error)
             except Exception as error:  # noqa: BLE001 - owner boundary converts dependency failure
                 await self._fatal(error)
                 if not call.response.done():
                     call.response.set_exception(error)
             else:
-                call.response.set_result(result)
+                if not call.response.done():
+                    call.response.set_result(result)
             if stop:
                 return
 

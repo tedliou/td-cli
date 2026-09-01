@@ -56,25 +56,50 @@ def create_app(
 ) -> FastAPI:
     state = root / "state"
     store: RequestStore | None = None
+    admission_tasks: set[asyncio.Task[tuple[dict[str, object], bool]]] = set()
+
+    def admission_done(task: asyncio.Task[tuple[dict[str, object], bool]]) -> None:
+        admission_tasks.discard(task)
+        with contextlib.suppress(asyncio.CancelledError):
+            task.exception()
+
+    async def durable_admission(
+        operation: Awaitable[tuple[dict[str, object], bool]],
+    ) -> tuple[dict[str, object], bool]:
+        async def invoke() -> tuple[dict[str, object], bool]:
+            return await operation
+
+        task: asyncio.Task[tuple[dict[str, object], bool]] = asyncio.create_task(
+            invoke(), name="request-admission"
+        )
+        admission_tasks.add(task)
+        task.add_done_callback(admission_done)
+        return await asyncio.shield(task)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         nonlocal store
         store = await RequestStore.open(state / "daemon.db")
-        if startup is None:
-            await _recover_requests(store)
-        else:
-            await startup(store)
-        app.state.request_store = store
-        cleanup_task = asyncio.create_task(_hourly_cleanup(store))
         try:
-            yield
+            if startup is None:
+                await _recover_requests(store)
+            else:
+                await startup(store)
+            app.state.request_store = store
+            cleanup_task = asyncio.create_task(_hourly_cleanup(store))
+            try:
+                yield
+            finally:
+                cleanup_task.cancel()
+                try:
+                    if teardown is not None:
+                        await teardown()
+                finally:
+                    if admission_tasks:
+                        await asyncio.gather(*admission_tasks, return_exceptions=True)
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await cleanup_task
         finally:
-            cleanup_task.cancel()
-            if teardown is not None:
-                await teardown()
-            with contextlib.suppress(asyncio.CancelledError):
-                await cleanup_task
             await store.close()
 
     app = FastAPI(lifespan=lifespan)
@@ -121,9 +146,9 @@ def create_app(
         ).model_dump(mode="json")
         try:
             if admit is None:
-                persisted, created = await store.create_or_get(snapshot)
+                persisted, created = await durable_admission(store.create_or_get(snapshot))
             else:
-                persisted, created = await admit(snapshot)
+                persisted, created = await durable_admission(admit(snapshot))
         except RequestIdentityConflict as error:
             raise HTTPException(status_code=409, detail="request_id_conflict") from error
         if not created:

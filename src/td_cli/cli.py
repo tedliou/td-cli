@@ -15,7 +15,7 @@ from typer._click.exceptions import ClickException, UsageError
 from td_cli import __version__
 from td_cli.client import ClientError, DaemonClient
 from td_cli.command_catalog import MAX_DAT_CONTENT_BYTES, MAX_INSPECTION_ITEMS, MAX_TOX_FILE_BYTES
-from td_cli.protocol import Command
+from td_cli.protocol import PROTOCOL_VERSION, Command
 
 app = typer.Typer(no_args_is_help=True)
 instances_app = typer.Typer()
@@ -50,7 +50,7 @@ app.add_typer(events_app, name="events")
 
 def _print_td_version(value: bool) -> None:
     if value:
-        typer.echo(f"td {__version__} (protocol 1)")
+        typer.echo(f"td {__version__} (protocol {PROTOCOL_VERSION})")
         raise typer.Exit()
 
 
