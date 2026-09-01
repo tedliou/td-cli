@@ -78,8 +78,11 @@ def test_agent_staging_uses_hosted_ci_without_touchdesigner_dependency() -> None
         "Validate staged files supplied by authorized environment"
     )
     dispatch = Path("scripts/dispatch_agent_stage.ps1").read_text(encoding="utf-8")
-    assert "stage_archive_base64=$payload" in dispatch
-    assert "stage_archive_sha256=$digest" in dispatch
+    assert "stage_archive_base64 = $payload" in dispatch
+    assert "stage_archive_sha256 = $digest" in dispatch
+    assert "ConvertTo-Json -Compress" in dispatch
+    assert "workflow run stage-agent-component.yml --ref main --json" in dispatch
+    assert '-f "stage_archive_base64=$payload"' not in dispatch
 
 
 def test_hosted_executable_smoke_runs_the_daemon_lifecycle() -> None:
