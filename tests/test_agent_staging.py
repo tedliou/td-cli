@@ -56,7 +56,7 @@ def test_prepared_agent_stage_carries_release_and_source_identity(tmp_path: Path
 
     manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
     evidence = json.loads((output / "verification.json").read_text(encoding="utf-8"))
-    assert manifest["agent_version"] == "0.2.0"
+    assert manifest["agent_version"] == "0.3.0"
     assert manifest["source_commit"] == "a" * 40
     assert evidence == {
         "artifact_sha256": hashlib.sha256(b"tox").hexdigest(),
