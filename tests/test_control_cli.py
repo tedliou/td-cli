@@ -54,7 +54,7 @@ def test_ops_get_submits_typed_command_and_emits_protocol_envelope(monkeypatch) 
         "input": {"operator_path": "/project1"},
     }
     assert json.loads(result.stdout) == {
-        "protocol_version": 1,
+        "protocol_version": 2,
         "data": {"path": "/project1", "name": "project1", "op_type": "base", "family": "COMP"},
         "request": {
             "request_id": json.loads(result.stdout)["request"]["request_id"],

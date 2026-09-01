@@ -1,4 +1,4 @@
-"""Strict public Protocol v1 models shared by the Daemon and Agent Component."""
+"""Strict public Protocol v2 models shared by the Daemon and Agent Component."""
 
 from __future__ import annotations
 
@@ -16,6 +16,9 @@ from td_cli.command_catalog import (
 )
 
 __all__ = ["OperatorInput"]
+
+PROTOCOL_VERSION = 2
+PROTOCOL_VERSIONS = (PROTOCOL_VERSION,)
 
 
 class Command(StrictModel):
@@ -44,6 +47,7 @@ class Command(StrictModel):
 class RequestStatus(StrEnum):
     QUEUED = "queued"
     DISPATCHED = "dispatched"
+    ACCEPTED = "accepted"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
@@ -57,9 +61,11 @@ class RequestSnapshot(StrictModel):
     instance_id: str
     command: Command
     status: RequestStatus
+    execution_id: str | None
     submitted_at: str
     dispatched_at: str | None
-    started_at: str | None
+    accepted_at: str | None
+    execute_authorized_at: str | None
     completed_at: str | None
     result: dict[str, Any] | None
     error: dict[str, Any] | None
@@ -73,9 +79,11 @@ class RequestSnapshot(StrictModel):
             instance_id=instance_id,
             command=command,
             status=RequestStatus.QUEUED,
+            execution_id=None,
             submitted_at=submitted_at,
             dispatched_at=None,
-            started_at=None,
+            accepted_at=None,
+            execute_authorized_at=None,
             completed_at=None,
             result=None,
             error=None,

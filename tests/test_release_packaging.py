@@ -19,14 +19,21 @@ def _write_agent_stage(root: Path, *, source_commit: str = "a" * 40) -> None:
     tox = root / "td-agent.tox"
     tox.write_bytes(b"tox")
     manifest = {
-        "agent_version": "0.2.0",
+        "agent_version": "0.3.0",
         "locked_touchdesigner_version": "2025.32050",
         "source_commit": source_commit,
         "artifact_sha256": hashlib.sha256(b"tox").hexdigest(),
     }
     (root / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     (root / "verification.json").write_text(
-        json.dumps({"validated": True, "source_commit": source_commit}), encoding="utf-8"
+        json.dumps(
+            {
+                "validated": True,
+                "source_commit": source_commit,
+                "artifact_sha256": hashlib.sha256(b"tox").hexdigest(),
+            }
+        ),
+        encoding="utf-8",
     )
 
 
@@ -49,10 +56,10 @@ def test_release_packaging_creates_the_four_root_layouts_and_sorted_checksums(
     } == first_digests
 
     assert [path.name for path in artifacts] == [
-        "td-agent-cli-v0.2.0-windows-x86_64.zip",
-        "td-agent-component-v0.2.0-td2025.32050.zip",
-        "td-daemon-v0.2.0-windows-x86_64.zip",
-        "td-v0.2.0-windows-x86_64.zip",
+        "td-agent-cli-v0.3.0-windows-x86_64.zip",
+        "td-agent-component-v0.3.0-td2025.32050.zip",
+        "td-daemon-v0.3.0-windows-x86_64.zip",
+        "td-v0.3.0-windows-x86_64.zip",
     ]
     expected_entries = {
         artifacts[0].name: ["td-agent.exe"],
@@ -70,7 +77,7 @@ def test_release_packaging_creates_the_four_root_layouts_and_sorted_checksums(
     assert [line.split("  ")[1] for line in checksum_lines] == sorted(expected_entries)
     assert all(len(line.split("  ")[0]) == 64 for line in checksum_lines)
     assert "__VERSION__" not in (output / "install.ps1").read_text(encoding="utf-8")
-    assert "0.2.0" in (output / "install.ps1").read_text(encoding="utf-8")
+    assert "0.3.0" in (output / "install.ps1").read_text(encoding="utf-8")
     assert (output / "uninstall.ps1").is_file()
 
 
@@ -85,4 +92,14 @@ def test_agent_stage_rejects_wrong_commit_or_touchdesigner_build(tmp_path: Path)
     manifest["locked_touchdesigner_version"] = "2025.99999"
     (tmp_path / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     with pytest.raises(ValueError, match="TouchDesigner"):
+        validate_agent_stage(tmp_path, expected_commit="a" * 40)
+
+
+def test_agent_stage_rejects_verification_for_another_artifact(tmp_path: Path) -> None:
+    _write_agent_stage(tmp_path)
+    verification = json.loads((tmp_path / "verification.json").read_text(encoding="utf-8"))
+    verification["artifact_sha256"] = hashlib.sha256(b"old").hexdigest()
+    (tmp_path / "verification.json").write_text(json.dumps(verification), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="artifact digest"):
         validate_agent_stage(tmp_path, expected_commit="a" * 40)

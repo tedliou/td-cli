@@ -67,16 +67,16 @@ class DaemonClient:
         return response.json()
 
     def health(self) -> dict[str, Any]:
-        payload = self.request("GET", "/v1/health")
-        if 1 not in payload.get("protocol_versions", []):
+        payload = self.request("GET", "/v2/health")
+        if 2 not in payload.get("protocol_versions", []):
             raise ClientError("protocol_incompatible")
         return payload
 
     def instances(self) -> list[dict[str, Any]]:
-        items = self.request("GET", "/v1/instances")
+        items = self.request("GET", "/v2/instances")
         if any(
             item.get("status") not in {"online", "offline", "draining"}
-            or item.get("protocol_version") != 1
+            or item.get("protocol_version") != 2
             for item in items
         ):
             raise ClientError("protocol_incompatible")
@@ -109,7 +109,7 @@ class DaemonClient:
         try:
             return self.request(
                 "POST",
-                "/v1/requests",
+                "/v2/requests",
                 json={"request_id": request_id, "instance_id": instance_id, "command": command},
             )
         except ClientError as error:
@@ -117,7 +117,7 @@ class DaemonClient:
             raise
 
     def get_request(self, request_id: str) -> dict[str, Any]:
-        snapshot = self.request("GET", f"/v1/requests/{request_id}")
+        snapshot = self.request("GET", f"/v2/requests/{request_id}")
         if snapshot.get("status") not in {
             "queued",
             "dispatched",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import inspect
 import secrets
 import uuid
@@ -14,8 +15,8 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from pydantic import field_validator
 
 from td_cli import __version__
-from td_cli.daemon.storage import RequestStore
-from td_cli.protocol import Command, RequestSnapshot, StrictModel
+from td_cli.daemon.storage import RequestIdentityConflict, RequestStore
+from td_cli.protocol import PROTOCOL_VERSIONS, Command, RequestSnapshot, StrictModel
 
 
 class SubmitRequest(StrictModel):
@@ -45,26 +46,61 @@ def create_app(
     root: Path,
     *,
     token: str,
-    preflight: Callable[[SubmitRequest], Awaitable[None]] | None = None,
-    dispatch: Callable[[dict[str, object]], Awaitable[None]] | None = None,
-    instances: Callable[[], list[dict[str, object]]] | None = None,
+    admit: Callable[[dict[str, object]], Awaitable[tuple[dict[str, object], bool]]] | None = None,
+    instances: Callable[[], list[dict[str, object]] | Awaitable[list[dict[str, object]]]]
+    | None = None,
     shutdown: Callable[[], Awaitable[None] | None] | None = None,
     runtime_health: Callable[[], bool] | None = None,
+    startup: Callable[[RequestStore], Awaitable[None]] | None = None,
+    teardown: Callable[[], Awaitable[None]] | None = None,
 ) -> FastAPI:
     state = root / "state"
     store: RequestStore | None = None
+    admission_tasks: set[asyncio.Task[tuple[dict[str, object], bool]]] = set()
+
+    def admission_done(task: asyncio.Task[tuple[dict[str, object], bool]]) -> None:
+        admission_tasks.discard(task)
+        with contextlib.suppress(asyncio.CancelledError):
+            task.exception()
+
+    async def durable_admission(
+        operation: Awaitable[tuple[dict[str, object], bool]],
+    ) -> tuple[dict[str, object], bool]:
+        async def invoke() -> tuple[dict[str, object], bool]:
+            return await operation
+
+        task: asyncio.Task[tuple[dict[str, object], bool]] = asyncio.create_task(
+            invoke(), name="request-admission"
+        )
+        admission_tasks.add(task)
+        task.add_done_callback(admission_done)
+        return await asyncio.shield(task)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         nonlocal store
-        store = RequestStore(state / "daemon.db")
-        app.state.request_store = store
-        cleanup_task = asyncio.create_task(_hourly_cleanup(store))
+        store = await RequestStore.open(state / "daemon.db")
         try:
-            yield
+            if startup is None:
+                await _recover_requests(store)
+            else:
+                await startup(store)
+            app.state.request_store = store
+            cleanup_task = asyncio.create_task(_hourly_cleanup(store))
+            try:
+                yield
+            finally:
+                cleanup_task.cancel()
+                try:
+                    if teardown is not None:
+                        await teardown()
+                finally:
+                    if admission_tasks:
+                        await asyncio.gather(*admission_tasks, return_exceptions=True)
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await cleanup_task
         finally:
-            cleanup_task.cancel()
-            store.close()
+            await store.close()
 
     app = FastAPI(lifespan=lifespan)
 
@@ -73,22 +109,25 @@ def create_app(
         if not secrets.compare_digest(supplied, token):
             raise HTTPException(status_code=404, detail="Not Found")
 
-    @app.get("/v1/health", dependencies=[Depends(authenticate)])
+    @app.get("/v2/health", dependencies=[Depends(authenticate)])
     def health() -> dict[str, object]:
         logging_healthy = runtime_health() if runtime_health is not None else True
         return {
             "ready": logging_healthy,
             "logging_healthy": logging_healthy,
             "release_version": __version__,
-            "protocol_versions": [1],
-            "schema_version": 1,
+            "protocol_versions": list(PROTOCOL_VERSIONS),
+            "schema_version": 2,
         }
 
-    @app.get("/v1/instances", dependencies=[Depends(authenticate)])
-    def list_instances() -> list[dict[str, object]]:
-        return instances() if instances is not None else []
+    @app.get("/v2/instances", dependencies=[Depends(authenticate)])
+    async def list_instances() -> list[dict[str, object]]:
+        if instances is None:
+            return []
+        result = instances()
+        return await result if inspect.isawaitable(result) else result
 
-    @app.post("/v1/shutdown", status_code=202, dependencies=[Depends(authenticate)])
+    @app.post("/v2/shutdown", status_code=202, dependencies=[Depends(authenticate)])
     async def request_shutdown() -> dict[str, bool]:
         if shutdown is not None:
             result = shutdown()
@@ -96,33 +135,31 @@ def create_app(
                 await result
         return {"draining": True}
 
-    @app.post("/v1/requests", status_code=201, dependencies=[Depends(authenticate)])
+    @app.post("/v2/requests", status_code=201, dependencies=[Depends(authenticate)])
     async def submit(payload: SubmitRequest, response: Response) -> dict[str, object]:
         assert store is not None
-        existing = store.get(payload.request_id)
-        if existing is not None:
-            existing_command = Command.model_validate(existing["command"])
-            if existing_command.canonical_json() != payload.command.canonical_json():
-                raise HTTPException(status_code=409, detail="request_id_conflict")
-            response.status_code = 200
-            return existing
-        if preflight is not None:
-            await preflight(payload)
         snapshot = RequestSnapshot.pending(
             request_id=payload.request_id,
             instance_id=payload.instance_id,
             command=payload.command,
             submitted_at=_now(),
         ).model_dump(mode="json")
-        store.insert(snapshot)
-        if dispatch is not None:
-            await dispatch(snapshot)
-        return snapshot
+        try:
+            if admit is None:
+                persisted, created = await durable_admission(store.create_or_get(snapshot))
+            else:
+                persisted, created = await durable_admission(admit(snapshot))
+        except RequestIdentityConflict as error:
+            raise HTTPException(status_code=409, detail="request_id_conflict") from error
+        if not created:
+            response.status_code = 200
+            return persisted
+        return persisted
 
-    @app.get("/v1/requests/{request_id}", dependencies=[Depends(authenticate)])
-    def get_request(request_id: str) -> dict[str, object]:
+    @app.get("/v2/requests/{request_id}", dependencies=[Depends(authenticate)])
+    async def get_request(request_id: str) -> dict[str, object]:
         assert store is not None
-        snapshot = store.get(request_id)
+        snapshot = await store.get(request_id)
         if snapshot is None:
             raise HTTPException(status_code=404, detail="request_not_found")
         return snapshot
@@ -132,6 +169,29 @@ def create_app(
 
 async def _hourly_cleanup(store: RequestStore) -> None:
     while True:
-        while store.cleanup() == 1000:
+        while await store.cleanup() == 1000:
             await asyncio.sleep(0)
         await asyncio.sleep(3600)
+
+
+async def _recover_requests(store: RequestStore) -> None:
+    policies = (
+        ({"queued", "dispatched", "accepted"}, "daemon_shutdown", "daemon_shutdown"),
+        ({"running"}, "unknown", "request_outcome_unknown"),
+    )
+    for statuses, target, code in policies:
+        for snapshot in await store.find_by_statuses(statuses):
+            await store.compare_and_set(
+                str(snapshot["request_id"]),
+                expected_statuses={str(snapshot["status"])},
+                changes={
+                    "status": target,
+                    "error": {
+                        "code": code,
+                        "message": code,
+                        "details": {},
+                        "retryable": False,
+                    },
+                    "completed_at": _now(),
+                },
+            )

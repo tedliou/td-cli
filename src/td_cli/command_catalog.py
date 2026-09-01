@@ -1,10 +1,12 @@
-"""Command definitions and input validation for Protocol v1."""
+"""Command definitions and input validation for Protocol v2."""
 
 from __future__ import annotations
 
 import math
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import PureWindowsPath
 from typing import Any, Literal
 
@@ -445,11 +447,143 @@ class BatchExecuteInput(StrictModel):
     commands: list[BatchItem] = Field(min_length=1, max_length=16)
 
 
+def _identity_result(result: dict[str, Any]) -> dict[str, Any]:
+    return result
+
+
+def _connection_result(result: dict[str, Any]) -> dict[str, Any]:
+    result.setdefault("previous_connection", None)
+    return result
+
+
+def _connections_result(result: dict[str, Any]) -> dict[str, Any]:
+    if isinstance(result.get("inputs"), list):
+        result["inputs"] = [
+            {**item, "connection": item.get("connection")} if isinstance(item, dict) else item
+            for item in result["inputs"]
+        ]
+    return result
+
+
+def _copy_result(result: dict[str, Any]) -> dict[str, Any]:
+    if "include_docked" in result:
+        result["include_docked"] = bool(result["include_docked"])
+    return result
+
+
+def _import_result(result: dict[str, Any]) -> dict[str, Any]:
+    for field in ("trusted", "replaced", "rollback_performed"):
+        if field in result:
+            result[field] = bool(result[field])
+    return result
+
+
+def _state_result(result: dict[str, Any]) -> dict[str, Any]:
+    if isinstance(result.get("state"), dict):
+        state = dict(result["state"])
+        for field in OPERATOR_STATE_BOOLEAN_FIELDS:
+            if field in state:
+                state[field] = bool(state[field])
+        result["state"] = state
+    return result
+
+
+def _inspection_result(result: dict[str, Any]) -> dict[str, Any]:
+    for section, fields in {
+        "cook": ("cooked_this_frame", "cooked_previous_frame"),
+        "flags": ("display", "render"),
+    }.items():
+        values = result.get(section)
+        if isinstance(values, dict):
+            result[section] = {
+                **values,
+                **{field: bool(values[field]) for field in fields if field in values},
+            }
+    details = result.get("details")
+    if isinstance(details, dict):
+        if result.get("family") == "DAT":
+            details.setdefault("editing_file", None)
+        for field in ("time_slice", "export", "editable", "template", "compare"):
+            if field in details:
+                details[field] = bool(details[field])
+        result["details"] = details
+    return result
+
+
+def _parameter_descriptor(item: object) -> object:
+    if not isinstance(item, dict):
+        return item
+    descriptor = dict(item)
+    for field in (
+        "page",
+        "unsupported_reason",
+        "sequence",
+        "source",
+        "bounds",
+        "max_operator_paths",
+    ):
+        descriptor.setdefault(field, None)
+    expression = descriptor.get("expression")
+    if isinstance(expression, dict):
+        descriptor["expression"] = {**expression, "source": expression.get("source")}
+    menu_default: list[object] | None = [] if descriptor.get("value_kind") == "menu" else None
+    descriptor.setdefault("menu_names", menu_default)
+    descriptor.setdefault("menu_labels", menu_default)
+    return descriptor
+
+
+def _parameter_list_result(result: dict[str, Any]) -> dict[str, Any]:
+    if isinstance(result.get("parameters"), list):
+        result["parameters"] = [_parameter_descriptor(item) for item in result["parameters"]]
+    return result
+
+
+def _parameter_result(result: dict[str, Any]) -> dict[str, Any]:
+    result.setdefault("source", None)
+    result.setdefault("unsupported_reason", None)
+    if result.get("value_type") in {"operator", "python", "sequence", "unknown"}:
+        result.setdefault("value", None)
+    return result
+
+
+def _sequence_result(result: dict[str, Any]) -> dict[str, Any]:
+    result.setdefault("max_blocks", None)
+    for block in result.get("blocks", []):
+        if not isinstance(block, dict):
+            continue
+        block.setdefault("name", None)
+        for parameter in block.get("parameters", []):
+            if isinstance(parameter, dict):
+                parameter.setdefault("value", None)
+    return result
+
+
+ResultNormalizer = Callable[[dict[str, Any]], dict[str, Any]]
+
+
 @dataclass(frozen=True)
 class CommandDefinition:
     name: str
     input_model: type[StrictModel]
-    batchable: bool = False
+    effect: CommandEffect
+    execution_class: ExecutionClass
+    result_normalizer: ResultNormalizer = _identity_result
+
+    @property
+    def batchable(self) -> bool:
+        return self.effect is CommandEffect.READ_ONLY and self.name != "batch.execute"
+
+
+class CommandEffect(StrEnum):
+    READ_ONLY = "read_only"
+    MUTATION = "mutation"
+
+
+class ExecutionClass(StrEnum):
+    FAST_READ = "fast_read"
+    BOUNDED_SCAN_OR_EXPORT = "bounded_scan_or_export"
+    BOUNDED_MUTATION = "bounded_mutation"
+    TRUSTED_ASSET_MUTATION = "trusted_asset_mutation"
 
 
 class CommandCatalog:
@@ -479,42 +613,250 @@ class CommandCatalog:
         definition = self._by_name.get(name)
         return definition.input_model if definition is not None else None
 
+    def effect(self, name: str) -> CommandEffect:
+        return self._definition(name).effect
+
+    def execution_class(self, name: str) -> ExecutionClass:
+        return self._definition(name).execution_class
+
+    def generic_exception_status(self, name: str) -> str:
+        return "failed" if self.effect(name) is CommandEffect.READ_ONLY else "unknown"
+
+    def normalize_result(self, command: object, result: object) -> object:
+        """Restore public result facts owned by the matching Command definition."""
+        if not isinstance(command, dict) or not isinstance(result, dict):
+            return result
+        name = command.get("name")
+        if not isinstance(name, str):
+            return result
+        normalized = dict(result)
+        if name == "batch.execute":
+            command_input = command.get("input")
+            nested_commands = (
+                command_input.get("commands") if isinstance(command_input, dict) else None
+            )
+            nested_results = normalized.get("results")
+            if isinstance(nested_commands, list) and isinstance(nested_results, list):
+                normalized["results"] = [
+                    self.normalize_result(nested_command, nested_result)
+                    for nested_command, nested_result in zip(
+                        nested_commands, nested_results, strict=False
+                    )
+                ]
+        return self._definition(name).result_normalizer(normalized)
+
+    def _definition(self, name: str) -> CommandDefinition:
+        definition = self._by_name.get(name)
+        if definition is None:
+            raise ValueError("unsupported Command")
+        return definition
+
 
 COMMAND_CATALOG = CommandCatalog(
     (
-        CommandDefinition("ops.get", OperatorInput, batchable=True),
-        CommandDefinition("ops.inspect", InspectOperatorInput, batchable=True),
-        CommandDefinition("ops.children", ChildrenInput, batchable=True),
-        CommandDefinition("ops.connections", ConnectionsInput, batchable=True),
-        CommandDefinition("ops.hierarchy.connections", ConnectionsInput, batchable=True),
-        CommandDefinition("ops.state.get", OperatorInput, batchable=True),
-        CommandDefinition("ops.state.set", SetOperatorStateInput),
-        CommandDefinition("dat.text.get", TextDatReadInput, batchable=True),
-        CommandDefinition("dat.text.set", TextDatSetInput),
-        CommandDefinition("dat.table.get", TableDatReadInput, batchable=True),
-        CommandDefinition("dat.table.replace", TableDatReplaceInput),
-        CommandDefinition("dat.table.patch", TableDatPatchInput),
-        CommandDefinition("parameters.get", ParameterInput, batchable=True),
-        CommandDefinition("parameters.list", OperatorInput, batchable=True),
-        CommandDefinition("parameters.set", SetParameterInput, batchable=True),
-        CommandDefinition("parameters.pulse", ParameterInput, batchable=True),
-        CommandDefinition("parameters.sequence.get", SequenceInput, batchable=True),
-        CommandDefinition("parameters.sequence.replace", ReplaceSequenceInput),
-        CommandDefinition("ops.create", CreateOperatorInput),
-        CommandDefinition("ops.rename", RenameOperatorInput),
-        CommandDefinition("ops.destroy", DestroyOperatorInput),
-        CommandDefinition("ops.copy", CopyOperatorInput),
-        CommandDefinition("ops.move", MoveOperatorInput),
-        CommandDefinition("ops.tox.import", ImportToxInput),
-        CommandDefinition("ops.connect", ConnectOperatorsInput),
-        CommandDefinition("ops.disconnect", DisconnectOperatorsInput),
-        CommandDefinition("ops.hierarchy.connect", ConnectOperatorsInput),
-        CommandDefinition("ops.hierarchy.disconnect", DisconnectOperatorsInput),
-        CommandDefinition("project.snapshot", SnapshotInput),
-        CommandDefinition("project.metadata", ProjectMetadataInput),
-        CommandDefinition("binary.export", BinaryExportInput),
-        CommandDefinition("events.read", EventsReadInput),
-        CommandDefinition("batch.execute", BatchExecuteInput),
+        CommandDefinition(
+            "ops.get", OperatorInput, CommandEffect.READ_ONLY, ExecutionClass.FAST_READ
+        ),
+        CommandDefinition(
+            "ops.inspect",
+            InspectOperatorInput,
+            CommandEffect.READ_ONLY,
+            ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
+            _inspection_result,
+        ),
+        CommandDefinition(
+            "ops.children",
+            ChildrenInput,
+            CommandEffect.READ_ONLY,
+            ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
+        ),
+        CommandDefinition(
+            "ops.connections",
+            ConnectionsInput,
+            CommandEffect.READ_ONLY,
+            ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
+            _connections_result,
+        ),
+        CommandDefinition(
+            "ops.hierarchy.connections",
+            ConnectionsInput,
+            CommandEffect.READ_ONLY,
+            ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
+            _connections_result,
+        ),
+        CommandDefinition(
+            "ops.state.get",
+            OperatorInput,
+            CommandEffect.READ_ONLY,
+            ExecutionClass.FAST_READ,
+            _state_result,
+        ),
+        CommandDefinition(
+            "ops.state.set",
+            SetOperatorStateInput,
+            CommandEffect.MUTATION,
+            ExecutionClass.BOUNDED_MUTATION,
+            _state_result,
+        ),
+        CommandDefinition(
+            "dat.text.get",
+            TextDatReadInput,
+            CommandEffect.READ_ONLY,
+            ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
+        ),
+        CommandDefinition(
+            "dat.text.set", TextDatSetInput, CommandEffect.MUTATION, ExecutionClass.BOUNDED_MUTATION
+        ),
+        CommandDefinition(
+            "dat.table.get",
+            TableDatReadInput,
+            CommandEffect.READ_ONLY,
+            ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
+        ),
+        CommandDefinition(
+            "dat.table.replace",
+            TableDatReplaceInput,
+            CommandEffect.MUTATION,
+            ExecutionClass.BOUNDED_MUTATION,
+        ),
+        CommandDefinition(
+            "dat.table.patch",
+            TableDatPatchInput,
+            CommandEffect.MUTATION,
+            ExecutionClass.BOUNDED_MUTATION,
+        ),
+        CommandDefinition(
+            "parameters.get",
+            ParameterInput,
+            CommandEffect.READ_ONLY,
+            ExecutionClass.FAST_READ,
+            _parameter_result,
+        ),
+        CommandDefinition(
+            "parameters.list",
+            OperatorInput,
+            CommandEffect.READ_ONLY,
+            ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
+            _parameter_list_result,
+        ),
+        CommandDefinition(
+            "parameters.set",
+            SetParameterInput,
+            CommandEffect.MUTATION,
+            ExecutionClass.BOUNDED_MUTATION,
+            _parameter_result,
+        ),
+        CommandDefinition(
+            "parameters.pulse",
+            ParameterInput,
+            CommandEffect.MUTATION,
+            ExecutionClass.BOUNDED_MUTATION,
+        ),
+        CommandDefinition(
+            "parameters.sequence.get",
+            SequenceInput,
+            CommandEffect.READ_ONLY,
+            ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
+            _sequence_result,
+        ),
+        CommandDefinition(
+            "parameters.sequence.replace",
+            ReplaceSequenceInput,
+            CommandEffect.MUTATION,
+            ExecutionClass.BOUNDED_MUTATION,
+            _sequence_result,
+        ),
+        CommandDefinition(
+            "ops.create",
+            CreateOperatorInput,
+            CommandEffect.MUTATION,
+            ExecutionClass.BOUNDED_MUTATION,
+        ),
+        CommandDefinition(
+            "ops.rename",
+            RenameOperatorInput,
+            CommandEffect.MUTATION,
+            ExecutionClass.BOUNDED_MUTATION,
+        ),
+        CommandDefinition(
+            "ops.destroy",
+            DestroyOperatorInput,
+            CommandEffect.MUTATION,
+            ExecutionClass.BOUNDED_MUTATION,
+        ),
+        CommandDefinition(
+            "ops.copy",
+            CopyOperatorInput,
+            CommandEffect.MUTATION,
+            ExecutionClass.BOUNDED_MUTATION,
+            _copy_result,
+        ),
+        CommandDefinition(
+            "ops.move", MoveOperatorInput, CommandEffect.MUTATION, ExecutionClass.BOUNDED_MUTATION
+        ),
+        CommandDefinition(
+            "ops.tox.import",
+            ImportToxInput,
+            CommandEffect.MUTATION,
+            ExecutionClass.TRUSTED_ASSET_MUTATION,
+            _import_result,
+        ),
+        CommandDefinition(
+            "ops.connect",
+            ConnectOperatorsInput,
+            CommandEffect.MUTATION,
+            ExecutionClass.BOUNDED_MUTATION,
+            _connection_result,
+        ),
+        CommandDefinition(
+            "ops.disconnect",
+            DisconnectOperatorsInput,
+            CommandEffect.MUTATION,
+            ExecutionClass.BOUNDED_MUTATION,
+        ),
+        CommandDefinition(
+            "ops.hierarchy.connect",
+            ConnectOperatorsInput,
+            CommandEffect.MUTATION,
+            ExecutionClass.BOUNDED_MUTATION,
+            _connection_result,
+        ),
+        CommandDefinition(
+            "ops.hierarchy.disconnect",
+            DisconnectOperatorsInput,
+            CommandEffect.MUTATION,
+            ExecutionClass.BOUNDED_MUTATION,
+        ),
+        CommandDefinition(
+            "project.snapshot",
+            SnapshotInput,
+            CommandEffect.READ_ONLY,
+            ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
+        ),
+        CommandDefinition(
+            "project.metadata",
+            ProjectMetadataInput,
+            CommandEffect.READ_ONLY,
+            ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
+        ),
+        CommandDefinition(
+            "binary.export",
+            BinaryExportInput,
+            CommandEffect.READ_ONLY,
+            ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
+        ),
+        CommandDefinition(
+            "events.read",
+            EventsReadInput,
+            CommandEffect.READ_ONLY,
+            ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
+        ),
+        CommandDefinition(
+            "batch.execute",
+            BatchExecuteInput,
+            CommandEffect.READ_ONLY,
+            ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
+        ),
     )
 )
 

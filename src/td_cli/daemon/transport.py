@@ -1,41 +1,69 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import json
+import logging
 import secrets
 import time
 import uuid
-from collections import defaultdict, deque
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from enum import StrEnum
+from functools import partial
 from pathlib import Path
+from typing import Any, cast
 
 import socketio
 from fastapi import HTTPException
 
-from td_cli.command_catalog import OPERATOR_STATE_BOOLEAN_FIELDS
-from td_cli.daemon.app import SubmitRequest, create_app
+from td_cli.daemon.app import create_app
+from td_cli.daemon.lifecycle import (
+    AdmissionRejected,
+    LifecycleBusy,
+    LifecycleEffect,
+    RequestLifecycle,
+)
+from td_cli.daemon.storage import RequestStore
 from td_cli.release import LOCKED_TOUCHDESIGNER_VERSION
+
+LOGGER = logging.getLogger("td_cli.daemon.lifecycle")
+DEFAULT_EXECUTION_LEASES = {
+    "fast_read": 7.0,
+    "bounded_scan_or_export": 7.0,
+    "bounded_mutation": 7.0,
+    "trusted_asset_mutation": 8.0,
+}
+MAX_OUTCOME_BYTES = 256 * 1024
+MAX_OUTCOME_CHUNKS = 16
+MAX_OUTCOME_CHUNK_BYTES = 24 * 1024
 
 
 @dataclass
-class Registration:
+class _Outbound:
+    event: str | None = None
+    data: dict[str, Any] | None = None
+    disconnect: bool = False
+    completed: asyncio.Future[None] | None = None
+
+
+@dataclass
+class _ConnectionAdapter:
     instance_id: str
     connection_id: str
-    sid: str | None
-    status: InstanceStatus
+    sid: str
+    queue: asyncio.Queue[_Outbound]
+    task: asyncio.Task[None] | None = None
+
+
+@dataclass
+class _InstanceMetadata:
+    connection_id: str
+    status: str
     agent_version: str
     capabilities: list[str]
-    last_heartbeat_monotonic: float
     last_heartbeat_at: str
     offline_expires_at: str | None = None
-
-
-class InstanceStatus(StrEnum):
-    ONLINE = "online"
-    OFFLINE = "offline"
-    DRAINING = "draining"
 
 
 def create_transport_app(
@@ -47,433 +75,525 @@ def create_transport_app(
     shutdown: Callable[[], None] | None = None,
     drain_timeout: float = 5,
     runtime_health: Callable[[], bool] | None = None,
+    outbound_capacity: int = 64,
+    execution_leases: dict[str, float] | None = None,
 ) -> socketio.ASGIApp:
-    """Create the combined authenticated HTTP and Socket.IO Protocol v1 interface."""
+    """Create thin authenticated Protocol v2 adapters around RequestLifecycle."""
     sio = socketio.AsyncServer(
         async_mode="asgi", cors_allowed_origins=[], max_http_buffer_size=256 * 1024
     )
-    registrations: dict[str, Registration] = {}
-    connected: set[str] = set()
-    queues: dict[str, deque[dict[str, object]]] = defaultdict(deque)
-    in_flight: dict[str, dict[str, object]] = {}
-    shutting_down = False
-    management = None
+    lifecycle: RequestLifecycle | None = None
+    effect_task: asyncio.Task[None] | None = None
+    deadline_task: asyncio.Task[None] | None = None
+    connections: dict[str, _ConnectionAdapter] = {}
+    by_sid: dict[str, _ConnectionAdapter] = {}
+    pending_sids: set[str] = set()
+    outcome_chunks: dict[tuple[str, str, str], tuple[int, list[str]]] = {}
+    metadata: dict[str, _InstanceMetadata] = {}
+    stopping = False
 
-    async def dispatch(snapshot: dict[str, object]) -> None:
-        instance_id = str(snapshot["instance_id"])
-        queues[instance_id].append(snapshot)
-        await dispatch_next(instance_id)
+    def require_lifecycle() -> RequestLifecycle:
+        if lifecycle is None:
+            raise RuntimeError("RequestLifecycle is not started")
+        return lifecycle
 
-    async def preflight(payload: SubmitRequest) -> None:
-        if shutting_down:
-            raise HTTPException(status_code=503, detail="daemon_shutdown")
-        instance_id = payload.instance_id
-        registration = registrations.get(instance_id)
-        if registration is not None and registration.status == InstanceStatus.DRAINING:
-            raise HTTPException(status_code=409, detail="instance_draining")
-        if registration is None or registration.status != InstanceStatus.ONLINE:
-            raise HTTPException(status_code=409, detail="instance_offline")
-        if payload.command.name not in registration.capabilities:
-            raise HTTPException(status_code=409, detail="command_unsupported")
-        if len(queues[instance_id]) + int(instance_id in in_flight) >= 32:
-            raise HTTPException(status_code=409, detail="instance_busy")
-
-    async def dispatch_next(instance_id: str) -> None:
-        registration = registrations.get(instance_id)
-        if (
-            registration is None
-            or registration.status != InstanceStatus.ONLINE
-            or instance_id in in_flight
-            or not queues[instance_id]
-        ):
-            return
-        snapshot = queues[instance_id].popleft()
-        in_flight[instance_id] = snapshot
-        assert management is not None
-        management.state.request_store.update(
-            str(snapshot["request_id"]), status="dispatched", dispatched_at=_now()
+    async def startup(store: RequestStore) -> None:
+        nonlocal lifecycle, effect_task, deadline_task
+        lifecycle = RequestLifecycle(
+            store,
+            heartbeat_timeout=heartbeat_timeout,
+            offline_retention=offline_retention,
+            execution_leases=execution_leases or DEFAULT_EXECUTION_LEASES,
         )
-        await sio.emit("request_dispatch", snapshot, to=registration.sid)
+        await lifecycle.start()
+        effect_task = asyncio.create_task(effect_pump(), name="lifecycle-effects")
+        deadline_task = asyncio.create_task(deadline_scheduler(), name="lifecycle-deadlines")
 
-    def instance_snapshots() -> list[dict[str, object]]:
-        ids = sorted(registrations)
-        return [
-            {
-                "instance_id": item.instance_id,
-                "connection_id": item.connection_id,
-                "selector": _selector(item.instance_id, ids),
-                "status": item.status,
-                "agent_version": item.agent_version,
-                "protocol_version": 1,
-                "capabilities": sorted(item.capabilities),
-                "last_heartbeat_at": item.last_heartbeat_at,
-                "offline_expires_at": item.offline_expires_at,
-            }
-            for item in (registrations[instance_id] for instance_id in ids)
-        ]
+    async def teardown() -> None:
+        nonlocal stopping
+        stopping = True
+        cleanup: list[Callable[[], Awaitable[None]]] = []
+        if deadline_task is not None:
+            cleanup.append(partial(_cancel_and_wait, deadline_task))
+        if lifecycle is not None:
+            cleanup.append(lifecycle.close)
+        if effect_task is not None:
+            cleanup.append(partial(_cancel_and_wait, effect_task))
+        cleanup.extend(partial(stop_sender, adapter) for adapter in list(connections.values()))
+        await _run_cleanup_steps(cleanup)
+
+    def healthy() -> bool:
+        external = runtime_health() if runtime_health is not None else True
+        tasks_healthy = all(
+            task is None or not task.done() for task in (effect_task, deadline_task)
+        )
+        return external and lifecycle is not None and lifecycle.ready and tasks_healthy
+
+    async def admit(snapshot: dict[str, object]) -> tuple[dict[str, object], bool]:
+        try:
+            return await require_lifecycle().submit(snapshot)
+        except AdmissionRejected as error:
+            status = 503 if error.code == "daemon_shutdown" else 409
+            raise HTTPException(status_code=status, detail=error.code) from error
+        except LifecycleBusy as error:
+            raise HTTPException(status_code=409, detail="instance_busy") from error
+
+    async def instance_snapshots() -> list[dict[str, object]]:
+        view = await require_lifecycle().snapshot()
+        visible = view["instances"]
+        ids = sorted(visible)
+        result = []
+        for instance_id in ids:
+            item = metadata.get(instance_id)
+            state = visible[instance_id]
+            if item is None:
+                continue
+            result.append(
+                {
+                    "instance_id": instance_id,
+                    "connection_id": state["connection_id"],
+                    "selector": _selector(instance_id, ids),
+                    "status": item.status if item.status == "draining" else state["status"],
+                    "agent_version": item.agent_version,
+                    "protocol_version": 2,
+                    "capabilities": sorted(item.capabilities),
+                    "last_heartbeat_at": item.last_heartbeat_at,
+                    "offline_expires_at": item.offline_expires_at,
+                }
+            )
+        return result
 
     async def orderly_shutdown() -> None:
-        nonlocal shutting_down
-        shutting_down = True
-        for registration in registrations.values():
-            if registration.status == InstanceStatus.ONLINE:
-                registration.status = InstanceStatus.DRAINING
-                if registration.sid is not None:
-                    await sio.emit(
-                        "daemon_draining", {"deadline_seconds": drain_timeout}, to=registration.sid
-                    )
+        await require_lifecycle().drain()
         deadline = time.monotonic() + drain_timeout
-        while (
-            in_flight
-            or any(registration.sid is not None for registration in registrations.values())
-        ) and time.monotonic() < deadline:
+        while connections and time.monotonic() < deadline:
             await asyncio.sleep(0.05)
-        for instance_id, queue in queues.items():
-            while queue:
-                terminal_request(queue.popleft(), "daemon_shutdown", "daemon_shutdown")
-        for instance_id, snapshot in list(in_flight.items()):
-            terminal_request(snapshot, "unknown", "request_outcome_unknown")
-            in_flight.pop(instance_id, None)
+        for adapter in list(connections.values()):
+            await enqueue(adapter, _Outbound(disconnect=True), wait=True)
         if shutdown is not None:
             shutdown()
 
     management = create_app(
         root,
         token=token,
-        preflight=preflight,
-        dispatch=dispatch,
+        admit=admit,
         instances=instance_snapshots,
         shutdown=orderly_shutdown,
-        runtime_health=runtime_health,
+        runtime_health=healthy,
+        startup=startup,
+        teardown=teardown,
     )
+
+    async def deadline_scheduler() -> None:
+        interval = max(0.01, min(0.25, heartbeat_timeout / 4, offline_retention / 4))
+        while True:
+            await asyncio.sleep(interval)
+            await require_lifecycle().expire_deadlines()
+
+    async def effect_pump() -> None:
+        while True:
+            effect = await require_lifecycle().next_effect()
+            _log_effect(effect)
+            if effect.kind == "registration_expired":
+                sid = effect.connection_id
+                if sid is not None and sid in pending_sids:
+                    pending_sids.discard(sid)
+                    await sio.disconnect(sid)
+                continue
+            if effect.kind == "instance_expired":
+                if effect.instance_id is not None:
+                    metadata.pop(effect.instance_id, None)
+                continue
+            if effect.kind == "fatal":
+                if shutdown is not None:
+                    shutdown()
+                continue
+            if effect.instance_id is None or effect.connection_id is None:
+                continue
+            adapter = connections.get(effect.instance_id)
+            if adapter is None or adapter.connection_id != effect.connection_id:
+                continue
+            outbound = _effect_outbound(effect, drain_timeout)
+            if outbound is not None:
+                await enqueue(adapter, outbound)
+
+    async def enqueue(
+        adapter: _ConnectionAdapter, outbound: _Outbound, *, wait: bool = False
+    ) -> None:
+        current = connections.get(adapter.instance_id)
+        if current is not adapter:
+            return
+        if wait:
+            outbound.completed = asyncio.get_running_loop().create_future()
+        try:
+            adapter.queue.put_nowait(outbound)
+        except asyncio.QueueFull:
+            await require_lifecycle().fail("outbound_queue_saturated")
+            if outbound.completed is not None:
+                raise RuntimeError("outbound queue saturated")
+            return
+        if outbound.completed is not None:
+            await outbound.completed
+
+    async def sender(adapter: _ConnectionAdapter) -> None:
+        outbound: _Outbound | None = None
+        try:
+            while True:
+                outbound = await adapter.queue.get()
+                if connections.get(adapter.instance_id) is not adapter:
+                    if outbound.completed is not None:
+                        outbound.completed.set_result(None)
+                    return
+                if outbound.event is not None:
+                    await sio.emit(outbound.event, outbound.data or {}, to=adapter.sid)
+                if outbound.disconnect:
+                    await sio.disconnect(adapter.sid)
+                if outbound.completed is not None and not outbound.completed.done():
+                    outbound.completed.set_result(None)
+                if outbound.disconnect:
+                    return
+                outbound = None
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 - sender is a fatal task boundary
+            if not stopping:
+                await require_lifecycle().fail("outbound_sender_failed")
+        finally:
+            failure = RuntimeError("outbound sender stopped")
+            if (
+                outbound is not None
+                and outbound.completed is not None
+                and not outbound.completed.done()
+            ):
+                outbound.completed.set_exception(failure)
+            while not adapter.queue.empty():
+                queued = adapter.queue.get_nowait()
+                if queued.completed is not None and not queued.completed.done():
+                    queued.completed.set_exception(failure)
+
+    async def stop_sender(adapter: _ConnectionAdapter) -> None:
+        if adapter.task is None:
+            return
+        adapter.task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await adapter.task
 
     @sio.event
     async def connect(sid: str, environ: dict[str, object], auth: object) -> bool:
         del environ
         supplied = auth.get("token", "") if isinstance(auth, dict) else ""
-        authenticated = secrets.compare_digest(str(supplied), token)
-        if authenticated:
-            connected.add(sid)
-            sio.start_background_task(enforce_registration_deadline, sid)
-        return authenticated
+        if not secrets.compare_digest(str(supplied), token):
+            return False
+        pending_sids.add(sid)
+        await require_lifecycle().connected(sid)
+        return True
 
     @sio.event
     async def register(sid: str, data: object) -> None:
-        if not isinstance(data, dict):
-            await sio.disconnect(sid)
-            return
-        versions = data.get("protocol_versions")
-        instance_id = data.get("instance_id")
-        try:
-            normalized_instance_id = str(uuid.UUID(str(instance_id)))
-        except ValueError:
-            normalized_instance_id = ""
-        valid_versions = (
-            isinstance(versions, list)
-            and all(type(version) is int for version in versions)
-            and 1 in versions
-        )
-        if (
-            not normalized_instance_id
-            or not valid_versions
-            or data.get("td_build") != LOCKED_TOUCHDESIGNER_VERSION
-        ):
+        parsed = _registration(data)
+        if parsed is None or sid not in pending_sids:
             await sio.emit("registration_error", {"code": "protocol_incompatible"}, to=sid)
             await sio.disconnect(sid)
             return
-        instance_id = normalized_instance_id
+        instance_id, agent_version, capabilities = parsed
+        previous = connections.get(instance_id)
+        if previous is not None:
+            await enqueue(previous, _Outbound(disconnect=True), wait=True)
+            await stop_sender(previous)
         connection_id = str(uuid.uuid4())
-        previous = registrations.get(instance_id)
-        registrations[instance_id] = Registration(
-            instance_id=instance_id,
-            connection_id=connection_id,
-            sid=sid,
-            status=(
-                InstanceStatus.DRAINING
-                if shutting_down or data.get("status") == "draining"
-                else InstanceStatus.ONLINE
-            ),
-            agent_version=str(data.get("agent_version", "unknown")),
-            capabilities=[str(value) for value in data.get("capabilities", [])],
-            last_heartbeat_monotonic=time.monotonic(),
-            last_heartbeat_at=_now(),
+        adapter = _ConnectionAdapter(
+            instance_id,
+            connection_id,
+            sid,
+            asyncio.Queue(maxsize=outbound_capacity),
         )
-        connected.discard(sid)
-        await sio.emit(
-            "registered",
-            {"instance_id": instance_id, "connection_id": connection_id, "protocol_version": 1},
-            to=sid,
+        connections[instance_id] = adapter
+        by_sid[sid] = adapter
+        pending_sids.discard(sid)
+        adapter.task = asyncio.create_task(sender(adapter), name=f"sender:{connection_id}")
+        metadata[instance_id] = _InstanceMetadata(
+            connection_id,
+            "synchronizing",
+            agent_version,
+            capabilities,
+            _now(),
         )
-        if shutting_down:
-            await sio.emit("daemon_draining", {"deadline_seconds": drain_timeout}, to=sid)
-        if previous is not None and previous.sid is not None and previous.sid != sid:
-            await sio.disconnect(previous.sid)
-        sio.start_background_task(monitor_heartbeat, instance_id, connection_id)
+        await require_lifecycle().register(
+            instance_id,
+            connection_id,
+            set(capabilities),
+            pending_connection_id=sid,
+        )
+
+    @sio.event
+    async def execution_sync(sid: str, data: object) -> None:
+        adapter = _current(by_sid, sid, data)
+        if adapter is None or not isinstance(data, dict):
+            return
+        records = data.get("records")
+        if (
+            not isinstance(records, list)
+            or len(records) > 64
+            or not all(isinstance(record, dict) for record in records)
+        ):
+            await require_lifecycle().fail("invalid_execution_sync")
+            return
+        await require_lifecycle().synchronized(adapter.instance_id, adapter.connection_id, records)
+        metadata[adapter.instance_id].status = "online"
 
     @sio.event
     async def heartbeat(sid: str, data: object) -> None:
-        if not isinstance(data, dict):
+        adapter = _current(by_sid, sid, data)
+        if adapter is None:
             return
-        registration = registrations.get(str(data.get("instance_id", "")))
+        await require_lifecycle().heartbeat(adapter.instance_id, adapter.connection_id)
+        item = metadata[adapter.instance_id]
+        item.last_heartbeat_at = _now()
+        if isinstance(data, dict) and data.get("status") == "draining":
+            item.status = "draining"
+            await require_lifecycle().set_draining(adapter.instance_id, adapter.connection_id)
+        await enqueue(
+            adapter,
+            _Outbound("heartbeat_recorded", {"connection_id": adapter.connection_id}),
+        )
+
+    @sio.event
+    async def request_accepted(sid: str, data: object) -> None:
+        adapter = _current(by_sid, sid, data)
+        if adapter is None or not isinstance(data, dict):
+            return
+        request_id = str(data.get("request_id", ""))
+        await require_lifecycle().accepted(adapter.instance_id, adapter.connection_id, request_id)
+        await require_lifecycle().authorize(adapter.instance_id, adapter.connection_id, request_id)
+
+    @sio.event
+    async def request_rejected(sid: str, data: object) -> None:
+        adapter = _current(by_sid, sid, data)
+        if adapter is None or not isinstance(data, dict):
+            return
+        await require_lifecycle().rejected(
+            adapter.instance_id,
+            adapter.connection_id,
+            str(data.get("request_id", "")),
+            str(data.get("code", "request_rejected")),
+        )
+
+    @sio.event
+    async def request_outcome(sid: str, data: object) -> None:
+        adapter = _current(by_sid, sid, data)
+        if adapter is None or not isinstance(data, dict):
+            return
+        await record_outcome(adapter, data)
+
+    @sio.event
+    async def request_outcome_chunk(sid: str, data: object) -> None:
+        adapter = _current(by_sid, sid, data)
+        if adapter is None or not isinstance(data, dict):
+            return
+        request_id = data.get("request_id")
+        execution_id = data.get("execution_id")
+        chunk_index = data.get("chunk_index")
+        chunk_count = data.get("chunk_count")
+        payload = data.get("payload")
+        valid = (
+            isinstance(request_id, str)
+            and isinstance(execution_id, str)
+            and type(chunk_index) is int
+            and type(chunk_count) is int
+            and 0 <= chunk_index < chunk_count <= MAX_OUTCOME_CHUNKS
+            and isinstance(payload, str)
+            and len(payload.encode("utf-8")) <= MAX_OUTCOME_CHUNK_BYTES
+        )
+        key = (sid, str(request_id), str(execution_id))
+        if not valid:
+            outcome_chunks.pop(key, None)
+            await require_lifecycle().fail("invalid_outcome_chunk")
+            return
+        chunk_count_value = cast(int, chunk_count)
+        chunk_index_value = cast(int, chunk_index)
+        payload_value = cast(str, payload)
+        expected_count, chunks = outcome_chunks.get(key, (chunk_count_value, []))
+        if expected_count != chunk_count_value or chunk_index_value != len(chunks):
+            outcome_chunks.pop(key, None)
+            await require_lifecycle().fail("invalid_outcome_chunk")
+            return
+        chunks.append(payload_value)
+        outcome_chunks[key] = (expected_count, chunks)
+        if len(chunks) != expected_count:
+            return
+        outcome_chunks.pop(key, None)
+        encoded = "".join(chunks)
+        if len(encoded.encode("utf-8")) > MAX_OUTCOME_BYTES:
+            await require_lifecycle().fail("invalid_outcome_chunk")
+            return
+        try:
+            outcome = json.loads(encoded)
+        except (TypeError, ValueError):
+            await require_lifecycle().fail("invalid_outcome_chunk")
+            return
         if (
-            registration
-            and registration.sid == sid
-            and registration.connection_id == data.get("connection_id")
+            not isinstance(outcome, dict)
+            or outcome.get("instance_id") != adapter.instance_id
+            or outcome.get("connection_id") != adapter.connection_id
+            or outcome.get("request_id") != request_id
+            or outcome.get("execution_id") != execution_id
         ):
-            registration.last_heartbeat_monotonic = time.monotonic()
-            registration.last_heartbeat_at = _now()
-            if data.get("status") == "draining":
-                registration.status = InstanceStatus.DRAINING
-            await sio.emit(
-                "heartbeat_recorded", {"connection_id": registration.connection_id}, to=sid
-            )
+            await require_lifecycle().fail("invalid_outcome_chunk")
+            return
+        await record_outcome(adapter, outcome)
+
+    async def record_outcome(adapter: _ConnectionAdapter, data: dict[str, Any]) -> None:
+        await require_lifecycle().outcome(
+            adapter.instance_id,
+            adapter.connection_id,
+            str(data.get("request_id", "")),
+            str(data.get("execution_id", "")),
+            status=str(data.get("status", "failed")),
+            result=_decode_wire_value(data.get("result")),
+            error=data.get("error"),
+        )
+
+    @sio.event
+    async def unregister(sid: str, data: object) -> None:
+        adapter = _current(by_sid, sid, data)
+        if adapter is not None:
+            await enqueue(adapter, _Outbound(disconnect=True))
 
     @sio.event
     async def disconnect(sid: str, reason: object = None) -> None:
         del reason
-        connected.discard(sid)
-        for instance_id, registration in list(registrations.items()):
-            if registration.sid != sid:
-                continue
-            registration.sid = None
-            registration.status = InstanceStatus.OFFLINE
-            registration.offline_expires_at = (
-                (datetime.now(UTC) + timedelta(seconds=offline_retention))
-                .isoformat(timespec="milliseconds")
-                .replace("+00:00", "Z")
-            )
-            current = in_flight.pop(instance_id, None)
-            if current is not None:
-                terminal_request(current, "unknown", "request_outcome_unknown")
-            sio.start_background_task(expire_offline, instance_id, registration.connection_id)
-            break
-
-    async def expire_offline(instance_id: str, connection_id: str) -> None:
-        await asyncio.sleep(offline_retention)
-        registration = registrations.get(instance_id)
-        if registration is None or registration.connection_id != connection_id:
+        pending_sids.discard(sid)
+        for key in [key for key in outcome_chunks if key[0] == sid]:
+            outcome_chunks.pop(key, None)
+        adapter = by_sid.pop(sid, None)
+        if adapter is None:
             return
-        if registration.status == InstanceStatus.OFFLINE:
-            registrations.pop(instance_id, None)
-            while queues[instance_id]:
-                terminal_request(
-                    queues[instance_id].popleft(), "instance_offline", "instance_offline"
+        if connections.get(adapter.instance_id) is adapter:
+            connections.pop(adapter.instance_id, None)
+            item = metadata.get(adapter.instance_id)
+            if item is not None:
+                item.status = "offline"
+                item.offline_expires_at = (
+                    (datetime.now(UTC) + timedelta(seconds=offline_retention))
+                    .isoformat(timespec="milliseconds")
+                    .replace("+00:00", "Z")
                 )
-
-    async def monitor_heartbeat(instance_id: str, connection_id: str) -> None:
-        while True:
-            await asyncio.sleep(heartbeat_timeout)
-            registration = registrations.get(instance_id)
-            if registration is None or registration.connection_id != connection_id:
-                return
-            if registration.status != InstanceStatus.ONLINE or registration.sid is None:
-                return
-            if time.monotonic() - registration.last_heartbeat_monotonic >= heartbeat_timeout:
-                await sio.disconnect(registration.sid)
-                return
-
-    async def enforce_registration_deadline(sid: str) -> None:
-        await asyncio.sleep(5)
-        if sid in connected:
-            await sio.disconnect(sid)
-
-    @sio.event
-    async def results_replayed(sid: str, data: object) -> None:
-        if not isinstance(data, dict) or current_registration(sid, data) is None:
-            return
-        await dispatch_next(str(data["instance_id"]))
-
-    @sio.event
-    async def unregister(sid: str, data: object) -> None:
-        if not isinstance(data, dict) or current_registration(sid, data) is None:
-            return
-        registrations.pop(str(data["instance_id"]), None)
-        await sio.disconnect(sid)
-
-    def terminal_request(snapshot: dict[str, object], status: str, code: str) -> None:
-        management.state.request_store.update(
-            str(snapshot["request_id"]),
-            status=status,
-            error={"code": code, "message": code, "details": {}, "retryable": False},
-            completed_at=_now(),
-        )
-
-    async def advance(instance_id: str) -> None:
-        in_flight.pop(instance_id, None)
-        await dispatch_next(instance_id)
-
-    def current_registration(sid: str, data: dict[str, object]) -> Registration | None:
-        registration = registrations.get(str(data.get("instance_id", "")))
-        if registration is None:
-            return None
-        if registration.sid != sid or registration.connection_id != data.get("connection_id"):
-            return None
-        return registration
-
-    @sio.event
-    async def request_accepted(sid: str, data: object) -> None:
-        if not isinstance(data, dict) or current_registration(sid, data) is None:
-            return
-        instance_id = str(data["instance_id"])
-        current = in_flight.get(instance_id)
-        if current is None or current["request_id"] != data.get("request_id"):
-            return
-        store = management.state.request_store
-        store.update(str(data.get("request_id")), status="running", started_at=_now())
-
-    @sio.event
-    async def request_result(sid: str, data: object) -> None:
-        if not isinstance(data, dict) or current_registration(sid, data) is None:
-            return
-        request_id = str(data.get("request_id", ""))
-        store = management.state.request_store
-        existing = store.get(request_id)
-        if (
-            existing is None
-            or existing["instance_id"] != data["instance_id"]
-            or existing["status"] not in {"dispatched", "running", "unknown"}
-        ):
-            return
-        result = _normalize_command_result(existing.get("command"), data.get("result"))
-        snapshot = store.update(
-            request_id,
-            status="succeeded",
-            result=result,
-            error=None,
-            completed_at=_now(),
-        )
-        if snapshot is not None:
-            await sio.emit("result_recorded", {"request_id": request_id}, to=sid)
-            await advance(str(data["instance_id"]))
-
-    @sio.event
-    async def request_rejected(sid: str, data: object) -> None:
-        if not isinstance(data, dict) or current_registration(sid, data) is None:
-            return
-        request_id = str(data.get("request_id", ""))
-        instance_id = str(data["instance_id"])
-        current = in_flight.get(instance_id)
-        if current is None or current["request_id"] != request_id:
-            return
-        snapshot = management.state.request_store.update(
-            request_id,
-            status="failed",
-            result=None,
-            error={
-                "code": str(data.get("code", "request_rejected")),
-                "message": str(data.get("code", "request_rejected")),
-                "details": {},
-                "retryable": data.get("code") == "result_buffer_full",
-            },
-            completed_at=_now(),
-        )
-        if snapshot is not None:
-            await advance(instance_id)
+            await require_lifecycle().disconnect(adapter.instance_id, adapter.connection_id)
+        if adapter.task is not asyncio.current_task():
+            await stop_sender(adapter)
 
     return socketio.ASGIApp(sio, other_asgi_app=management)
 
 
-def _now() -> str:
-    return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+async def _cancel_and_wait(task: asyncio.Task[None]) -> None:
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
 
 
-def _normalize_command_result(command: object, result: object) -> object:
-    """Restore public nullable fields omitted by locked SocketIO DAT transport."""
-    result = _decode_wire_value(result)
-    if not isinstance(command, dict) or not isinstance(result, dict):
-        return result
-    normalized = dict(result)
-    name = command.get("name")
-    if name == "batch.execute":
-        command_input = command.get("input")
-        nested_commands = command_input.get("commands") if isinstance(command_input, dict) else None
-        nested_results = normalized.get("results")
-        if isinstance(nested_commands, list) and isinstance(nested_results, list):
-            normalized["results"] = [
-                _normalize_command_result(nested_command, nested_result)
-                for nested_command, nested_result in zip(
-                    nested_commands, nested_results, strict=False
-                )
-            ]
-    elif name in {"ops.connect", "ops.hierarchy.connect"}:
-        normalized.setdefault("previous_connection", None)
-    elif name in {"ops.connections", "ops.hierarchy.connections"} and isinstance(
-        normalized.get("inputs"), list
+async def _run_cleanup_steps(steps: Iterable[Callable[[], Awaitable[None]]]) -> None:
+    """Run every owned cleanup step, then surface the first failure."""
+    first_failure: BaseException | None = None
+    for step in steps:
+        try:
+            await step()
+        except asyncio.CancelledError as error:
+            if first_failure is None:
+                first_failure = error
+        except Exception as error:  # noqa: BLE001 - cleanup must continue through failure
+            if first_failure is None:
+                first_failure = error
+    if first_failure is not None:
+        raise first_failure
+
+
+def _effect_outbound(effect: LifecycleEffect, drain_timeout: float) -> _Outbound | None:
+    envelope = {
+        "instance_id": effect.instance_id,
+        "connection_id": effect.connection_id,
+    }
+    if effect.kind == "registered":
+        return _Outbound("registered", {**envelope, "protocol_version": 2})
+    if effect.kind == "request_dispatch":
+        return _Outbound("request_dispatch", {**effect.payload, **envelope})
+    if effect.kind == "request_execute":
+        return _Outbound(
+            "request_execute",
+            {
+                **envelope,
+                "request_id": effect.request_id,
+                "execution_id": effect.execution_id,
+            },
+        )
+    if effect.kind in {"outcome_recorded", "record_release"}:
+        return _Outbound(
+            effect.kind,
+            {
+                **envelope,
+                "request_id": effect.request_id,
+                "execution_id": effect.execution_id,
+            },
+        )
+    if effect.kind == "daemon_draining":
+        return _Outbound("daemon_draining", {"deadline_seconds": drain_timeout})
+    if effect.kind == "connection_expired":
+        return _Outbound(disconnect=True)
+    return None
+
+
+def _registration(data: object) -> tuple[str, str, list[str]] | None:
+    if not isinstance(data, dict):
+        return None
+    versions = data.get("protocol_versions")
+    try:
+        instance_id = str(uuid.UUID(str(data.get("instance_id"))))
+    except ValueError:
+        return None
+    if (
+        not isinstance(versions, list)
+        or any(type(version) is not int for version in versions)
+        or versions != [2]
+        or data.get("td_build") != LOCKED_TOUCHDESIGNER_VERSION
     ):
-        normalized["inputs"] = [
-            {**item, "connection": item.get("connection")} if isinstance(item, dict) else item
-            for item in normalized["inputs"]
-        ]
-    elif name == "ops.copy" and "include_docked" in normalized:
-        normalized["include_docked"] = bool(normalized["include_docked"])
-    elif name == "ops.tox.import":
-        for field in ("trusted", "replaced", "rollback_performed"):
-            if field in normalized:
-                normalized[field] = bool(normalized[field])
-    elif name in {"ops.state.get", "ops.state.set"} and isinstance(normalized.get("state"), dict):
-        state = dict(normalized["state"])
-        for field in OPERATOR_STATE_BOOLEAN_FIELDS:
-            if field in state:
-                state[field] = bool(state[field])
-        normalized["state"] = state
-    elif name == "ops.inspect":
-        for section, fields in {
-            "cook": ("cooked_this_frame", "cooked_previous_frame"),
-            "flags": ("display", "render"),
-        }.items():
-            values = normalized.get(section)
-            if isinstance(values, dict):
-                normalized[section] = {
-                    **values,
-                    **{field: bool(values[field]) for field in fields if field in values},
-                }
-        details = normalized.get("details")
-        if isinstance(details, dict):
-            if normalized.get("family") == "DAT":
-                details.setdefault("editing_file", None)
-            for field in ("time_slice", "export", "editable", "template", "compare"):
-                if field in details:
-                    details[field] = bool(details[field])
-            normalized["details"] = details
-    elif name == "parameters.list" and isinstance(normalized.get("parameters"), list):
-        parameters = []
-        for item in normalized["parameters"]:
-            if not isinstance(item, dict):
-                parameters.append(item)
-                continue
-            descriptor = dict(item)
-            descriptor.setdefault("page", None)
-            descriptor.setdefault("unsupported_reason", None)
-            descriptor.setdefault("sequence", None)
-            descriptor.setdefault("source", None)
-            descriptor.setdefault("bounds", None)
-            descriptor.setdefault("max_operator_paths", None)
-            expression = descriptor.get("expression")
-            if isinstance(expression, dict):
-                descriptor["expression"] = {**expression, "source": expression.get("source")}
-            if descriptor.get("value_kind") == "menu":
-                descriptor.setdefault("menu_names", [])
-                descriptor.setdefault("menu_labels", [])
-            else:
-                descriptor.setdefault("menu_names", None)
-                descriptor.setdefault("menu_labels", None)
-            parameters.append(descriptor)
-        normalized["parameters"] = parameters
-    elif name in {"parameters.get", "parameters.set"}:
-        normalized.setdefault("source", None)
-        normalized.setdefault("unsupported_reason", None)
-        if normalized.get("value_type") in {"operator", "python", "sequence", "unknown"}:
-            normalized.setdefault("value", None)
-    elif name in {"parameters.sequence.get", "parameters.sequence.replace"}:
-        normalized.setdefault("max_blocks", None)
-        for block in normalized.get("blocks", []):
-            if not isinstance(block, dict):
-                continue
-            block.setdefault("name", None)
-            for parameter in block.get("parameters", []):
-                if isinstance(parameter, dict):
-                    parameter.setdefault("value", None)
-    return normalized
+        return None
+    capabilities = data.get("capabilities")
+    if not isinstance(capabilities, list) or not all(
+        isinstance(capability, str) for capability in capabilities
+    ):
+        return None
+    return instance_id, str(data.get("agent_version", "unknown")), capabilities
+
+
+def _current(
+    by_sid: dict[str, _ConnectionAdapter], sid: str, data: object
+) -> _ConnectionAdapter | None:
+    if not isinstance(data, dict):
+        return None
+    adapter = by_sid.get(sid)
+    if adapter is None:
+        return None
+    if (
+        data.get("instance_id") != adapter.instance_id
+        or data.get("connection_id") != adapter.connection_id
+    ):
+        return None
+    return adapter
+
+
+def _log_effect(effect: LifecycleEffect) -> None:
+    LOGGER.info(
+        json.dumps(
+            {
+                "event": effect.kind,
+                "instance_id": effect.instance_id,
+                "connection_id": effect.connection_id,
+                "request_id": effect.request_id,
+                "execution_id": effect.execution_id,
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    )
 
 
 def _decode_wire_value(value: object) -> object:
@@ -484,6 +604,10 @@ def _decode_wire_value(value: object) -> object:
     if isinstance(value, list):
         return [_decode_wire_value(item) for item in value]
     return value
+
+
+def _now() -> str:
+    return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def _selector(instance_id: str, all_ids: list[str]) -> str:

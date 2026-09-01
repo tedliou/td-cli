@@ -1,5 +1,6 @@
 """Build `td-agent.tox` inside TouchDesigner 2025.32050 from canonical text."""
 
+import builtins
 import hashlib
 import json
 from pathlib import Path
@@ -17,19 +18,18 @@ def locked_touchdesigner_version(application):
     return touchdesigner_version
 
 
-def activate_agent_runtime(agent, extension_dat, heartbeat_dat, socket_dat, auth_table):
+def configure_agent_runtime(agent, extension_dat, heartbeat_dat, socket_dat, auth_table):
+    del extension_dat, auth_table
     agent.par.ext0object = (
         "op('./agent_extension').module.AgentExt(me, project_info=project, app_info=app)"
     )
     agent.par.ext0name = "Agent"
     agent.par.ext0promote = True
-    agent.par.reinitextensions.pulse()
-    if not hasattr(agent.ext, "Agent"):
-        raise RuntimeError("Agent extension failed to initialize")
-    agent.ext.Agent.refresh_auth(auth_table)
-    heartbeat_dat.par.start = True
-    heartbeat_dat.par.framestart = True
-    socket_dat.par.active = True
+    agent.par.initextonstart = True
+    heartbeat_dat.par.start = False
+    heartbeat_dat.par.create = False
+    heartbeat_dat.par.framestart = False
+    socket_dat.par.active = False
 
 
 def build(source_dir, output_path, source_revision):
@@ -61,11 +61,14 @@ def build(source_dir, output_path, source_revision):
         "registered",
         "registration_error",
         "request_dispatch",
-        "result_recorded",
+        "request_execute",
+        "outcome_recorded",
+        "record_release",
         "daemon_draining",
     ):
         events.appendRow([event])
     auth = agent.create(tableDAT, "auth_table")  # type: ignore[name-defined]
+    auth.clear()
     socket_dat = agent.create(socketioDAT, "socketio1")  # type: ignore[name-defined]
     socket_dat.par.active = False
     socket_dat.par.url = "http://127.0.0.1:9982"
@@ -79,8 +82,14 @@ def build(source_dir, output_path, source_revision):
     if generated_callbacks and generated_callbacks != callbacks_dat:
         generated_callbacks.destroy()
 
-    activate_agent_runtime(agent, extension_dat, heartbeat_dat, socket_dat, auth)
-    agent.save(str(output))
+    builtins._td_cli_building_artifact = True
+    try:
+        configure_agent_runtime(agent, extension_dat, heartbeat_dat, socket_dat, auth)
+        socket_dat.par.active = False
+        auth.clear()
+        agent.save(str(output))
+    finally:
+        del builtins._td_cli_building_artifact
     operators = sorted(child.name for child in agent.children)
     evidence = {
         "source_revision": source_revision,

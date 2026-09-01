@@ -7,6 +7,7 @@ import json
 import math
 import os
 import re
+import time
 import uuid
 from pathlib import Path
 from typing import ClassVar
@@ -2382,8 +2383,10 @@ class OperatorControl:
 
 
 class AgentExt:
-    MAX_UNCONFIRMED_RESULTS = 256
-    MAX_RESULT_BYTES = 256 * 1024
+    MAX_EXECUTION_RECORDS = 64
+    MAX_OUTCOME_BYTES = 256 * 1024
+    OUTCOME_CHUNK_BYTES = 24 * 1024
+    MAX_TOTAL_OUTCOME_BYTES = 16 * 1024 * 1024
 
     CAPABILITIES = tuple(OperatorControl.HANDLERS) + (
         "batch.execute",
@@ -2408,6 +2411,9 @@ class AgentExt:
             manifest = json.loads(manifest_dat.text)
             self.agent_version = str(manifest["agent_version"])
             self.protocol_versions = [int(version) for version in manifest["protocol_versions"]]
+            self.read_only_commands = frozenset(
+                str(name) for name in manifest["read_only_commands"]
+            )
             operator_catalog = OperatorCatalog(json.loads(catalog_dat.text))
         except (KeyError, TypeError, ValueError) as error:
             raise RuntimeError("Operator catalog DAT is invalid") from error
@@ -2423,23 +2429,77 @@ class AgentExt:
         state = getattr(builtins, "_td_cli_agent_state", None)
         if state is None or state["runtime_session_id"] != runtime_session_id:
             state = {
+                "state_version": 2,
                 "runtime_session_id": runtime_session_id,
                 "instance_id": str(uuid.uuid4()),
-                "pending_results": {},
-                "seen_commands": {},
+                "execution_records": {},
+                "outcome_bytes": 0,
                 "events": [],
                 "next_event_id": 1,
+                "socket_generations": [],
+                "current_socket_generation": None,
+                "heartbeat_emissions": 0,
+            }
+            builtins._td_cli_agent_state = state
+        elif state.get("state_version") != 2:
+            state = {
+                "state_version": 2,
+                "runtime_session_id": runtime_session_id,
+                "instance_id": state["instance_id"],
+                "execution_records": {},
+                "outcome_bytes": 0,
+                "events": state.get("events", []),
+                "next_event_id": state.get("next_event_id", 1),
+                "socket_generations": [],
+                "current_socket_generation": None,
+                "heartbeat_emissions": 0,
             }
             builtins._td_cli_agent_state = state
         self.instance_id = state["instance_id"]
-        self.pending_results = state["pending_results"]
-        self.seen_commands = state["seen_commands"]
+        self.execution_records = state["execution_records"]
         self.events = state.setdefault("events", [])
         state.setdefault("next_event_id", 1)
+        state.setdefault("socket_generations", [])
+        state.setdefault("current_socket_generation", None)
+        state.setdefault("heartbeat_emissions", 0)
         self._state = state
         self.connection_id = None
         self.draining = False
         self.last_heartbeat_at = 0.0
+        self._heartbeat_generation = None
+        self.runtime_active = False
+
+    def onInitTD(self):
+        if getattr(builtins, "_td_cli_building_artifact", False):
+            return
+        auth_table = self.owner_comp.op("auth_table")
+        socket_dat = self.owner_comp.op("socketio1")
+        if auth_table is None or socket_dat is None:
+            raise RuntimeError("Agent runtime operators are required")
+        self.runtime_active = False
+        socket_dat.par.active = False
+        auth_table.clear()
+        try:
+            self.refresh_auth(auth_table)
+            socket_dat.par.active = True
+            socket_dat.par.reset.pulse()
+        except Exception:
+            socket_dat.par.active = False
+            auth_table.clear()
+            raise
+        self.runtime_active = True
+
+    def onDestroyTD(self):
+        self.runtime_active = False
+        self._state["current_socket_generation"] = None
+        self.connection_id = None
+        self.stop_heartbeat()
+        socket_dat = self.owner_comp.op("socketio1")
+        if socket_dat is not None:
+            socket_dat.par.active = False
+        auth_table = self.owner_comp.op("auth_table")
+        if auth_table is not None:
+            auth_table.clear()
 
     def registration_payload(self):
         return {
@@ -2458,40 +2518,235 @@ class AgentExt:
             "status": "draining" if self.draining else "online",
         }
 
-    def accept(self, request):
-        request_id = request["request_id"]
-        canonical = json.dumps(request["command"], separators=(",", ":"), sort_keys=True)
-        if request_id in self.seen_commands:
-            if self.seen_commands[request_id] != canonical:
-                return "request_rejected", {"request_id": request_id, "code": "request_id_conflict"}
-            if request_id in self.pending_results:
-                return "request_result", self.pending_results[request_id]
+    def rebind_connection(self, connection_id):
+        self.connection_id = connection_id
+        for record in self.execution_records.values():
+            record["connection_id"] = connection_id
+            if record["phase"] == "outcome":
+                record["outcome"]["connection_id"] = connection_id
+
+    def begin_socket_generation(self):
+        generation = str(uuid.uuid4())
+        self._state["socket_generations"].append(generation)
+        self._state["current_socket_generation"] = generation
+        return generation
+
+    def end_socket_generation(self):
+        generations = self._state["socket_generations"]
+        if not generations:
+            return False
+        generation = generations.pop(0)
+        if generation != self._state["current_socket_generation"]:
+            return False
+        self._state["current_socket_generation"] = None
+        self.connection_id = None
+        self.stop_heartbeat()
+        return True
+
+    def start_heartbeat(self):
+        self._heartbeat_generation = str(uuid.uuid4())
+        return self._heartbeat_generation
+
+    def stop_heartbeat(self):
+        self._heartbeat_generation = None
+
+    def heartbeat_active(self, generation):
+        return generation == self._heartbeat_generation
+
+    def mark_heartbeat(self):
+        self.last_heartbeat_at = time.monotonic()
+        self._state["heartbeat_emissions"] += 1
+
+    def reserve(self, request):
+        request_id = str(request.get("request_id", ""))
+        envelope = self._request_envelope(request_id)
+        if (
+            request.get("instance_id") != self.instance_id
+            or request.get("connection_id") != self.connection_id
+        ):
+            return "request_rejected", {**envelope, "code": "request_identity_invalid"}
+        command = request.get("command")
+        canonical = json.dumps(command, separators=(",", ":"), sort_keys=True)
+        existing = self.execution_records.get(request_id)
+        if existing is not None:
+            if (
+                existing["canonical_command"] != canonical
+                or existing["instance_id"] != self.instance_id
+                or existing["connection_id"] != self.connection_id
+            ):
+                return "request_rejected", {**envelope, "code": "request_id_conflict"}
+            if existing["phase"] == "outcome":
+                return "request_outcome", dict(existing["outcome"])
+            return "request_accepted", envelope
         if self.draining:
-            return "request_rejected", {"request_id": request_id, "code": "instance_draining"}
-        if len(self.pending_results) >= self.MAX_UNCONFIRMED_RESULTS:
-            return "request_rejected", {"request_id": request_id, "code": "result_buffer_full"}
-        self.seen_commands[request_id] = canonical
-        try:
-            command = request["command"]
-            command_result = self.execute_command(command)
-        except AgentCommandError as error:
-            self._record_event("command.failed", request_id, error.code)
-            return "request_rejected", {"request_id": request_id, "code": error.code}
-        except Exception:  # noqa: BLE001 - convert TD runtime failures to a wire error
-            self._record_event("command.failed", request_id, "internal_error")
-            return "request_rejected", {"request_id": request_id, "code": "internal_error"}
-        result = {
+            return "request_rejected", {**envelope, "code": "instance_draining"}
+        if len(self.execution_records) >= self.MAX_EXECUTION_RECORDS:
+            return "request_rejected", {**envelope, "code": "execution_capacity_full"}
+        self.execution_records[request_id] = {
             "request_id": request_id,
             "instance_id": self.instance_id,
             "connection_id": self.connection_id,
-            "result": self._wire_value(command_result),
+            "canonical_command": canonical,
+            "command": command,
+            "phase": "reserved",
+            "execution_id": None,
+            "outcome": None,
+            "outcome_bytes": 0,
         }
-        if len(json.dumps(result, separators=(",", ":")).encode("utf-8")) > self.MAX_RESULT_BYTES:
-            self._record_event("command.failed", request_id, "result_too_large")
-            return "request_rejected", {"request_id": request_id, "code": "result_too_large"}
-        self.pending_results[request_id] = result
-        self._record_event("command.succeeded", request_id)
-        return "request_result", result
+        return "request_accepted", envelope
+
+    def authorize(self, message):
+        request_id = str(message.get("request_id", ""))
+        record = self.execution_records.get(request_id)
+        execution_id = str(message.get("execution_id", ""))
+        if (
+            record is None
+            or record["phase"] != "reserved"
+            or message.get("instance_id") != self.instance_id
+            or message.get("connection_id") != self.connection_id
+            or not execution_id
+            or any(
+                other_id != request_id and other["execution_id"] == execution_id
+                for other_id, other in self.execution_records.items()
+            )
+        ):
+            return False
+        record["phase"] = "authorized"
+        record["execution_id"] = execution_id
+        return True
+
+    def execute_authorized(self, request_id, execution_id):
+        record = self.execution_records.get(request_id)
+        if (
+            record is None
+            or record["phase"] != "authorized"
+            or record["execution_id"] != execution_id
+        ):
+            return None
+        record["phase"] = "executing"
+        command = record["command"]
+        status = "succeeded"
+        result = None
+        error_payload = None
+        try:
+            result = self._wire_value(self.execute_command(command))
+        except AgentCommandError as error:
+            status = "unknown" if error.code.endswith("_outcome_unknown") else "failed"
+            error_payload = self._outcome_error(error.code)
+        except Exception:  # noqa: BLE001 - generic TD exceptions require effect classification
+            if command["name"] in self.read_only_commands:
+                status = "failed"
+                error_payload = self._outcome_error("internal_error")
+            else:
+                status = "unknown"
+                error_payload = self._outcome_error("request_outcome_unknown")
+        outcome = {
+            **self._request_envelope(request_id),
+            "execution_id": execution_id,
+            "status": status,
+            "result": result,
+            "error": error_payload,
+        }
+        size = len(json.dumps(outcome, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+        if size > self.MAX_OUTCOME_BYTES:
+            status = "failed" if command["name"] in self.read_only_commands else "unknown"
+            code = "result_too_large" if status == "failed" else "request_outcome_unknown"
+            outcome.update(status=status, result=None, error=self._outcome_error(code))
+            size = len(json.dumps(outcome, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+        if self._state["outcome_bytes"] + size > self.MAX_TOTAL_OUTCOME_BYTES:
+            outcome.update(
+                status="unknown",
+                result=None,
+                error=self._outcome_error("outcome_capacity_exceeded"),
+            )
+            size = len(json.dumps(outcome, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+        record.update(phase="outcome", outcome=outcome, outcome_bytes=size)
+        self._state["outcome_bytes"] += size
+        self._record_event(
+            "command.succeeded" if outcome["status"] == "succeeded" else "command.failed",
+            request_id,
+            None if outcome["status"] == "succeeded" else outcome["error"]["code"],
+        )
+        return dict(outcome)
+
+    def replay_records(self):
+        return [
+            dict(record["outcome"])
+            for _, record in sorted(self.execution_records.items())
+            if record["phase"] == "outcome"
+        ]
+
+    def synchronization_records(self):
+        records = []
+        for request_id, record in sorted(self.execution_records.items()):
+            if record["phase"] == "outcome":
+                records.append({"phase": "outcome", **record["outcome"]})
+            else:
+                records.append(
+                    {
+                        "phase": record["phase"],
+                        "request_id": request_id,
+                        "execution_id": record["execution_id"],
+                    }
+                )
+        return records
+
+    def outcome_chunks(self, outcome):
+        """Encode one retained outcome into bounded, ordered SocketIO events."""
+        payload = json.dumps(outcome, separators=(",", ":"), sort_keys=True)
+        return [
+            {
+                **self._request_envelope(outcome["request_id"]),
+                "execution_id": outcome["execution_id"],
+                "chunk_index": index,
+                "chunk_count": (len(payload) + self.OUTCOME_CHUNK_BYTES - 1)
+                // self.OUTCOME_CHUNK_BYTES,
+                "payload": payload[offset : offset + self.OUTCOME_CHUNK_BYTES],
+            }
+            for index, offset in enumerate(range(0, len(payload), self.OUTCOME_CHUNK_BYTES))
+        ]
+
+    def authorized_records(self):
+        return [
+            (request_id, record["execution_id"])
+            for request_id, record in sorted(self.execution_records.items())
+            if record["phase"] == "authorized"
+        ]
+
+    def retention_snapshot(self):
+        return {
+            "record_count": len(self.execution_records),
+            "outcome_bytes": self._state["outcome_bytes"],
+        }
+
+    def acknowledge_outcome(self, request_id, execution_id=None):
+        record = self.execution_records.get(request_id)
+        if record is None or record["phase"] != "outcome":
+            return False
+        if execution_id is not None and record["execution_id"] != execution_id:
+            return False
+        self._state["outcome_bytes"] -= record["outcome_bytes"]
+        del self.execution_records[request_id]
+        return True
+
+    def release_record(self, request_id):
+        record = self.execution_records.get(request_id)
+        if record is None:
+            return False
+        self._state["outcome_bytes"] -= record["outcome_bytes"]
+        del self.execution_records[request_id]
+        return True
+
+    def _request_envelope(self, request_id):
+        return {
+            "request_id": request_id,
+            "instance_id": self.instance_id,
+            "connection_id": self.connection_id,
+        }
+
+    @staticmethod
+    def _outcome_error(code):
+        return {"code": code, "message": code, "details": {}, "retryable": False}
 
     @classmethod
     def _wire_value(cls, value):
@@ -2514,8 +2769,11 @@ class AgentExt:
             return self._events(payload)
         if name == "batch.execute":
             commands = payload["commands"]
-            for item in commands:
-                self.operator_control.preflight(item)
+            if any(
+                item["name"] not in self.read_only_commands or item["name"] == "batch.execute"
+                for item in commands
+            ):
+                raise AgentCommandError("command_unsupported")
             return {"results": [self.execute_command(item) for item in commands]}
         if name in OperatorControl.HANDLERS:
             return self.operator_control.execute(command)
@@ -2614,9 +2872,6 @@ class AgentExt:
             "family": str(operator.family),
         }
 
-    def acknowledge_result(self, request_id):
-        self.pending_results.pop(request_id, None)
-
     def begin_draining(self):
         self.draining = True
 
@@ -2630,3 +2885,7 @@ class AgentExt:
             raise RuntimeError("auth.token is malformed")
         table.clear()
         table.appendRow(["token", token])
+
+    @staticmethod
+    def clear_auth(table):
+        table.clear()

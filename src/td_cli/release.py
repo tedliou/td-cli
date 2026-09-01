@@ -42,7 +42,7 @@ def validate_agent_stage(stage: Path, *, expected_commit: str | None = None) -> 
     ):
         raise ValueError("Agent Component source commit does not match")
     digest = hashlib.sha256((stage / "td-agent.tox").read_bytes()).hexdigest()
-    if manifest.get("artifact_sha256") != digest:
+    if manifest.get("artifact_sha256") != digest or verification.get("artifact_sha256") != digest:
         raise ValueError("Agent Component artifact digest does not match")
 
 

@@ -15,7 +15,7 @@ from typer._click.exceptions import ClickException, UsageError
 from td_cli import __version__
 from td_cli.client import ClientError, DaemonClient
 from td_cli.command_catalog import MAX_DAT_CONTENT_BYTES, MAX_INSPECTION_ITEMS, MAX_TOX_FILE_BYTES
-from td_cli.protocol import Command
+from td_cli.protocol import PROTOCOL_VERSION, Command
 
 app = typer.Typer(no_args_is_help=True)
 instances_app = typer.Typer()
@@ -50,7 +50,7 @@ app.add_typer(events_app, name="events")
 
 def _print_td_version(value: bool) -> None:
     if value:
-        typer.echo(f"td {__version__} (protocol 1)")
+        typer.echo(f"td {__version__} (protocol {PROTOCOL_VERSION})")
         raise typer.Exit()
 
 
@@ -79,7 +79,7 @@ def _reject_instance_on_query(ctx: typer.Context) -> None:
 
 def _emit(ctx: typer.Context, data: object, *, request: dict[str, Any] | None = None) -> None:
     if ctx.obj["json"]:
-        envelope: dict[str, object] = {"protocol_version": 1, "data": data}
+        envelope: dict[str, object] = {"protocol_version": 2, "data": data}
         if request is not None:
             envelope["request"] = {"request_id": request["request_id"], "status": request["status"]}
         typer.echo(json.dumps(envelope, separators=(",", ":"), ensure_ascii=True))
@@ -101,7 +101,7 @@ def _fail(ctx: typer.Context, error: ClientError) -> None:
     code = exits.get(error.code, 5)
     if ctx.obj["json"]:
         envelope: dict[str, object] = {
-            "protocol_version": 1,
+            "protocol_version": 2,
             "error": {
                 "code": error.code,
                 "message": error.code,
@@ -198,7 +198,7 @@ def version_info(
                 raise
         data = {
             "release_version": __version__,
-            "protocol_versions": [1],
+            "protocol_versions": [2],
             "daemon_release_version": daemon_version,
         }
         original = ctx.obj["json"]
@@ -1193,7 +1193,7 @@ def events_read(
 
 
 def run() -> None:
-    """Run the CLI while preserving Protocol v1 JSON for parser failures."""
+    """Run the CLI while preserving Protocol v2 JSON for parser failures."""
     try:
         exit_code = app(standalone_mode=False)
         if isinstance(exit_code, int) and exit_code:
@@ -1203,7 +1203,7 @@ def run() -> None:
             typer.echo(
                 json.dumps(
                     {
-                        "protocol_version": 1,
+                        "protocol_version": 2,
                         "error": {
                             "code": "invalid_arguments",
                             "message": "invalid_arguments",

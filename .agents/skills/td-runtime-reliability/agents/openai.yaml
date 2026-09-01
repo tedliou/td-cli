@@ -1,0 +1,4 @@
+interface:
+  display_name: "TD Runtime Reliability"
+  short_description: "Review high-risk td-cli runtime reliability changes"
+  default_prompt: "Apply the td-cli runtime reliability workflow to this change."
