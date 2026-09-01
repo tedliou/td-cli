@@ -161,7 +161,7 @@ def unused_port() -> int:
 def registration_payload() -> dict[str, object]:
     return {
         "instance_id": INSTANCE_ID,
-        "protocol_versions": [1],
+        "protocol_versions": [2],
         "agent_version": "0.1.0",
         "td_build": "2025.32050",
         "capabilities": ["ops.get"],
@@ -234,7 +234,7 @@ async def test_agent_authenticates_registers_and_heartbeats_with_connection_gene
             registration_payload(),
         )
         registration = await asyncio.wait_for(registered, 2)
-        assert registration["protocol_version"] == 1
+        assert registration["protocol_version"] == 2
         assert registration["connection_id"] != INSTANCE_ID
 
         await client.emit("heartbeat", registration)
@@ -243,7 +243,7 @@ async def test_agent_authenticates_registers_and_heartbeats_with_connection_gene
         ]
         async with ClientSession() as session:
             response = await session.get(
-                f"http://127.0.0.1:{port}/v1/instances",
+                f"http://127.0.0.1:{port}/v2/instances",
                 headers={"Authorization": f"Bearer {TOKEN}"},
             )
             instance = (await response.json())[0]
@@ -284,10 +284,10 @@ async def test_draining_instance_remains_visible_but_rejects_new_requests(tmp_pa
         await asyncio.wait_for(heartbeat.wait(), 2)
         async with ClientSession() as session:
             headers = {"Authorization": f"Bearer {TOKEN}"}
-            instances = await session.get(f"http://127.0.0.1:{port}/v1/instances", headers=headers)
+            instances = await session.get(f"http://127.0.0.1:{port}/v2/instances", headers=headers)
             assert (await instances.json())[0]["status"] == "draining"
             rejected = await session.post(
-                f"http://127.0.0.1:{port}/v1/requests",
+                f"http://127.0.0.1:{port}/v2/requests",
                 headers=headers,
                 json={
                     "request_id": REQUEST_ID,
@@ -348,7 +348,7 @@ async def test_request_for_offline_instance_is_rejected_before_acceptance(tmp_pa
     try:
         async with ClientSession() as session:
             response = await session.post(
-                f"http://127.0.0.1:{port}/v1/requests",
+                f"http://127.0.0.1:{port}/v2/requests",
                 headers={"Authorization": f"Bearer {TOKEN}"},
                 json={
                     "request_id": REQUEST_ID,
@@ -410,7 +410,7 @@ async def test_durable_request_dispatches_and_result_is_acknowledged(tmp_path: P
         await asyncio.wait_for(registered.wait(), 2)
         async with ClientSession() as session:
             response = await session.post(
-                f"http://127.0.0.1:{port}/v1/requests",
+                f"http://127.0.0.1:{port}/v2/requests",
                 headers={"Authorization": f"Bearer {TOKEN}"},
                 json={
                     "request_id": REQUEST_ID,
@@ -421,7 +421,7 @@ async def test_durable_request_dispatches_and_result_is_acknowledged(tmp_path: P
             assert response.status == 201
             await asyncio.wait_for(result_recorded, 2)
             query = await session.get(
-                f"http://127.0.0.1:{port}/v1/requests/{REQUEST_ID}",
+                f"http://127.0.0.1:{port}/v2/requests/{REQUEST_ID}",
                 headers={"Authorization": f"Bearer {TOKEN}"},
             )
             snapshot = await query.json()
@@ -469,7 +469,7 @@ async def test_requests_dispatch_one_at_a_time_in_fifo_order(tmp_path: Path) -> 
             request_ids = [REQUEST_ID, "018f47ec-7f3b-7a34-8f31-2ad70b6f6e2b"]
             for request_id in request_ids:
                 response = await session.post(
-                    f"http://127.0.0.1:{port}/v1/requests",
+                    f"http://127.0.0.1:{port}/v2/requests",
                     headers={"Authorization": f"Bearer {TOKEN}"},
                     json={
                         "request_id": request_id,
@@ -527,7 +527,7 @@ async def test_thirty_third_request_is_rejected_without_persistence(tmp_path: Pa
             for index in range(32):
                 request_id = f"018f47ec-7f3b-7a34-8f31-{index:012d}"
                 response = await session.post(
-                    f"http://127.0.0.1:{port}/v1/requests",
+                    f"http://127.0.0.1:{port}/v2/requests",
                     headers=headers,
                     json={
                         "request_id": request_id,
@@ -538,7 +538,7 @@ async def test_thirty_third_request_is_rejected_without_persistence(tmp_path: Pa
                 assert response.status == 201
             rejected_id = "018f47ec-7f3b-7a34-8f31-999999999999"
             rejected = await session.post(
-                f"http://127.0.0.1:{port}/v1/requests",
+                f"http://127.0.0.1:{port}/v2/requests",
                 headers=headers,
                 json={
                     "request_id": rejected_id,
@@ -549,7 +549,7 @@ async def test_thirty_third_request_is_rejected_without_persistence(tmp_path: Pa
             assert rejected.status == 409
             assert (await rejected.json())["detail"] == "instance_busy"
             query = await session.get(
-                f"http://127.0.0.1:{port}/v1/requests/{rejected_id}", headers=headers
+                f"http://127.0.0.1:{port}/v2/requests/{rejected_id}", headers=headers
             )
             assert query.status == 404
     finally:
@@ -597,7 +597,7 @@ async def test_disconnect_marks_in_flight_unknown_and_reconnect_resumes_queue(
         async with ClientSession() as session:
             for request_id in request_ids:
                 response = await session.post(
-                    f"http://127.0.0.1:{port}/v1/requests",
+                    f"http://127.0.0.1:{port}/v2/requests",
                     headers=headers,
                     json={
                         "request_id": request_id,
@@ -612,7 +612,7 @@ async def test_disconnect_marks_in_flight_unknown_and_reconnect_resumes_queue(
             await first_client.disconnect()
             for _ in range(50):
                 query = await session.get(
-                    f"http://127.0.0.1:{port}/v1/requests/{request_ids[0]}", headers=headers
+                    f"http://127.0.0.1:{port}/v2/requests/{request_ids[0]}", headers=headers
                 )
                 if (await query.json())["status"] == "unknown":
                     break
@@ -666,7 +666,7 @@ async def test_unadvertised_command_capability_is_rejected_before_fifo(tmp_path:
         await asyncio.wait_for(registered.wait(), 2)
         async with ClientSession() as session:
             response = await session.post(
-                f"http://127.0.0.1:{port}/v1/requests",
+                f"http://127.0.0.1:{port}/v2/requests",
                 headers={"Authorization": f"Bearer {TOKEN}"},
                 json={
                     "request_id": REQUEST_ID,
@@ -722,7 +722,7 @@ async def test_daemon_shutdown_drains_then_recovers_in_flight_and_queued_request
         async with ClientSession() as session:
             for request_id in request_ids:
                 accepted = await session.post(
-                    f"http://127.0.0.1:{port}/v1/requests",
+                    f"http://127.0.0.1:{port}/v2/requests",
                     headers=headers,
                     json={
                         "request_id": request_id,
@@ -732,14 +732,14 @@ async def test_daemon_shutdown_drains_then_recovers_in_flight_and_queued_request
                 )
                 assert accepted.status == 201
             await asyncio.wait_for(dispatched.wait(), 2)
-            stopped = await session.post(f"http://127.0.0.1:{port}/v1/shutdown", headers=headers)
+            stopped = await session.post(f"http://127.0.0.1:{port}/v2/shutdown", headers=headers)
             assert stopped.status == 202
             await asyncio.wait_for(draining.wait(), 2)
             await asyncio.wait_for(shutdown_called.wait(), 2)
             states = []
             for request_id in request_ids:
                 response = await session.get(
-                    f"http://127.0.0.1:{port}/v1/requests/{request_id}", headers=headers
+                    f"http://127.0.0.1:{port}/v2/requests/{request_id}", headers=headers
                 )
                 states.append((await response.json())["status"])
             assert states == ["unknown", "daemon_shutdown"]
@@ -749,7 +749,7 @@ async def test_daemon_shutdown_drains_then_recovers_in_flight_and_queued_request
             await late_client.emit("register", registration_payload())
             await asyncio.wait_for(late_registered.wait(), 2)
             await asyncio.wait_for(late_draining.wait(), 2)
-            instances = await session.get(f"http://127.0.0.1:{port}/v1/instances", headers=headers)
+            instances = await session.get(f"http://127.0.0.1:{port}/v2/instances", headers=headers)
             assert (await instances.json())[0]["status"] == "draining"
     finally:
         if client.connected:
@@ -784,12 +784,12 @@ async def test_missing_application_heartbeat_makes_instance_offline(tmp_path: Pa
         await asyncio.wait_for(registered.wait(), 2)
         async with ClientSession() as session:
             headers = {"Authorization": f"Bearer {TOKEN}"}
-            online = await session.get(f"http://127.0.0.1:{port}/v1/instances", headers=headers)
+            online = await session.get(f"http://127.0.0.1:{port}/v2/instances", headers=headers)
             assert (await online.json())[0]["status"] == "online"
             instances = []
             for _ in range(50):
                 observed = await session.get(
-                    f"http://127.0.0.1:{port}/v1/instances", headers=headers
+                    f"http://127.0.0.1:{port}/v2/instances", headers=headers
                 )
                 instances = await observed.json()
                 if instances and instances[0]["status"] == "offline":

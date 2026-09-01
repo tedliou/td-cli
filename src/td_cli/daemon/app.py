@@ -15,7 +15,7 @@ from pydantic import field_validator
 
 from td_cli import __version__
 from td_cli.daemon.storage import RequestStore
-from td_cli.protocol import Command, RequestSnapshot, StrictModel
+from td_cli.protocol import PROTOCOL_VERSIONS, Command, RequestSnapshot, StrictModel
 
 
 class SubmitRequest(StrictModel):
@@ -73,22 +73,22 @@ def create_app(
         if not secrets.compare_digest(supplied, token):
             raise HTTPException(status_code=404, detail="Not Found")
 
-    @app.get("/v1/health", dependencies=[Depends(authenticate)])
+    @app.get("/v2/health", dependencies=[Depends(authenticate)])
     def health() -> dict[str, object]:
         logging_healthy = runtime_health() if runtime_health is not None else True
         return {
             "ready": logging_healthy,
             "logging_healthy": logging_healthy,
             "release_version": __version__,
-            "protocol_versions": [1],
+            "protocol_versions": list(PROTOCOL_VERSIONS),
             "schema_version": 1,
         }
 
-    @app.get("/v1/instances", dependencies=[Depends(authenticate)])
+    @app.get("/v2/instances", dependencies=[Depends(authenticate)])
     def list_instances() -> list[dict[str, object]]:
         return instances() if instances is not None else []
 
-    @app.post("/v1/shutdown", status_code=202, dependencies=[Depends(authenticate)])
+    @app.post("/v2/shutdown", status_code=202, dependencies=[Depends(authenticate)])
     async def request_shutdown() -> dict[str, bool]:
         if shutdown is not None:
             result = shutdown()
@@ -96,13 +96,16 @@ def create_app(
                 await result
         return {"draining": True}
 
-    @app.post("/v1/requests", status_code=201, dependencies=[Depends(authenticate)])
+    @app.post("/v2/requests", status_code=201, dependencies=[Depends(authenticate)])
     async def submit(payload: SubmitRequest, response: Response) -> dict[str, object]:
         assert store is not None
         existing = store.get(payload.request_id)
         if existing is not None:
             existing_command = Command.model_validate(existing["command"])
-            if existing_command.canonical_json() != payload.command.canonical_json():
+            if (
+                existing["instance_id"] != payload.instance_id
+                or existing_command.canonical_json() != payload.command.canonical_json()
+            ):
                 raise HTTPException(status_code=409, detail="request_id_conflict")
             response.status_code = 200
             return existing
@@ -119,7 +122,7 @@ def create_app(
             await dispatch(snapshot)
         return snapshot
 
-    @app.get("/v1/requests/{request_id}", dependencies=[Depends(authenticate)])
+    @app.get("/v2/requests/{request_id}", dependencies=[Depends(authenticate)])
     def get_request(request_id: str) -> dict[str, object]:
         assert store is not None
         snapshot = store.get(request_id)

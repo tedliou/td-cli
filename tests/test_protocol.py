@@ -19,6 +19,52 @@ def test_command_catalog_is_the_single_command_contract() -> None:
         Command.model_validate({"name": "future.command", "input": {"operator_path": "/project1"}})
 
 
+def test_command_catalog_owns_effect_execution_and_exception_contracts() -> None:
+    assert COMMAND_CATALOG.effect("ops.get") == "read_only"
+    assert COMMAND_CATALOG.execution_class("ops.get") == "fast_read"
+    assert COMMAND_CATALOG.generic_exception_status("ops.get") == "failed"
+
+    assert COMMAND_CATALOG.effect("parameters.set") == "mutation"
+    assert COMMAND_CATALOG.execution_class("parameters.set") == "bounded_mutation"
+    assert COMMAND_CATALOG.generic_exception_status("parameters.set") == "unknown"
+    assert COMMAND_CATALOG.execution_class("ops.tox.import") == "trusted_asset_mutation"
+
+    assert all(COMMAND_CATALOG.effect(name) == "read_only" for name in COMMAND_CATALOG.batch_names)
+    assert "parameters.set" not in COMMAND_CATALOG.batch_names
+    assert "parameters.pulse" not in COMMAND_CATALOG.batch_names
+
+
+def test_command_catalog_normalizes_locked_transport_results() -> None:
+    assert COMMAND_CATALOG.normalize_result(
+        {"name": "ops.connect", "input": {}}, {"connected": True}
+    ) == {"connected": True, "previous_connection": None}
+
+    nested = COMMAND_CATALOG.normalize_result(
+        {
+            "name": "batch.execute",
+            "input": {
+                "commands": [
+                    {
+                        "name": "parameters.get",
+                        "input": {"operator_path": "/project1", "parameter": "display"},
+                    }
+                ]
+            },
+        },
+        {"results": [{"value_type": "operator"}]},
+    )
+    assert nested == {
+        "results": [
+            {
+                "value_type": "operator",
+                "source": None,
+                "unsupported_reason": None,
+                "value": None,
+            }
+        ]
+    }
+
+
 def test_family_inspection_input_is_strict_bounded_and_batchable() -> None:
     assert COMMAND_CATALOG.validate_input("ops.inspect", {"operator_path": "/project1/source"}) == {
         "operator_path": "/project1/source",
@@ -54,7 +100,7 @@ def test_command_has_stable_canonical_json_independent_of_key_order() -> None:
     )
 
 
-def test_request_snapshot_serializes_protocol_v1_public_shape() -> None:
+def test_request_snapshot_serializes_protocol_v2_public_shape() -> None:
     snapshot = RequestSnapshot.pending(
         request_id="018f47ec-7f3b-7a34-8f31-2ad70b6f6e2a",
         instance_id="8cf81688-b9a4-4c39-9f92-31c77319c761",
@@ -67,6 +113,9 @@ def test_request_snapshot_serializes_protocol_v1_public_shape() -> None:
     assert payload["result"] is None
     assert payload["error"] is None
     assert payload["dispatched_at"] is None
+    assert payload["accepted_at"] is None
+    assert payload["execute_authorized_at"] is None
+    assert "started_at" not in payload
 
 
 @pytest.mark.parametrize(
@@ -108,7 +157,7 @@ def test_request_snapshot_serializes_protocol_v1_public_shape() -> None:
         ),
     ],
 )
-def test_protocol_v1_typed_commands_validate_and_canonicalize(
+def test_protocol_v2_typed_commands_validate_and_canonicalize(
     payload: dict[str, object], canonical: str
 ) -> None:
     assert Command.model_validate(payload).canonical_json() == canonical
@@ -228,7 +277,7 @@ def test_parameter_sources_and_sequences_are_strict_and_bounded() -> None:
         },
     ],
 )
-def test_protocol_v1_typed_commands_reject_invalid_input(payload: dict[str, object]) -> None:
+def test_protocol_v2_typed_commands_reject_invalid_input(payload: dict[str, object]) -> None:
     with pytest.raises(ValidationError):
         Command.model_validate(payload)
 
@@ -248,15 +297,7 @@ def test_phase_3_commands_are_strict_and_bounded() -> None:
             "input": {
                 "commands": [
                     {"name": "ops.get", "input": {"operator_path": "/project1"}},
-                    {
-                        "name": "parameters.set",
-                        "input": {
-                            "operator_path": "/project1",
-                            "parameter": "display",
-                            "mode": "constant",
-                            "value": False,
-                        },
-                    },
+                        {"name": "ops.state.get", "input": {"operator_path": "/project1"}},
                 ]
             },
         }

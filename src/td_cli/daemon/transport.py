@@ -14,7 +14,7 @@ from pathlib import Path
 import socketio
 from fastapi import HTTPException
 
-from td_cli.command_catalog import OPERATOR_STATE_BOOLEAN_FIELDS
+from td_cli.command_catalog import COMMAND_CATALOG
 from td_cli.daemon.app import SubmitRequest, create_app
 from td_cli.release import LOCKED_TOUCHDESIGNER_VERSION
 
@@ -48,7 +48,7 @@ def create_transport_app(
     drain_timeout: float = 5,
     runtime_health: Callable[[], bool] | None = None,
 ) -> socketio.ASGIApp:
-    """Create the combined authenticated HTTP and Socket.IO Protocol v1 interface."""
+    """Create the combined authenticated HTTP and Socket.IO Protocol v2 interface."""
     sio = socketio.AsyncServer(
         async_mode="asgi", cors_allowed_origins=[], max_http_buffer_size=256 * 1024
     )
@@ -104,7 +104,7 @@ def create_transport_app(
                 "selector": _selector(item.instance_id, ids),
                 "status": item.status,
                 "agent_version": item.agent_version,
-                "protocol_version": 1,
+                "protocol_version": 2,
                 "capabilities": sorted(item.capabilities),
                 "last_heartbeat_at": item.last_heartbeat_at,
                 "offline_expires_at": item.offline_expires_at,
@@ -171,7 +171,7 @@ def create_transport_app(
         valid_versions = (
             isinstance(versions, list)
             and all(type(version) is int for version in versions)
-            and 1 in versions
+            and 2 in versions
         )
         if (
             not normalized_instance_id
@@ -201,7 +201,7 @@ def create_transport_app(
         connected.discard(sid)
         await sio.emit(
             "registered",
-            {"instance_id": instance_id, "connection_id": connection_id, "protocol_version": 1},
+            {"instance_id": instance_id, "connection_id": connection_id, "protocol_version": 2},
             to=sid,
         )
         if shutting_down:
@@ -319,7 +319,7 @@ def create_transport_app(
         if current is None or current["request_id"] != data.get("request_id"):
             return
         store = management.state.request_store
-        store.update(str(data.get("request_id")), status="running", started_at=_now())
+        store.update(str(data.get("request_id")), status="running", execute_authorized_at=_now())
 
     @sio.event
     async def request_result(sid: str, data: object) -> None:
@@ -380,100 +380,7 @@ def _now() -> str:
 def _normalize_command_result(command: object, result: object) -> object:
     """Restore public nullable fields omitted by locked SocketIO DAT transport."""
     result = _decode_wire_value(result)
-    if not isinstance(command, dict) or not isinstance(result, dict):
-        return result
-    normalized = dict(result)
-    name = command.get("name")
-    if name == "batch.execute":
-        command_input = command.get("input")
-        nested_commands = command_input.get("commands") if isinstance(command_input, dict) else None
-        nested_results = normalized.get("results")
-        if isinstance(nested_commands, list) and isinstance(nested_results, list):
-            normalized["results"] = [
-                _normalize_command_result(nested_command, nested_result)
-                for nested_command, nested_result in zip(
-                    nested_commands, nested_results, strict=False
-                )
-            ]
-    elif name in {"ops.connect", "ops.hierarchy.connect"}:
-        normalized.setdefault("previous_connection", None)
-    elif name in {"ops.connections", "ops.hierarchy.connections"} and isinstance(
-        normalized.get("inputs"), list
-    ):
-        normalized["inputs"] = [
-            {**item, "connection": item.get("connection")} if isinstance(item, dict) else item
-            for item in normalized["inputs"]
-        ]
-    elif name == "ops.copy" and "include_docked" in normalized:
-        normalized["include_docked"] = bool(normalized["include_docked"])
-    elif name == "ops.tox.import":
-        for field in ("trusted", "replaced", "rollback_performed"):
-            if field in normalized:
-                normalized[field] = bool(normalized[field])
-    elif name in {"ops.state.get", "ops.state.set"} and isinstance(normalized.get("state"), dict):
-        state = dict(normalized["state"])
-        for field in OPERATOR_STATE_BOOLEAN_FIELDS:
-            if field in state:
-                state[field] = bool(state[field])
-        normalized["state"] = state
-    elif name == "ops.inspect":
-        for section, fields in {
-            "cook": ("cooked_this_frame", "cooked_previous_frame"),
-            "flags": ("display", "render"),
-        }.items():
-            values = normalized.get(section)
-            if isinstance(values, dict):
-                normalized[section] = {
-                    **values,
-                    **{field: bool(values[field]) for field in fields if field in values},
-                }
-        details = normalized.get("details")
-        if isinstance(details, dict):
-            if normalized.get("family") == "DAT":
-                details.setdefault("editing_file", None)
-            for field in ("time_slice", "export", "editable", "template", "compare"):
-                if field in details:
-                    details[field] = bool(details[field])
-            normalized["details"] = details
-    elif name == "parameters.list" and isinstance(normalized.get("parameters"), list):
-        parameters = []
-        for item in normalized["parameters"]:
-            if not isinstance(item, dict):
-                parameters.append(item)
-                continue
-            descriptor = dict(item)
-            descriptor.setdefault("page", None)
-            descriptor.setdefault("unsupported_reason", None)
-            descriptor.setdefault("sequence", None)
-            descriptor.setdefault("source", None)
-            descriptor.setdefault("bounds", None)
-            descriptor.setdefault("max_operator_paths", None)
-            expression = descriptor.get("expression")
-            if isinstance(expression, dict):
-                descriptor["expression"] = {**expression, "source": expression.get("source")}
-            if descriptor.get("value_kind") == "menu":
-                descriptor.setdefault("menu_names", [])
-                descriptor.setdefault("menu_labels", [])
-            else:
-                descriptor.setdefault("menu_names", None)
-                descriptor.setdefault("menu_labels", None)
-            parameters.append(descriptor)
-        normalized["parameters"] = parameters
-    elif name in {"parameters.get", "parameters.set"}:
-        normalized.setdefault("source", None)
-        normalized.setdefault("unsupported_reason", None)
-        if normalized.get("value_type") in {"operator", "python", "sequence", "unknown"}:
-            normalized.setdefault("value", None)
-    elif name in {"parameters.sequence.get", "parameters.sequence.replace"}:
-        normalized.setdefault("max_blocks", None)
-        for block in normalized.get("blocks", []):
-            if not isinstance(block, dict):
-                continue
-            block.setdefault("name", None)
-            for parameter in block.get("parameters", []):
-                if isinstance(parameter, dict):
-                    parameter.setdefault("value", None)
-    return normalized
+    return COMMAND_CATALOG.normalize_result(command, result)
 
 
 def _decode_wire_value(value: object) -> object:
