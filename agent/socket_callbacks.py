@@ -1,4 +1,4 @@
-"""Canonical SocketIO DAT callbacks using ordinary JSON events."""
+"""Canonical SocketIO DAT callbacks for the Protocol v2 execution handshake."""
 
 
 def onOpen(dat):
@@ -12,26 +12,24 @@ def onReceiveEvent(dat, rowIndex, message, event):
     agent = parent().ext.Agent
     if event == "registered":
         agent.connection_id = message["connection_id"]
-        for result in agent.pending_results.values():
-            result["connection_id"] = agent.connection_id
-            dat.emit("request_result", data=result)
-        dat.emit("results_replayed", data=agent.heartbeat_payload())
+        dat.emit(
+            "execution_sync",
+            data={**agent.heartbeat_payload(), "records": agent.synchronization_records()},
+        )
+        for request_id, execution_id in agent.authorized_records():
+            scheduleExecution(dat, request_id, execution_id)
     elif event == "request_dispatch":
-        envelope = {
-            "request_id": message["request_id"],
-            "instance_id": agent.instance_id,
-            "connection_id": agent.connection_id,
-        }
-        result_event, result = agent.accept(message)
-        if result_event == "request_result":
-            dat.emit("request_accepted", data=envelope)
-        else:
-            result = {**envelope, **result}
-        dat.emit(result_event, data=result)
-    elif event == "result_recorded":
-        agent.acknowledge_result(message["request_id"])
-        if agent.draining and not agent.pending_results:
+        result_event, payload = agent.reserve(message)
+        dat.emit(result_event, data=payload)
+    elif event == "request_execute":
+        if agent.authorize(message):
+            scheduleExecution(dat, message["request_id"], message["execution_id"])
+    elif event == "outcome_recorded":
+        agent.acknowledge_outcome(message["request_id"], message.get("execution_id"))
+        if agent.draining and agent.retention_snapshot()["record_count"] == 0:
             finishDraining(dat)
+    elif event == "record_release":
+        agent.release_record(message["request_id"])
     elif event == "daemon_draining":
         agent.begin_draining()
         dat.emit("heartbeat", data=agent.heartbeat_payload())
@@ -40,21 +38,38 @@ def onReceiveEvent(dat, rowIndex, message, event):
             "op('socket_callbacks').module.resumeAfterDraining(args[0])",
             dat,
             delayMilliSeconds=deadline_milliseconds + 500,
-            fromOP=me,
+            delayRef=op.TDResources,
         )
-        if not agent.pending_results:
+        if agent.retention_snapshot()["record_count"] == 0:
             finishDraining(dat)
         else:
             run(
                 "op('socket_callbacks').module.finishDraining(args[0])",
                 dat,
                 delayMilliSeconds=deadline_milliseconds,
-                fromOP=me,
+                delayRef=op.TDResources,
             )
 
 
+def executeScheduled(dat, request_id, execution_id):
+    outcome = parent().ext.Agent.execute_authorized(request_id, execution_id)
+    if outcome is not None:
+        dat.emit("request_outcome", data=outcome)
+
+
+def scheduleExecution(dat, request_id, execution_id):
+    run(
+        "op('socket_callbacks').module.executeScheduled(args[0], args[1], args[2])",
+        dat,
+        request_id,
+        execution_id,
+        delayMilliSeconds=1,
+        delayRef=op.TDResources,
+    )
+
+
 def onClose(dat, failure):
-    del failure
+    del dat, failure
     parent().ext.Agent.connection_id = None
     parent().ext.Agent.refresh_auth(op("auth_table"))
 

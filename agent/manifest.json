@@ -2,6 +2,7 @@
   "agent_version": "0.2.0",
   "locked_touchdesigner_version": "2025.32050",
   "protocol_versions": [2],
+  "read_only_commands": ["ops.get", "ops.inspect", "ops.children", "ops.connections", "ops.hierarchy.connections", "ops.state.get", "dat.text.get", "dat.table.get", "parameters.get", "parameters.list", "parameters.sequence.get", "project.snapshot", "project.metadata", "binary.export", "events.read", "batch.execute"],
   "required_files": ["extension.py", "socket_callbacks.py", "heartbeat_execute.py", "build_td.py", "touchdesigner-2025.32050-operators.json"],
   "required_operators": ["agent_manifest", "operator_catalog", "agent_extension", "socket_callbacks", "heartbeat_execute", "events_table", "auth_table", "socketio1"]
 }

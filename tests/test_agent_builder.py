@@ -106,7 +106,7 @@ def test_runtime_callbacks_start_only_after_promoted_agent_is_ready() -> None:
     assert agent.extensions[0] is agent.ext.Agent
     assert agent.ext.Agent.auth_table is auth_table
     assert heartbeat.par.start is True
-    assert heartbeat.par.framestart is True
+    assert heartbeat.par.framestart is False
     assert socket.par.active is True
 
 
@@ -214,7 +214,9 @@ def test_canonical_build_removes_unused_generated_socket_callbacks(tmp_path: Pat
         ["registered"],
         ["registration_error"],
         ["request_dispatch"],
-        ["result_recorded"],
+        ["request_execute"],
+        ["outcome_recorded"],
+        ["record_release"],
         ["daemon_draining"],
     ]
     assert evidence["operators"] == [

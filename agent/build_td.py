@@ -28,7 +28,7 @@ def activate_agent_runtime(agent, extension_dat, heartbeat_dat, socket_dat, auth
         raise RuntimeError("Agent extension failed to initialize")
     agent.ext.Agent.refresh_auth(auth_table)
     heartbeat_dat.par.start = True
-    heartbeat_dat.par.framestart = True
+    heartbeat_dat.par.framestart = False
     socket_dat.par.active = True
 
 
@@ -61,7 +61,9 @@ def build(source_dir, output_path, source_revision):
         "registered",
         "registration_error",
         "request_dispatch",
-        "result_recorded",
+        "request_execute",
+        "outcome_recorded",
+        "record_release",
         "daemon_draining",
     ):
         events.appendRow([event])
