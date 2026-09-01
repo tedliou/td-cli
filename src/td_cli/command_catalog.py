@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import PureWindowsPath
@@ -446,17 +447,131 @@ class BatchExecuteInput(StrictModel):
     commands: list[BatchItem] = Field(min_length=1, max_length=16)
 
 
+def _identity_result(result: dict[str, Any]) -> dict[str, Any]:
+    return result
+
+
+def _connection_result(result: dict[str, Any]) -> dict[str, Any]:
+    result.setdefault("previous_connection", None)
+    return result
+
+
+def _connections_result(result: dict[str, Any]) -> dict[str, Any]:
+    if isinstance(result.get("inputs"), list):
+        result["inputs"] = [
+            {**item, "connection": item.get("connection")} if isinstance(item, dict) else item
+            for item in result["inputs"]
+        ]
+    return result
+
+
+def _copy_result(result: dict[str, Any]) -> dict[str, Any]:
+    if "include_docked" in result:
+        result["include_docked"] = bool(result["include_docked"])
+    return result
+
+
+def _import_result(result: dict[str, Any]) -> dict[str, Any]:
+    for field in ("trusted", "replaced", "rollback_performed"):
+        if field in result:
+            result[field] = bool(result[field])
+    return result
+
+
+def _state_result(result: dict[str, Any]) -> dict[str, Any]:
+    if isinstance(result.get("state"), dict):
+        state = dict(result["state"])
+        for field in OPERATOR_STATE_BOOLEAN_FIELDS:
+            if field in state:
+                state[field] = bool(state[field])
+        result["state"] = state
+    return result
+
+
+def _inspection_result(result: dict[str, Any]) -> dict[str, Any]:
+    for section, fields in {
+        "cook": ("cooked_this_frame", "cooked_previous_frame"),
+        "flags": ("display", "render"),
+    }.items():
+        values = result.get(section)
+        if isinstance(values, dict):
+            result[section] = {
+                **values,
+                **{field: bool(values[field]) for field in fields if field in values},
+            }
+    details = result.get("details")
+    if isinstance(details, dict):
+        if result.get("family") == "DAT":
+            details.setdefault("editing_file", None)
+        for field in ("time_slice", "export", "editable", "template", "compare"):
+            if field in details:
+                details[field] = bool(details[field])
+        result["details"] = details
+    return result
+
+
+def _parameter_descriptor(item: object) -> object:
+    if not isinstance(item, dict):
+        return item
+    descriptor = dict(item)
+    for field in (
+        "page",
+        "unsupported_reason",
+        "sequence",
+        "source",
+        "bounds",
+        "max_operator_paths",
+    ):
+        descriptor.setdefault(field, None)
+    expression = descriptor.get("expression")
+    if isinstance(expression, dict):
+        descriptor["expression"] = {**expression, "source": expression.get("source")}
+    menu_default: list[object] | None = [] if descriptor.get("value_kind") == "menu" else None
+    descriptor.setdefault("menu_names", menu_default)
+    descriptor.setdefault("menu_labels", menu_default)
+    return descriptor
+
+
+def _parameter_list_result(result: dict[str, Any]) -> dict[str, Any]:
+    if isinstance(result.get("parameters"), list):
+        result["parameters"] = [_parameter_descriptor(item) for item in result["parameters"]]
+    return result
+
+
+def _parameter_result(result: dict[str, Any]) -> dict[str, Any]:
+    result.setdefault("source", None)
+    result.setdefault("unsupported_reason", None)
+    if result.get("value_type") in {"operator", "python", "sequence", "unknown"}:
+        result.setdefault("value", None)
+    return result
+
+
+def _sequence_result(result: dict[str, Any]) -> dict[str, Any]:
+    result.setdefault("max_blocks", None)
+    for block in result.get("blocks", []):
+        if not isinstance(block, dict):
+            continue
+        block.setdefault("name", None)
+        for parameter in block.get("parameters", []):
+            if isinstance(parameter, dict):
+                parameter.setdefault("value", None)
+    return result
+
+
+ResultNormalizer = Callable[[dict[str, Any]], dict[str, Any]]
+
+
 @dataclass(frozen=True)
 class CommandDefinition:
     name: str
     input_model: type[StrictModel]
     effect: CommandEffect
     execution_class: ExecutionClass
-    batchable: bool = False
+    result_normalizer: ResultNormalizer = _identity_result
 
-    def __post_init__(self) -> None:
-        if self.batchable and self.effect is not CommandEffect.READ_ONLY:
-            raise ValueError("Only read-only Commands may be batchable")
+    @property
+    def batchable(self) -> bool:
+        return self.effect is CommandEffect.READ_ONLY and self.name != "batch.execute"
 
 
 class CommandEffect(StrEnum):
@@ -508,11 +623,13 @@ class CommandCatalog:
         return "failed" if self.effect(name) is CommandEffect.READ_ONLY else "unknown"
 
     def normalize_result(self, command: object, result: object) -> object:
-        """Restore nullable fields and wire-safe scalar types for a Command result."""
+        """Restore public result facts owned by the matching Command definition."""
         if not isinstance(command, dict) or not isinstance(result, dict):
             return result
-        normalized = dict(result)
         name = command.get("name")
+        if not isinstance(name, str):
+            return result
+        normalized = dict(result)
         if name == "batch.execute":
             command_input = command.get("input")
             nested_commands = (
@@ -526,93 +643,7 @@ class CommandCatalog:
                         nested_commands, nested_results, strict=False
                     )
                 ]
-        elif name in {"ops.connect", "ops.hierarchy.connect"}:
-            normalized.setdefault("previous_connection", None)
-        elif name in {"ops.connections", "ops.hierarchy.connections"} and isinstance(
-            normalized.get("inputs"), list
-        ):
-            normalized["inputs"] = [
-                {**item, "connection": item.get("connection")} if isinstance(item, dict) else item
-                for item in normalized["inputs"]
-            ]
-        elif name == "ops.copy" and "include_docked" in normalized:
-            normalized["include_docked"] = bool(normalized["include_docked"])
-        elif name == "ops.tox.import":
-            for field in ("trusted", "replaced", "rollback_performed"):
-                if field in normalized:
-                    normalized[field] = bool(normalized[field])
-        elif name in {"ops.state.get", "ops.state.set"} and isinstance(
-            normalized.get("state"), dict
-        ):
-            state = dict(normalized["state"])
-            for field in OPERATOR_STATE_BOOLEAN_FIELDS:
-                if field in state:
-                    state[field] = bool(state[field])
-            normalized["state"] = state
-        elif name == "ops.inspect":
-            for section, fields in {
-                "cook": ("cooked_this_frame", "cooked_previous_frame"),
-                "flags": ("display", "render"),
-            }.items():
-                values = normalized.get(section)
-                if isinstance(values, dict):
-                    normalized[section] = {
-                        **values,
-                        **{field: bool(values[field]) for field in fields if field in values},
-                    }
-            details = normalized.get("details")
-            if isinstance(details, dict):
-                if normalized.get("family") == "DAT":
-                    details.setdefault("editing_file", None)
-                for field in ("time_slice", "export", "editable", "template", "compare"):
-                    if field in details:
-                        details[field] = bool(details[field])
-                normalized["details"] = details
-        elif name == "parameters.list" and isinstance(normalized.get("parameters"), list):
-            parameters = []
-            for item in normalized["parameters"]:
-                if not isinstance(item, dict):
-                    parameters.append(item)
-                    continue
-                descriptor = dict(item)
-                for field in (
-                    "page",
-                    "unsupported_reason",
-                    "sequence",
-                    "source",
-                    "bounds",
-                    "max_operator_paths",
-                ):
-                    descriptor.setdefault(field, None)
-                expression = descriptor.get("expression")
-                if isinstance(expression, dict):
-                    descriptor["expression"] = {
-                        **expression,
-                        "source": expression.get("source"),
-                    }
-                if descriptor.get("value_kind") == "menu":
-                    descriptor.setdefault("menu_names", [])
-                    descriptor.setdefault("menu_labels", [])
-                else:
-                    descriptor.setdefault("menu_names", None)
-                    descriptor.setdefault("menu_labels", None)
-                parameters.append(descriptor)
-            normalized["parameters"] = parameters
-        elif name in {"parameters.get", "parameters.set"}:
-            normalized.setdefault("source", None)
-            normalized.setdefault("unsupported_reason", None)
-            if normalized.get("value_type") in {"operator", "python", "sequence", "unknown"}:
-                normalized.setdefault("value", None)
-        elif name in {"parameters.sequence.get", "parameters.sequence.replace"}:
-            normalized.setdefault("max_blocks", None)
-            for block in normalized.get("blocks", []):
-                if not isinstance(block, dict):
-                    continue
-                block.setdefault("name", None)
-                for parameter in block.get("parameters", []):
-                    if isinstance(parameter, dict):
-                        parameter.setdefault("value", None)
-        return normalized
+        return self._definition(name).result_normalizer(normalized)
 
     def _definition(self, name: str) -> CommandDefinition:
         definition = self._by_name.get(name)
@@ -624,51 +655,54 @@ class CommandCatalog:
 COMMAND_CATALOG = CommandCatalog(
     (
         CommandDefinition(
-            "ops.get", OperatorInput, CommandEffect.READ_ONLY, ExecutionClass.FAST_READ, True
+            "ops.get", OperatorInput, CommandEffect.READ_ONLY, ExecutionClass.FAST_READ
         ),
         CommandDefinition(
             "ops.inspect",
             InspectOperatorInput,
             CommandEffect.READ_ONLY,
             ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
-            True,
+            _inspection_result,
         ),
         CommandDefinition(
             "ops.children",
             ChildrenInput,
             CommandEffect.READ_ONLY,
             ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
-            True,
         ),
         CommandDefinition(
             "ops.connections",
             ConnectionsInput,
             CommandEffect.READ_ONLY,
             ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
-            True,
+            _connections_result,
         ),
         CommandDefinition(
             "ops.hierarchy.connections",
             ConnectionsInput,
             CommandEffect.READ_ONLY,
             ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
-            True,
+            _connections_result,
         ),
         CommandDefinition(
-            "ops.state.get", OperatorInput, CommandEffect.READ_ONLY, ExecutionClass.FAST_READ, True
+            "ops.state.get",
+            OperatorInput,
+            CommandEffect.READ_ONLY,
+            ExecutionClass.FAST_READ,
+            _state_result,
         ),
         CommandDefinition(
             "ops.state.set",
             SetOperatorStateInput,
             CommandEffect.MUTATION,
             ExecutionClass.BOUNDED_MUTATION,
+            _state_result,
         ),
         CommandDefinition(
             "dat.text.get",
             TextDatReadInput,
             CommandEffect.READ_ONLY,
             ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
-            True,
         ),
         CommandDefinition(
             "dat.text.set", TextDatSetInput, CommandEffect.MUTATION, ExecutionClass.BOUNDED_MUTATION
@@ -678,7 +712,6 @@ COMMAND_CATALOG = CommandCatalog(
             TableDatReadInput,
             CommandEffect.READ_ONLY,
             ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
-            True,
         ),
         CommandDefinition(
             "dat.table.replace",
@@ -697,20 +730,21 @@ COMMAND_CATALOG = CommandCatalog(
             ParameterInput,
             CommandEffect.READ_ONLY,
             ExecutionClass.FAST_READ,
-            True,
+            _parameter_result,
         ),
         CommandDefinition(
             "parameters.list",
             OperatorInput,
             CommandEffect.READ_ONLY,
             ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
-            True,
+            _parameter_list_result,
         ),
         CommandDefinition(
             "parameters.set",
             SetParameterInput,
             CommandEffect.MUTATION,
             ExecutionClass.BOUNDED_MUTATION,
+            _parameter_result,
         ),
         CommandDefinition(
             "parameters.pulse",
@@ -723,13 +757,14 @@ COMMAND_CATALOG = CommandCatalog(
             SequenceInput,
             CommandEffect.READ_ONLY,
             ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
-            True,
+            _sequence_result,
         ),
         CommandDefinition(
             "parameters.sequence.replace",
             ReplaceSequenceInput,
             CommandEffect.MUTATION,
             ExecutionClass.BOUNDED_MUTATION,
+            _sequence_result,
         ),
         CommandDefinition(
             "ops.create",
@@ -750,7 +785,11 @@ COMMAND_CATALOG = CommandCatalog(
             ExecutionClass.BOUNDED_MUTATION,
         ),
         CommandDefinition(
-            "ops.copy", CopyOperatorInput, CommandEffect.MUTATION, ExecutionClass.BOUNDED_MUTATION
+            "ops.copy",
+            CopyOperatorInput,
+            CommandEffect.MUTATION,
+            ExecutionClass.BOUNDED_MUTATION,
+            _copy_result,
         ),
         CommandDefinition(
             "ops.move", MoveOperatorInput, CommandEffect.MUTATION, ExecutionClass.BOUNDED_MUTATION
@@ -760,12 +799,14 @@ COMMAND_CATALOG = CommandCatalog(
             ImportToxInput,
             CommandEffect.MUTATION,
             ExecutionClass.TRUSTED_ASSET_MUTATION,
+            _import_result,
         ),
         CommandDefinition(
             "ops.connect",
             ConnectOperatorsInput,
             CommandEffect.MUTATION,
             ExecutionClass.BOUNDED_MUTATION,
+            _connection_result,
         ),
         CommandDefinition(
             "ops.disconnect",
@@ -778,6 +819,7 @@ COMMAND_CATALOG = CommandCatalog(
             ConnectOperatorsInput,
             CommandEffect.MUTATION,
             ExecutionClass.BOUNDED_MUTATION,
+            _connection_result,
         ),
         CommandDefinition(
             "ops.hierarchy.disconnect",

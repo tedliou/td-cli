@@ -1,6 +1,9 @@
+import asyncio
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 
 from td_cli.daemon.app import create_app
 
@@ -109,3 +112,37 @@ def test_submission_requires_uuid7_request_id(tmp_path: Path) -> None:
             },
         )
         assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_cancelled_http_admission_does_not_create_partial_request(tmp_path: Path) -> None:
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def blocked_admission(snapshot):
+        del snapshot
+        entered.set()
+        await release.wait()
+        raise AssertionError("cancelled admission resumed")
+
+    app = create_app(tmp_path, token=TOKEN, admit=blocked_admission)
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        submission = asyncio.create_task(
+            client.post(
+                "/v2/requests",
+                headers=headers(),
+                json={
+                    "request_id": REQUEST_ID,
+                    "instance_id": INSTANCE_ID,
+                    "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
+                },
+            )
+        )
+        await entered.wait()
+        submission.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await submission
+        assert await app.state.request_store.get(REQUEST_ID) is None

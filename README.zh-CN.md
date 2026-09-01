@@ -86,6 +86,12 @@ uv run td-daemon serve
 `run\daemon.json`。只有在 Daemon 停止时删除 `state\auth.token` 才是手动 token recovery；之後
 所有 Agent Component 都必须重新连接。
 
+Protocol v2 是唯一 runtime protocol，不提供 v1 alias 或 fallback。Request 依次经过
+`queued`、`dispatched`、`accepted`、`running` 后才进入终态。Daemon 必须先持久化再派发，
+每个 Instance 依 FIFO 仅允许一个已授权 Request，且每次重连都以新的 Connection ID 隔离。
+授权后断线会成为 `unknown`；td-cli 绝不自动重试，但同一 execution 保留的结果之后可将它细化为
+`succeeded` 或 `failed`。
+
 <!-- doc-section: agent-component -->
 
 ## Agent Component
@@ -102,6 +108,14 @@ Artifact inspection 需要 locked TouchDesigner build 产生的相邻
 `td-agent.tox.manifest.json`。它将 artifact 绑定至 canonical source revision、
 TouchDesigner `2025.32050` 与必要 DAT／Operator topology。实际 `.tox` 建置及 Online Instance
 验证必须在固定版本 TouchDesigner 环境完成。
+
+Agent 在发出 `request_accepted` 前会先保留有界 outcome 容量，只执行符合 immutable execution
+authorization 的工作，并保留所有 post-accept `succeeded`、`failed`、`unknown` outcome，直到
+Daemon 完成记录。上限为 64 条、每条 canonical outcome 256 KiB、合计 16 MiB。Command、
+超过锁定版 SocketIO DAT 单一事件实测范围的 outcome，会拆成依序且经过 identity 验证的 24 KiB
+区块，重组完成后才提交公开结果。Command、heartbeat 与 drain timer 使用 TouchDesigner
+独立的 `TDResources` 时间参考，所有 TouchDesigner object 访问仍只在主线程。Extension
+初始化使用官方 SocketIO Reset 参数，连接后清除暂存 auth DAT。Power Off 模式不受支持。
 
 <!-- doc-section: operator-control -->
 

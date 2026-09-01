@@ -12,7 +12,7 @@ from typing import Any, TypeVar
 
 T = TypeVar("T")
 SCHEMA_VERSION = 2
-LOGGER = logging.getLogger("td_cli.store")
+LOGGER = logging.getLogger("td_cli.daemon.storage")
 _MUTABLE_COLUMNS = {
     "status": "status",
     "execution_id": "execution_id",

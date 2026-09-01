@@ -134,6 +134,83 @@ class FakeOwner:
         return None
 
 
+class FakeAuthTable:
+    def __init__(self) -> None:
+        self.rows = []
+
+    def clear(self) -> None:
+        self.rows.clear()
+
+    def appendRow(self, row) -> None:
+        self.rows.append(list(row))
+
+
+class RuntimeOwner(FakeOwner):
+    def __init__(self) -> None:
+        super().__init__()
+        self.auth = FakeAuthTable()
+        self.reset_count = 0
+        self.socket = SimpleNamespace(
+            par=SimpleNamespace(
+                active=False,
+                reset=SimpleNamespace(pulse=self._pulse_reset),
+            )
+        )
+
+    def _pulse_reset(self) -> None:
+        self.reset_count += 1
+
+    def op(self, name: str):
+        if name == "auth_table":
+            return self.auth
+        if name == "socketio1":
+            return self.socket
+        return super().op(name)
+
+
+def test_runtime_initialization_fails_closed_for_malformed_auth_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    token = tmp_path / "touchdesigner-cli" / "state" / "auth.token"
+    token.parent.mkdir(parents=True)
+    token.write_text("malformed", encoding="ascii")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    owner = RuntimeOwner()
+    agent = AgentExt(owner)
+
+    with pytest.raises(RuntimeError, match="auth.token is malformed"):
+        agent.onInitTD()
+
+    assert agent.runtime_active is False
+    assert owner.socket.par.active is False
+    assert owner.auth.rows == []
+    assert owner.reset_count == 0
+
+
+def test_runtime_initialization_resets_official_socket_and_destroy_clears_auth(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    token = tmp_path / "touchdesigner-cli" / "state" / "auth.token"
+    token.parent.mkdir(parents=True)
+    token.write_text("a" * 64, encoding="ascii")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    owner = RuntimeOwner()
+    agent = AgentExt(owner)
+
+    agent.onInitTD()
+
+    assert agent.runtime_active is True
+    assert owner.socket.par.active is True
+    assert owner.reset_count == 1
+    assert owner.auth.rows == [["token", "a" * 64]]
+
+    agent.onDestroyTD()
+
+    assert agent.runtime_active is False
+    assert owner.socket.par.active is False
+    assert owner.auth.rows == []
+
+
 class FakeParameter:
     def __init__(self, value=None, *, mode="constant", read_only=False, pulseable=False) -> None:
         self.val = value
@@ -2309,6 +2386,65 @@ def test_extension_reload_preserves_instance_identity_and_execution_records() ->
     assert reloaded.execution_records == {"request": {"phase": "reserved"}}
 
 
+def test_heartbeat_scheduler_generation_invalidates_stale_ticks() -> None:
+    agent = AgentExt(FakeOwner())
+
+    first = agent.start_heartbeat()
+    second = agent.start_heartbeat()
+
+    assert isinstance(first, str)
+    assert first != second
+    assert not agent.heartbeat_active(first)
+    assert agent.heartbeat_active(second)
+    agent.stop_heartbeat()
+    assert not agent.heartbeat_active(second)
+
+
+def test_stale_socket_close_does_not_invalidate_new_connection_generation() -> None:
+    agent = AgentExt(FakeOwner())
+    first = agent.begin_socket_generation()
+    second = agent.begin_socket_generation()
+    agent.connection_id = "new-connection"
+    heartbeat = agent.start_heartbeat()
+
+    assert first != second
+    assert agent.end_socket_generation() is False
+    assert agent.connection_id == "new-connection"
+    assert agent.heartbeat_active(heartbeat)
+    assert agent.end_socket_generation() is True
+    assert agent.connection_id is None
+    assert not agent.heartbeat_active(heartbeat)
+
+
+def test_connection_rebind_updates_retained_envelopes_but_not_execution_identity() -> None:
+    agent = AgentExt(FakeOwner())
+    agent.execution_records["request"] = {
+        "request_id": "request",
+        "instance_id": agent.instance_id,
+        "connection_id": "old-connection",
+        "execution_id": "execution-1",
+        "phase": "outcome",
+        "outcome": {
+            "request_id": "request",
+            "instance_id": agent.instance_id,
+            "connection_id": "old-connection",
+            "execution_id": "execution-1",
+            "status": "succeeded",
+            "result": {},
+            "error": None,
+        },
+    }
+
+    agent.rebind_connection("new-connection")
+
+    record = agent.execution_records["request"]
+    assert agent.connection_id == "new-connection"
+    assert record["connection_id"] == "new-connection"
+    assert record["outcome"]["connection_id"] == "new-connection"
+    assert record["execution_id"] == "execution-1"
+    assert record["outcome"]["execution_id"] == "execution-1"
+
+
 def test_extension_rejects_missing_touchdesigner_build() -> None:
     del builtins.app
     with pytest.raises(RuntimeError, match="app build"):
@@ -3265,12 +3401,12 @@ def test_phase_3_observation_binary_metadata_and_events_are_bounded() -> None:
     }
 
 
-def test_batch_preflights_every_item_before_any_mutation() -> None:
+def test_agent_rejects_mutation_batch_before_any_mutation() -> None:
     root = FakeOperator("/project1")
     root.par.display = FakeParameter(True)
     agent = AgentExt(FakeOwner(), operator_lookup=lambda _: root)
 
-    with pytest.raises(module.AgentCommandError, match="parameter_not_found"):
+    with pytest.raises(module.AgentCommandError, match="command_unsupported"):
         agent.execute_command(
             {
                 "name": "batch.execute",
@@ -3284,48 +3420,7 @@ def test_batch_preflights_every_item_before_any_mutation() -> None:
                                 "mode": "constant",
                                 "value": False,
                             },
-                        },
-                        {
-                            "name": "parameters.get",
-                            "input": {"operator_path": "/project1", "parameter": "missing"},
-                        },
-                    ]
-                },
-            }
-        )
-    assert root.par.display.val is True
-
-
-def test_batch_preflights_unsupported_parameter_value_before_mutation() -> None:
-    root = FakeOperator("/project1")
-    root.par.display = FakeParameter(True)
-    root.par.unsupported = FakeParameter(object())
-    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: root)
-
-    with pytest.raises(module.AgentCommandError, match="parameter_type_unsupported"):
-        agent.execute_command(
-            {
-                "name": "batch.execute",
-                "input": {
-                    "commands": [
-                        {
-                            "name": "parameters.set",
-                            "input": {
-                                "operator_path": "/project1",
-                                "parameter": "display",
-                                "mode": "constant",
-                                "value": False,
-                            },
-                        },
-                        {
-                            "name": "parameters.set",
-                            "input": {
-                                "operator_path": "/project1",
-                                "parameter": "unsupported",
-                                "mode": "constant",
-                                "value": "opaque",
-                            },
-                        },
+                        }
                     ]
                 },
             }
@@ -3430,6 +3525,29 @@ def test_execution_retains_internal_and_oversized_outcomes() -> None:
         ("internal", "internal_error"),
         ("oversized", "result_too_large"),
     ]
+
+
+def test_large_outcome_is_split_into_bounded_ordered_socket_events() -> None:
+    agent = AgentExt(FakeOwner())
+    agent.connection_id = "connection-1"
+    outcome = {
+        **agent.heartbeat_payload(),
+        "request_id": "request-1",
+        "execution_id": "execution-1",
+        "status": "succeeded",
+        "result": {"payload": "x" * (agent.OUTCOME_CHUNK_BYTES * 2)},
+        "error": None,
+    }
+
+    chunks = agent.outcome_chunks(outcome)
+
+    assert len(chunks) == 3
+    assert [chunk["chunk_index"] for chunk in chunks] == [0, 1, 2]
+    assert all(chunk["chunk_count"] == 3 for chunk in chunks)
+    assert all(
+        len(chunk["payload"].encode("utf-8")) <= agent.OUTCOME_CHUNK_BYTES for chunk in chunks
+    )
+    assert json.loads("".join(chunk["payload"] for chunk in chunks)) == outcome
 
 
 def test_protocol_v2_reserves_before_accept_and_executes_only_after_authorization() -> None:

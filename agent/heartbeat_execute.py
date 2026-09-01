@@ -1,22 +1,29 @@
 """Independent-time Agent scheduler using TouchDesigner's official run delay reference."""
 
 
-def onStart():
-    parent().ext.Agent.refresh_auth(op("auth_table"))
-    scheduleTick()
-    return
+def startScheduler():
+    generation = parent().ext.Agent.start_heartbeat()
+    scheduleTick(generation)
 
 
-def scheduleTick():
+def stopScheduler():
+    parent().ext.Agent.stop_heartbeat()
+
+
+def scheduleTick(generation):
     run(
-        "op('heartbeat_execute').module.schedulerTick()",
+        schedulerTick,
+        generation,
         delayMilliSeconds=2000,
         delayRef=op.TDResources,
     )
 
 
-def schedulerTick():
+def schedulerTick(generation):
     agent = parent().ext.Agent
+    if not agent.heartbeat_active(generation):
+        return
     if agent.connection_id:
+        agent.mark_heartbeat()
         op("socketio1").emit("heartbeat", data=agent.heartbeat_payload())
-    scheduleTick()
+    scheduleTick(generation)

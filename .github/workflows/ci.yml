@@ -21,7 +21,6 @@ jobs:
       - run: uv run ruff check .
       - run: uv run mypy src
       - run: uv run pytest -q
-      - run: uv run pytest tests/test_protocol.py tests/test_socket_transport.py tests/test_management.py -q
 
   executable-build-smoke:
     runs-on: windows-2022
@@ -43,7 +42,7 @@ jobs:
             'td','td-daemon','td-agent' | ForEach-Object { & "$env:GITHUB_WORKSPACE/dist/$_.exe" --version }
             & "$env:GITHUB_WORKSPACE/dist/td-daemon.exe" start
             $status = & "$env:GITHUB_WORKSPACE/dist/td-daemon.exe" status --json | ConvertFrom-Json
-            if ($status.status -ne 'running' -or $status.protocol_versions -notcontains 1) {
+            if ($status.status -ne 'running' -or $status.protocol_versions -notcontains 2) {
               throw 'Frozen Daemon lifecycle smoke failed'
             }
           }

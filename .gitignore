@@ -5,6 +5,9 @@ __pycache__/
 *.py[cod]
 *.tox
 *.tox.manifest.json
+/td-agent.tox.dir/
+/td-agent.tox.toc
+/.tmp-locked-runtime-*.json
 dist/
 build/
 

@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from runpy import run_path
 from types import SimpleNamespace
@@ -11,18 +12,63 @@ class FakeAgentExtension:
         self.draining = False
         self.records = []
         self.authorized = []
+        self.heartbeat_generation = 0
+        self.runtime_active = True
+        self.heartbeat_marks = 0
+        self.socket_generations = []
+        self.current_socket_generation = None
 
     def refresh_auth(self, table) -> None:
         self.auth_table = table
 
+    def clear_auth(self, table) -> None:
+        table.clear()
+
     def registration_payload(self) -> dict[str, object]:
         return {"instance_id": self.instance_id}
+
+    def begin_socket_generation(self):
+        generation = f"socket-{len(self.socket_generations) + 1}"
+        self.socket_generations.append(generation)
+        self.current_socket_generation = generation
+        return generation
+
+    def end_socket_generation(self):
+        if not self.socket_generations:
+            return False
+        generation = self.socket_generations.pop(0)
+        if generation != self.current_socket_generation:
+            return False
+        self.current_socket_generation = None
+        self.connection_id = None
+        return True
 
     def heartbeat_payload(self) -> dict[str, object]:
         return {"instance_id": self.instance_id, "connection_id": self.connection_id}
 
     def synchronization_records(self):
         return list(self.records)
+
+    def outcome_chunks(self, outcome):
+        payload = json.dumps(outcome, separators=(",", ":"), sort_keys=True)
+        size = 24 * 1024
+        count = (len(payload) + size - 1) // size
+        return [
+            {
+                **self.heartbeat_payload(),
+                "request_id": outcome["request_id"],
+                "execution_id": outcome["execution_id"],
+                "chunk_index": index,
+                "chunk_count": count,
+                "payload": payload[offset : offset + size],
+            }
+            for index, offset in enumerate(range(0, len(payload), size))
+        ]
+
+    def rebind_connection(self, connection_id):
+        self.connection_id = connection_id
+        for record in self.records:
+            record["connection_id"] = connection_id
 
     def authorized_records(self):
         return []
@@ -61,6 +107,19 @@ class FakeAgentExtension:
     def end_draining(self) -> None:
         self.draining = False
 
+    def start_heartbeat(self):
+        self.heartbeat_generation += 1
+        return f"generation-{self.heartbeat_generation}"
+
+    def stop_heartbeat(self):
+        self.heartbeat_generation += 1
+
+    def heartbeat_active(self, generation):
+        return generation == f"generation-{self.heartbeat_generation}"
+
+    def mark_heartbeat(self):
+        self.heartbeat_marks += 1
+
 
 class FakeSocket:
     def __init__(self) -> None:
@@ -80,11 +139,16 @@ class FakeOp:
         return self.values[name]
 
 
-def component(extension):
-    return SimpleNamespace(ext=SimpleNamespace(Agent=extension), extensions=[extension])
+def component(extension, reinitialize=None):
+    pulse = SimpleNamespace(pulse=reinitialize or (lambda: None))
+    return SimpleNamespace(
+        ext=SimpleNamespace(Agent=extension),
+        extensions=[extension],
+        par=SimpleNamespace(reinitextensions=pulse),
+    )
 
 
-def test_independent_scheduler_uses_tdresources_for_heartbeat() -> None:
+def test_connection_starts_generation_tagged_independent_heartbeat_scheduler() -> None:
     extension = FakeAgentExtension()
     socket = FakeSocket()
     auth_table = object()
@@ -96,16 +160,24 @@ def test_independent_scheduler_uses_tdresources_for_heartbeat() -> None:
         init_globals={
             "parent": lambda: component(extension),
             "op": lookup,
-            "run": lambda script, **options: scheduled.append((script, options)),
+            "run": lambda script, *args, **options: scheduled.append((script, args, options)),
         },
     )
-    callbacks["onStart"]()
-    assert extension.auth_table is auth_table
-    assert scheduled[0][1] == {"delayMilliSeconds": 2000, "delayRef": lookup.TDResources}
+    assert "onStart" not in callbacks
+    callbacks["startScheduler"]()
+    assert scheduled[0][0] is callbacks["schedulerTick"]
+    generation = scheduled[0][1][0]
+    assert isinstance(generation, str)
+    assert scheduled[0][2] == {"delayMilliSeconds": 2000, "delayRef": lookup.TDResources}
 
     extension.connection_id = "connection-1"
-    callbacks["schedulerTick"]()
+    callbacks["schedulerTick"](generation)
     assert socket.emitted == [("heartbeat", extension.heartbeat_payload())]
+    assert extension.heartbeat_marks == 1
+    assert len(scheduled) == 2
+
+    callbacks["stopScheduler"]()
+    callbacks["schedulerTick"](generation)
     assert len(scheduled) == 2
 
 
@@ -113,34 +185,100 @@ def test_socket_open_registers_named_extension() -> None:
     extension = FakeAgentExtension()
     extension.draining = True
     socket = FakeSocket()
+    heartbeat_calls = []
+    auth_table = SimpleNamespace(clear=lambda: heartbeat_calls.append("clear-auth"))
+    lookup = FakeOp(
+        {
+            "auth_table": auth_table,
+            "heartbeat_execute": SimpleNamespace(
+                module=SimpleNamespace(startScheduler=lambda: heartbeat_calls.append("start"))
+            ),
+        }
+    )
     callbacks = run_path(
         str(Path("agent/socket_callbacks.py")),
-        init_globals={"parent": lambda: component(extension)},
+        init_globals={"parent": lambda: component(extension), "op": lookup},
     )
     callbacks["onOpen"](socket)
     assert socket.emitted == [("register", {"instance_id": "instance-1"})]
     assert extension.draining is False
+    assert heartbeat_calls == ["start", "clear-auth"]
+
+
+def test_socket_close_invalidates_heartbeat_generation() -> None:
+    extension = FakeAgentExtension()
+    extension.connection_id = "connection-1"
+    extension.begin_socket_generation()
+    stopped = []
+    lookup = FakeOp(
+        {
+            "auth_table": object(),
+            "heartbeat_execute": SimpleNamespace(
+                module=SimpleNamespace(stopScheduler=lambda: stopped.append(True))
+            ),
+        }
+    )
+    callbacks = run_path(
+        str(Path("agent/socket_callbacks.py")),
+        init_globals={"parent": lambda: component(extension), "op": lookup},
+    )
+
+    callbacks["onClose"](FakeSocket(), object())
+
+    assert extension.connection_id is None
+    assert stopped == [True]
+
+
+def test_stale_close_cannot_stop_new_socket_generation() -> None:
+    extension = FakeAgentExtension()
+    extension.begin_socket_generation()
+    extension.begin_socket_generation()
+    stopped = []
+    lookup = FakeOp(
+        {
+            "auth_table": object(),
+            "heartbeat_execute": SimpleNamespace(
+                module=SimpleNamespace(stopScheduler=lambda: stopped.append(True))
+            ),
+        }
+    )
+    callbacks = run_path(
+        str(Path("agent/socket_callbacks.py")),
+        init_globals={"parent": lambda: component(extension), "op": lookup},
+    )
+
+    callbacks["onClose"](FakeSocket(), object())
+
+    assert extension.current_socket_generation == "socket-2"
+    assert stopped == []
 
 
 def test_registration_replays_all_execution_phases_before_dispatch() -> None:
     extension = FakeAgentExtension()
-    extension.records = [{"phase": "outcome", "request_id": "request-1"}]
+    outcome = {
+        "request_id": "request-1",
+        "instance_id": "instance-1",
+        "connection_id": "old-connection",
+        "execution_id": "execution-1",
+        "status": "succeeded",
+        "result": {"payload": "x" * 100},
+        "error": None,
+    }
+    extension.records = [{"phase": "outcome", **outcome}]
     socket = FakeSocket()
     callbacks = run_path(
         str(Path("agent/socket_callbacks.py")),
         init_globals={"parent": lambda: component(extension)},
     )
     callbacks["onReceiveEvent"](socket, 0, {"connection_id": "connection-1"}, "registered")
-    assert socket.emitted == [
-        (
-            "execution_sync",
-            {
-                "instance_id": "instance-1",
-                "connection_id": "connection-1",
-                "records": extension.records,
-            },
-        )
-    ]
+    assert extension.connection_id == "connection-1"
+    assert [event for event, _ in socket.emitted[:-1]] == ["request_outcome_chunk"] * len(
+        socket.emitted[:-1]
+    )
+    assert socket.emitted[-1] == (
+        "execution_sync",
+        {"instance_id": "instance-1", "connection_id": "connection-1", "records": []},
+    )
 
 
 def test_dispatch_accepts_without_execution_then_authorization_uses_main_thread_run() -> None:
@@ -185,6 +323,7 @@ def test_dispatch_accepts_without_execution_then_authorization_uses_main_thread_
         "request_execute",
     )
     assert extension.authorized == ["execution-1"]
+    assert scheduled[0][0] is callbacks["executeScheduled"]
     assert scheduled[0][2] == {"delayMilliSeconds": 1, "delayRef": lookup.TDResources}
     callbacks["executeScheduled"](socket, "request-2", "execution-1")
     assert socket.emitted[-1][0] == "request_outcome"
@@ -212,3 +351,4 @@ def test_orderly_draining_uses_independent_time_and_unregisters_when_empty() -> 
         "delayMilliSeconds": 1500,
         "delayRef": lookup.TDResources,
     }
+    assert scheduled[0][0] is callbacks["resumeAfterDraining"]

@@ -7,6 +7,7 @@ import json
 import math
 import os
 import re
+import time
 import uuid
 from pathlib import Path
 from typing import ClassVar
@@ -2384,6 +2385,7 @@ class OperatorControl:
 class AgentExt:
     MAX_EXECUTION_RECORDS = 64
     MAX_OUTCOME_BYTES = 256 * 1024
+    OUTCOME_CHUNK_BYTES = 24 * 1024
     MAX_TOTAL_OUTCOME_BYTES = 16 * 1024 * 1024
 
     CAPABILITIES = tuple(OperatorControl.HANDLERS) + (
@@ -2434,6 +2436,9 @@ class AgentExt:
                 "outcome_bytes": 0,
                 "events": [],
                 "next_event_id": 1,
+                "socket_generations": [],
+                "current_socket_generation": None,
+                "heartbeat_emissions": 0,
             }
             builtins._td_cli_agent_state = state
         elif state.get("state_version") != 2:
@@ -2445,16 +2450,56 @@ class AgentExt:
                 "outcome_bytes": 0,
                 "events": state.get("events", []),
                 "next_event_id": state.get("next_event_id", 1),
+                "socket_generations": [],
+                "current_socket_generation": None,
+                "heartbeat_emissions": 0,
             }
             builtins._td_cli_agent_state = state
         self.instance_id = state["instance_id"]
         self.execution_records = state["execution_records"]
         self.events = state.setdefault("events", [])
         state.setdefault("next_event_id", 1)
+        state.setdefault("socket_generations", [])
+        state.setdefault("current_socket_generation", None)
+        state.setdefault("heartbeat_emissions", 0)
         self._state = state
         self.connection_id = None
         self.draining = False
         self.last_heartbeat_at = 0.0
+        self._heartbeat_generation = None
+        self.runtime_active = False
+
+    def onInitTD(self):
+        if getattr(builtins, "_td_cli_building_artifact", False):
+            return
+        auth_table = self.owner_comp.op("auth_table")
+        socket_dat = self.owner_comp.op("socketio1")
+        if auth_table is None or socket_dat is None:
+            raise RuntimeError("Agent runtime operators are required")
+        self.runtime_active = False
+        socket_dat.par.active = False
+        auth_table.clear()
+        try:
+            self.refresh_auth(auth_table)
+            socket_dat.par.active = True
+            socket_dat.par.reset.pulse()
+        except Exception:
+            socket_dat.par.active = False
+            auth_table.clear()
+            raise
+        self.runtime_active = True
+
+    def onDestroyTD(self):
+        self.runtime_active = False
+        self._state["current_socket_generation"] = None
+        self.connection_id = None
+        self.stop_heartbeat()
+        socket_dat = self.owner_comp.op("socketio1")
+        if socket_dat is not None:
+            socket_dat.par.active = False
+        auth_table = self.owner_comp.op("auth_table")
+        if auth_table is not None:
+            auth_table.clear()
 
     def registration_payload(self):
         return {
@@ -2472,6 +2517,45 @@ class AgentExt:
             "connection_id": self.connection_id,
             "status": "draining" if self.draining else "online",
         }
+
+    def rebind_connection(self, connection_id):
+        self.connection_id = connection_id
+        for record in self.execution_records.values():
+            record["connection_id"] = connection_id
+            if record["phase"] == "outcome":
+                record["outcome"]["connection_id"] = connection_id
+
+    def begin_socket_generation(self):
+        generation = str(uuid.uuid4())
+        self._state["socket_generations"].append(generation)
+        self._state["current_socket_generation"] = generation
+        return generation
+
+    def end_socket_generation(self):
+        generations = self._state["socket_generations"]
+        if not generations:
+            return False
+        generation = generations.pop(0)
+        if generation != self._state["current_socket_generation"]:
+            return False
+        self._state["current_socket_generation"] = None
+        self.connection_id = None
+        self.stop_heartbeat()
+        return True
+
+    def start_heartbeat(self):
+        self._heartbeat_generation = str(uuid.uuid4())
+        return self._heartbeat_generation
+
+    def stop_heartbeat(self):
+        self._heartbeat_generation = None
+
+    def heartbeat_active(self, generation):
+        return generation == self._heartbeat_generation
+
+    def mark_heartbeat(self):
+        self.last_heartbeat_at = time.monotonic()
+        self._state["heartbeat_emissions"] += 1
 
     def reserve(self, request):
         request_id = str(request.get("request_id", ""))
@@ -2607,6 +2691,21 @@ class AgentExt:
                 )
         return records
 
+    def outcome_chunks(self, outcome):
+        """Encode one retained outcome into bounded, ordered SocketIO events."""
+        payload = json.dumps(outcome, separators=(",", ":"), sort_keys=True)
+        return [
+            {
+                **self._request_envelope(outcome["request_id"]),
+                "execution_id": outcome["execution_id"],
+                "chunk_index": index,
+                "chunk_count": (len(payload) + self.OUTCOME_CHUNK_BYTES - 1)
+                // self.OUTCOME_CHUNK_BYTES,
+                "payload": payload[offset : offset + self.OUTCOME_CHUNK_BYTES],
+            }
+            for index, offset in enumerate(range(0, len(payload), self.OUTCOME_CHUNK_BYTES))
+        ]
+
     def authorized_records(self):
         return [
             (request_id, record["execution_id"])
@@ -2670,8 +2769,11 @@ class AgentExt:
             return self._events(payload)
         if name == "batch.execute":
             commands = payload["commands"]
-            for item in commands:
-                self.operator_control.preflight(item)
+            if any(
+                item["name"] not in self.read_only_commands or item["name"] == "batch.execute"
+                for item in commands
+            ):
+                raise AgentCommandError("command_unsupported")
             return {"results": [self.execute_command(item) for item in commands]}
         if name in OperatorControl.HANDLERS:
             return self.operator_control.execute(command)
@@ -2783,3 +2885,7 @@ class AgentExt:
             raise RuntimeError("auth.token is malformed")
         table.clear()
         table.appendRow(["token", token])
+
+    @staticmethod
+    def clear_auth(table):
+        table.clear()

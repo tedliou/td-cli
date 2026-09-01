@@ -11,7 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import socketio
 from fastapi import HTTPException
@@ -26,13 +26,16 @@ from td_cli.daemon.lifecycle import (
 from td_cli.daemon.storage import RequestStore
 from td_cli.release import LOCKED_TOUCHDESIGNER_VERSION
 
-LOGGER = logging.getLogger("td_cli.lifecycle")
+LOGGER = logging.getLogger("td_cli.daemon.lifecycle")
 DEFAULT_EXECUTION_LEASES = {
-    "fast_read": 5.0,
-    "bounded_scan_or_export": 30.0,
-    "bounded_mutation": 30.0,
-    "trusted_asset_mutation": 120.0,
+    "fast_read": 7.0,
+    "bounded_scan_or_export": 7.0,
+    "bounded_mutation": 7.0,
+    "trusted_asset_mutation": 8.0,
 }
+MAX_OUTCOME_BYTES = 256 * 1024
+MAX_OUTCOME_CHUNKS = 16
+MAX_OUTCOME_CHUNK_BYTES = 24 * 1024
 
 
 @dataclass
@@ -84,6 +87,7 @@ def create_transport_app(
     connections: dict[str, _ConnectionAdapter] = {}
     by_sid: dict[str, _ConnectionAdapter] = {}
     pending_sids: set[str] = set()
+    outcome_chunks: dict[tuple[str, str, str], tuple[int, list[str]]] = {}
     metadata: dict[str, _InstanceMetadata] = {}
     stopping = False
 
@@ -363,6 +367,66 @@ def create_transport_app(
         adapter = _current(by_sid, sid, data)
         if adapter is None or not isinstance(data, dict):
             return
+        await record_outcome(adapter, data)
+
+    @sio.event
+    async def request_outcome_chunk(sid: str, data: object) -> None:
+        adapter = _current(by_sid, sid, data)
+        if adapter is None or not isinstance(data, dict):
+            return
+        request_id = data.get("request_id")
+        execution_id = data.get("execution_id")
+        chunk_index = data.get("chunk_index")
+        chunk_count = data.get("chunk_count")
+        payload = data.get("payload")
+        valid = (
+            isinstance(request_id, str)
+            and isinstance(execution_id, str)
+            and type(chunk_index) is int
+            and type(chunk_count) is int
+            and 0 <= chunk_index < chunk_count <= MAX_OUTCOME_CHUNKS
+            and isinstance(payload, str)
+            and len(payload.encode("utf-8")) <= MAX_OUTCOME_CHUNK_BYTES
+        )
+        key = (sid, str(request_id), str(execution_id))
+        if not valid:
+            outcome_chunks.pop(key, None)
+            await require_lifecycle().fail("invalid_outcome_chunk")
+            return
+        chunk_count_value = cast(int, chunk_count)
+        chunk_index_value = cast(int, chunk_index)
+        payload_value = cast(str, payload)
+        expected_count, chunks = outcome_chunks.get(key, (chunk_count_value, []))
+        if expected_count != chunk_count_value or chunk_index_value != len(chunks):
+            outcome_chunks.pop(key, None)
+            await require_lifecycle().fail("invalid_outcome_chunk")
+            return
+        chunks.append(payload_value)
+        outcome_chunks[key] = (expected_count, chunks)
+        if len(chunks) != expected_count:
+            return
+        outcome_chunks.pop(key, None)
+        encoded = "".join(chunks)
+        if len(encoded.encode("utf-8")) > MAX_OUTCOME_BYTES:
+            await require_lifecycle().fail("invalid_outcome_chunk")
+            return
+        try:
+            outcome = json.loads(encoded)
+        except (TypeError, ValueError):
+            await require_lifecycle().fail("invalid_outcome_chunk")
+            return
+        if (
+            not isinstance(outcome, dict)
+            or outcome.get("instance_id") != adapter.instance_id
+            or outcome.get("connection_id") != adapter.connection_id
+            or outcome.get("request_id") != request_id
+            or outcome.get("execution_id") != execution_id
+        ):
+            await require_lifecycle().fail("invalid_outcome_chunk")
+            return
+        await record_outcome(adapter, outcome)
+
+    async def record_outcome(adapter: _ConnectionAdapter, data: dict[str, Any]) -> None:
         await require_lifecycle().outcome(
             adapter.instance_id,
             adapter.connection_id,
@@ -383,6 +447,8 @@ def create_transport_app(
     async def disconnect(sid: str, reason: object = None) -> None:
         del reason
         pending_sids.discard(sid)
+        for key in [key for key in outcome_chunks if key[0] == sid]:
+            outcome_chunks.pop(key, None)
         adapter = by_sid.pop(sid, None)
         if adapter is None:
             return

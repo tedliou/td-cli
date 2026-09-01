@@ -60,10 +60,13 @@ irm https://github.com/tedliou/td-cli/releases/latest/download/uninstall.ps1 | i
 Python 3.11 and [uv](https://docs.astral.sh/uv/) are required.
 
 ```powershell
-uv sync --python 3.11
-uv run pytest
+uv sync --locked --python 3.11
+uv run pytest -q
 uv run ruff check .
 uv run ruff format --check .
+uv run mypy src
+uv lock --check
+uv run python -m td_cli.agent_tool inspect-source agent
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete contribution workflow. Changes to the
@@ -90,6 +93,14 @@ The fixed layout contains `state\daemon.db`, `state\auth.token`,
 Deleting `state\auth.token` while the Daemon is stopped performs manual token
 recovery; every Agent Component must reconnect afterward.
 
+Protocol v2 is the only runtime protocol; there is no v1 alias or fallback. A
+Request moves through `queued`, `dispatched`, `accepted`, and `running` before a
+terminal outcome. The Daemon persists before dispatch, permits one authorized
+Request per Instance in FIFO order, and isolates every reconnect with a new
+Connection ID. A disconnect after authorization becomes `unknown`; td-cli never
+automatically retries it, though the same retained execution outcome may later
+refine it to `succeeded` or `failed`.
+
 <!-- doc-section: agent-component -->
 
 ## Agent Component
@@ -109,12 +120,24 @@ the artifact to the canonical source revision, TouchDesigner `2025.32050`, and
 the required DAT/operator topology. Actual `.tox` creation and Online Instance
 validation are performed locally in the locked TouchDesigner environment.
 
+The Agent reserves bounded outcome capacity before `request_accepted`, executes
+only after a matching immutable execution authorization, and retains every
+post-accept `succeeded`, `failed`, or `unknown` outcome until the Daemon records
+it. Retention is limited to 64 records, 256 KiB per canonical outcome, and 16
+MiB total. Outcomes above the locked SocketIO DAT's proven single-event envelope
+are sent as ordered, identity-checked 24 KiB chunks and are reassembled before
+the public result is committed. Command, heartbeat, and drain timers use TouchDesigner's independent
+`TDResources` time reference while all TouchDesigner object access remains on
+the main thread. Extension initialization uses the official SocketIO Reset
+parameter, and clears the transient auth DAT after connection. Power Off mode is
+not supported.
+
 <!-- doc-section: operator-control -->
 
 ## Basic network control
 
 List the Instances, select an Online Instance, and use an explicit Selector
-whenever more than one is available. Protocol v1 can create cataloged built-in
+whenever more than one is available. Protocol v2 can create cataloged built-in
 Operators, inspect and configure their Parameters, and edit same-family wiring:
 
 ```powershell
@@ -162,7 +185,7 @@ td --json --instance <selector> parameters sequence-replace /project1/target Ite
 
 Bind sources are generated solely from a typed Operator/Parameter identity.
 Export mode accepts a typed CHOP Operator/channel identity only when that exact
-export already exists in TouchDesigner; Protocol v1 does not synthesize CHOP
+export already exists in TouchDesigner; Protocol v2 does not synthesize CHOP
 export tables or emulate an export with an expression. Sequence replacement is
 bounded to 128 blocks and 256 Parameters per block, reads back the complete
 ordered state, and restores the prior block count, order, names, modes, values,

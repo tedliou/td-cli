@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from td_cli.daemon.lifecycle import RequestLifecycle
 from td_cli.daemon.storage import RequestIdentityConflict, RequestStore
 from td_cli.protocol import Command, RequestSnapshot
 
@@ -129,8 +130,19 @@ async def test_failed_v1_migration_rolls_back_and_fails_closed(tmp_path: Path) -
     connection.close()
 
 
+@pytest.mark.parametrize(
+    ("crash_status", "recovered_status"),
+    [
+        ("queued", "daemon_shutdown"),
+        ("dispatched", "daemon_shutdown"),
+        ("accepted", "daemon_shutdown"),
+        ("running", "unknown"),
+    ],
+)
 @pytest.mark.asyncio
-async def test_wal_recovers_committed_request_after_abrupt_process_exit(tmp_path: Path) -> None:
+async def test_wal_and_lifecycle_recover_each_abrupt_process_boundary(
+    tmp_path: Path, crash_status: str, recovered_status: str
+) -> None:
     path = tmp_path / "daemon.db"
     script = """
 import asyncio
@@ -151,17 +163,34 @@ async def main():
         "execute_authorized_at": None, "completed_at": None,
         "result": None, "error": None,
     })
+    status = sys.argv[2]
+    if status != "queued":
+        changes = {"status": status}
+        if status == "running":
+            changes.update(execution_id="execution-1", execute_authorized_at="2026-09-01T00:00:01.000Z")
+        await store.compare_and_set(
+            "018f47ec-7f3b-7a34-8f31-2ad70b6f6e2a",
+            expected_statuses={"queued"},
+            changes=changes,
+        )
     os._exit(0)
 
 asyncio.run(main())
 """
-    process = await asyncio.create_subprocess_exec(sys.executable, "-c", script, str(path))
+    process = await asyncio.create_subprocess_exec(
+        sys.executable, "-c", script, str(path), crash_status
+    )
     assert await process.wait() == 0
 
     store = await RequestStore.open(path)
+    lifecycle = RequestLifecycle(store)
     try:
+        await lifecycle.start()
         recovered = await store.get(REQUEST_ID)
         assert recovered is not None
-        assert recovered["status"] == "queued"
+        assert recovered["status"] == recovered_status
+        if crash_status == "running":
+            assert recovered["execution_id"] == "execution-1"
     finally:
+        await lifecycle.close()
         await store.close()

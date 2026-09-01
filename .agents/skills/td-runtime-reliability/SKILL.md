@@ -21,7 +21,13 @@ Use this workflow before changing a runtime seam and again before declaring it c
    RequestLifecycle, HTTP/Socket.IO adapter, or Agent request scheduler. Run one red-to-green
    vertical slice at a time. Replace superseded shallow tests; do not repeat the same failure matrix
    for every Command.
-5. Use locked TouchDesigner 2025.32050 only for facts substitutes cannot prove: callback and
+5. Apply the primary-source design rules recorded in the research baseline. Following Parnas,
+   place a seam around a volatile design decision, not around a processing step. Use McCabe
+   complexity to locate decision-heavy code, not as a numeric target; lower it by moving policy
+   behind a deeper Interface, never by adding forwarding wrappers. Following SWEBOK's risk-based
+   testing principle, spend integration and locked-runtime cost on distinct high-impact failure
+   modes and delete subset reruns or tests already proved at a smaller seam.
+6. Use locked TouchDesigner 2025.32050 only for facts substitutes cannot prove: callback and
    scheduler thread, paused-timeline progress, graph mutation, frame stall, reconnect, process
    death, Agent reload, and retained-outcome replay. Record the build, artifact identity, exact
    probes, measurements, margins, and observed outcomes. A failed required probe blocks release.

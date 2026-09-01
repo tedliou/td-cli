@@ -3,7 +3,10 @@
 
 def onOpen(dat):
     agent = parent().ext.Agent
+    agent.begin_socket_generation()
     agent.end_draining()
+    op("heartbeat_execute").module.startScheduler()
+    agent.clear_auth(op("auth_table"))
     dat.emit("register", data=agent.registration_payload())
 
 
@@ -11,10 +14,20 @@ def onReceiveEvent(dat, rowIndex, message, event):
     del rowIndex
     agent = parent().ext.Agent
     if event == "registered":
-        agent.connection_id = message["connection_id"]
+        agent.rebind_connection(message["connection_id"])
+        records = []
+        for record in agent.synchronization_records():
+            if record["phase"] == "outcome":
+                emitOutcome(
+                    dat,
+                    {key: value for key, value in record.items() if key != "phase"},
+                    force_chunks=True,
+                )
+            else:
+                records.append(record)
         dat.emit(
             "execution_sync",
-            data={**agent.heartbeat_payload(), "records": agent.synchronization_records()},
+            data={**agent.heartbeat_payload(), "records": records},
         )
         for request_id, execution_id in agent.authorized_records():
             scheduleExecution(dat, request_id, execution_id)
@@ -35,7 +48,7 @@ def onReceiveEvent(dat, rowIndex, message, event):
         dat.emit("heartbeat", data=agent.heartbeat_payload())
         deadline_milliseconds = int(float(message["deadline_seconds"]) * 1000)
         run(
-            "op('socket_callbacks').module.resumeAfterDraining(args[0])",
+            resumeAfterDraining,
             dat,
             delayMilliSeconds=deadline_milliseconds + 500,
             delayRef=op.TDResources,
@@ -44,7 +57,7 @@ def onReceiveEvent(dat, rowIndex, message, event):
             finishDraining(dat)
         else:
             run(
-                "op('socket_callbacks').module.finishDraining(args[0])",
+                finishDraining,
                 dat,
                 delayMilliSeconds=deadline_milliseconds,
                 delayRef=op.TDResources,
@@ -54,12 +67,21 @@ def onReceiveEvent(dat, rowIndex, message, event):
 def executeScheduled(dat, request_id, execution_id):
     outcome = parent().ext.Agent.execute_authorized(request_id, execution_id)
     if outcome is not None:
+        emitOutcome(dat, outcome)
+
+
+def emitOutcome(dat, outcome, force_chunks=False):
+    chunks = parent().ext.Agent.outcome_chunks(outcome)
+    if len(chunks) == 1 and not force_chunks:
         dat.emit("request_outcome", data=outcome)
+        return
+    for chunk in chunks:
+        dat.emit("request_outcome_chunk", data=chunk)
 
 
 def scheduleExecution(dat, request_id, execution_id):
     run(
-        "op('socket_callbacks').module.executeScheduled(args[0], args[1], args[2])",
+        executeScheduled,
         dat,
         request_id,
         execution_id,
@@ -70,8 +92,12 @@ def scheduleExecution(dat, request_id, execution_id):
 
 def onClose(dat, failure):
     del dat, failure
-    parent().ext.Agent.connection_id = None
-    parent().ext.Agent.refresh_auth(op("auth_table"))
+    agent = parent().ext.Agent
+    if not agent.end_socket_generation():
+        return
+    op("heartbeat_execute").module.stopScheduler()
+    if agent.runtime_active:
+        agent.refresh_auth(op("auth_table"))
 
 
 def finishDraining(dat):

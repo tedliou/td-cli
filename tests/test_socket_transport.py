@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import socket
 import threading
@@ -231,6 +232,76 @@ async def test_reconnect_reconciles_matching_retained_outcome(tmp_path: Path) ->
         await asyncio.wait_for(recorded, 2)
         _, succeeded = await get_json(port, f"/v2/requests/{REQUEST_ID}")
         assert succeeded["status"] == "succeeded"
+    finally:
+        for client in (first, second):
+            if client.connected:
+                await client.disconnect()
+        stop_server(server, thread)
+
+
+@pytest.mark.asyncio
+async def test_reconnect_reassembles_bounded_outcome_chunks_before_synchronizing(
+    tmp_path: Path,
+) -> None:
+    server, thread, port = await start_server(create_transport_app(tmp_path, token=TOKEN))
+    first = socketio.AsyncClient(reconnection=False)
+    second = socketio.AsyncClient(reconnection=False)
+    dispatched: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
+    execute: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
+    recorded: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
+    first.on("request_dispatch", lambda data: dispatched.set_result(data))
+    first.on("request_execute", lambda data: execute.set_result(data))
+    second.on("outcome_recorded", lambda data: recorded.set_result(data))
+    try:
+        first_connection = await register(first, port)
+        async with ClientSession() as session:
+            response = await session.post(
+                f"http://127.0.0.1:{port}/v2/requests",
+                headers={"Authorization": f"Bearer {TOKEN}"},
+                json={
+                    "request_id": REQUEST_ID,
+                    "instance_id": INSTANCE_ID,
+                    "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
+                },
+            )
+            assert response.status == 201
+        await asyncio.wait_for(dispatched, 2)
+        await first.emit("request_accepted", {**first_connection, "request_id": REQUEST_ID})
+        authorization = await asyncio.wait_for(execute, 2)
+        await first.disconnect()
+
+        second_connection = await register(second, port, synchronize=False)
+        outcome = {
+            **second_connection,
+            "request_id": REQUEST_ID,
+            "execution_id": authorization["execution_id"],
+            "status": "succeeded",
+            "result": {"payload": "x" * 70_000},
+            "error": None,
+        }
+        encoded = json.dumps(outcome, separators=(",", ":"), sort_keys=True)
+        size = 24 * 1024
+        payloads = [encoded[offset : offset + size] for offset in range(0, len(encoded), size)]
+        for index, payload in enumerate(payloads):
+            await second.emit(
+                "request_outcome_chunk",
+                {
+                    **second_connection,
+                    "request_id": REQUEST_ID,
+                    "execution_id": authorization["execution_id"],
+                    "chunk_index": index,
+                    "chunk_count": len(payloads),
+                    "payload": payload,
+                },
+            )
+        await second.emit("execution_sync", {**second_connection, "records": []})
+
+        await asyncio.wait_for(recorded, 2)
+        _, succeeded = await get_json(port, f"/v2/requests/{REQUEST_ID}")
+        assert succeeded["status"] == "succeeded"
+        assert succeeded["result"] == {"payload": "x" * 70_000}
+        _, instances = await get_json(port, "/v2/instances")
+        assert instances[0]["status"] == "online"
     finally:
         for client in (first, second):
             if client.connected:
