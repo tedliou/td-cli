@@ -326,7 +326,9 @@ def test_dispatch_accepts_without_execution_then_authorization_uses_main_thread_
     assert scheduled[0][0] is callbacks["executeScheduled"]
     assert scheduled[0][2] == {"delayMilliSeconds": 1, "delayRef": lookup.TDResources}
     callbacks["executeScheduled"](socket, "request-2", "execution-1")
-    assert socket.emitted[-1][0] == "request_outcome"
+    event, chunk = socket.emitted[-1]
+    assert event == "request_outcome_chunk"
+    assert json.loads(chunk["payload"])["error"] is None
 
 
 def test_orderly_draining_uses_independent_time_and_unregisters_when_empty() -> None:
