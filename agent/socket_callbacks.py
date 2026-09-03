@@ -21,7 +21,6 @@ def onReceiveEvent(dat, rowIndex, message, event):
                 emitOutcome(
                     dat,
                     {key: value for key, value in record.items() if key != "phase"},
-                    force_chunks=True,
                 )
             else:
                 records.append(record)
@@ -70,12 +69,8 @@ def executeScheduled(dat, request_id, execution_id):
         emitOutcome(dat, outcome)
 
 
-def emitOutcome(dat, outcome, force_chunks=False):
-    chunks = parent().ext.Agent.outcome_chunks(outcome)
-    if len(chunks) == 1 and not force_chunks:
-        dat.emit("request_outcome", data=outcome)
-        return
-    for chunk in chunks:
+def emitOutcome(dat, outcome):
+    for chunk in parent().ext.Agent.outcome_chunks(outcome):
         dat.emit("request_outcome_chunk", data=chunk)
 
 
