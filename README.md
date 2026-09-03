@@ -79,7 +79,8 @@ follow the [td-runtime-reliability skill](.agents/skills/td-runtime-reliability/
 
 The Daemon is one authenticated background process per Windows user. It binds
 only to `127.0.0.1:9982` and stores state under
-`%LOCALAPPDATA%\touchdesigner-cli`.
+`%LOCALAPPDATA%\touchdesigner-cli`. `td-daemon start` returns after the
+background process is ready and does not leave a console window open.
 
 ```powershell
 uv run td-daemon start

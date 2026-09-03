@@ -21,7 +21,6 @@ def onReceiveEvent(dat, rowIndex, message, event):
                 emitOutcome(
                     dat,
                     {key: value for key, value in record.items() if key != "phase"},
-                    force_chunks=True,
                 )
             else:
                 records.append(record)
@@ -33,7 +32,10 @@ def onReceiveEvent(dat, rowIndex, message, event):
             scheduleExecution(dat, request_id, execution_id)
     elif event == "request_dispatch":
         result_event, payload = agent.reserve(message)
-        dat.emit(result_event, data=payload)
+        if result_event == "request_outcome":
+            emitOutcome(dat, payload)
+        else:
+            dat.emit(result_event, data=payload)
     elif event == "request_execute":
         if agent.authorize(message):
             scheduleExecution(dat, message["request_id"], message["execution_id"])
@@ -70,12 +72,8 @@ def executeScheduled(dat, request_id, execution_id):
         emitOutcome(dat, outcome)
 
 
-def emitOutcome(dat, outcome, force_chunks=False):
-    chunks = parent().ext.Agent.outcome_chunks(outcome)
-    if len(chunks) == 1 and not force_chunks:
-        dat.emit("request_outcome", data=outcome)
-        return
-    for chunk in chunks:
+def emitOutcome(dat, outcome):
+    for chunk in parent().ext.Agent.outcome_chunks(outcome):
         dat.emit("request_outcome_chunk", data=chunk)
 
 

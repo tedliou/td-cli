@@ -171,11 +171,8 @@ def start() -> None:
         typer.echo("Daemon is starting/unhealthy", err=True)
         raise typer.Exit(3)
     flags = 0
-    startupinfo = None
     if os.name == "nt":
-        flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
-        startupinfo = subprocess.STARTUPINFO()
-        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        flags = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
     frozen = bool(getattr(sys, "frozen", False))
     command = (
         [sys.executable, "serve"]
@@ -188,7 +185,6 @@ def start() -> None:
     subprocess.Popen(
         command,
         creationflags=flags,
-        startupinfo=startupinfo,
         close_fds=True,
         env=child_environment,
     )
