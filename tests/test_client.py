@@ -45,6 +45,23 @@ def test_command_transport_failure_preserves_known_request_id(tmp_path: Path, mo
     assert caught.value.details == {"request_id": "request-7"}
 
 
+def test_accepted_request_remains_queryable_while_execution_is_authorized(
+    tmp_path: Path, monkeypatch
+) -> None:
+    snapshot = {
+        "request_id": "request-1",
+        "status": "accepted",
+        "command": {"name": "ops.children", "input": {"operator_path": "/project1"}},
+        "result": None,
+        "error": None,
+    }
+    monkeypatch.setattr(
+        httpx, "request", lambda *args, **kwargs: httpx.Response(200, json=snapshot)
+    )
+
+    assert client(tmp_path).get_request("request-1") == snapshot
+
+
 def test_read_timeout_is_not_retried(tmp_path: Path, monkeypatch) -> None:
     attempts = 0
 

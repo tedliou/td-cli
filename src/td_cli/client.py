@@ -8,6 +8,9 @@ import httpx
 
 from td_cli.daemon.cli import ENDPOINT
 from td_cli.daemon.runtime_files import data_root, load_token
+from td_cli.protocol import RequestStatus
+
+_REQUEST_STATUSES = frozenset(RequestStatus)
 
 
 class ClientError(Exception):
@@ -118,16 +121,7 @@ class DaemonClient:
 
     def get_request(self, request_id: str) -> dict[str, Any]:
         snapshot = self.request("GET", f"/v2/requests/{request_id}")
-        if snapshot.get("status") not in {
-            "queued",
-            "dispatched",
-            "running",
-            "succeeded",
-            "failed",
-            "unknown",
-            "instance_offline",
-            "daemon_shutdown",
-        }:
+        if snapshot.get("status") not in _REQUEST_STATUSES:
             raise ClientError("protocol_incompatible")
         error = snapshot.get("error")
         if isinstance(error, dict) and error.get("code") not in {
