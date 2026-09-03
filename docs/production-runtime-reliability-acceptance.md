@@ -35,13 +35,15 @@ Socket.IO event. The Daemon continues to accept the v0.3.0 direct event for
 Protocol 2 receive compatibility, but the Agent does not use it as a fallback.
 
 Locked TouchDesigner 2025.32050 rebuilt source revision
-`3d37625b83d9410dc63f8048f64527f38d53589bea36387b04b4aa065c7217da`
+`3498be00fdc44a1df7d70231b819b8c45049e81e905c2f93e243bcfc029a516d`
 as artifact SHA-256
-`66c2ec1b1f3faea180929c20c5ba861789221164d011e735a7b3f729d75f935b`.
+`bc7234d50809dc7f8618538b7d6dcfca149f14c6f2561394ec47ca6945283e76`.
 With the root timeline paused, the corrected artifact produced these outcomes:
 
 - `ops children /project1` and `project metadata` both completed on their first
   Connection generation; Daemon dispatch-to-outcome time was 31 ms for each;
+- `ops get /project1/does_not_exist` returned `operator_not_found` in the first
+  Connection generation rather than timing out, preserving a null `result`;
 - create, inspect, and destroy of `/project1/outcome_fix_probe` all succeeded,
   and the Agent retained zero records after acknowledgment;
 - a 50 ms Daemon process kill during a 1,000-Operator trusted import did not
@@ -56,25 +58,28 @@ With the root timeline paused, the corrected artifact produced these outcomes:
   no new visible top-level window and a zero `MainWindowHandle` on the serve
   process.
 
-The maximum locked execution measurements were 0.019 ms for `fast_read`,
-2.126 ms for `bounded_scan_or_export`, 18.353 ms for `bounded_mutation`, and
-123.707 ms for `trusted_asset_mutation`. They are within the previously
-recorded 0.020, 2.130, 18.437, and 133.494 ms maxima respectively. The gate was
-that no execution class exceed its 2026-09-01 maximum. The transport correction
-adds no event for small outcomes and removes one runtime branch.
+The maximum locked execution measurements were 0.020 ms for `fast_read`,
+2.226 ms for `bounded_scan_or_export`, 18.955 ms for `bounded_mutation`, and
+135.751 ms for `trusted_asset_mutation`. The risk-based regression margin was
+10% above the previously recorded 0.020, 2.130, 18.437, and 133.494 ms maxima;
+all four remained within that margin, with the largest observed increase at
+4.5%. This measurement calls `execute_command()` directly and does not include
+the changed outcome emitter. The transport correction adds no event for small
+outcomes and removes one runtime branch.
 
-The corrective CLI probes were run against selector `8926` in the disposable
+The final corrective CLI probes were run against selector `8f24` in the disposable
 project created by `tools/locked_runtime_acceptance.py`:
 
 ```powershell
-uv run td --json --timeout 10 --instance 8926 ops children /project1
-uv run td --json --timeout 10 --instance 8926 project metadata
-uv run td --json --timeout 10 --instance 8926 ops create /project1 nullDAT outcome_fix_probe
-uv run td --json --timeout 10 --instance 8926 ops get /project1/outcome_fix_probe
-uv run td --json --timeout 10 --instance 8926 ops destroy /project1/outcome_fix_probe
+uv run td --json --timeout 10 --instance 8f24 ops children /project1
+uv run td --json --timeout 10 --instance 8f24 project metadata
+uv run td --json --timeout 10 --instance 8f24 ops get /project1/does_not_exist
+uv run td --json --timeout 10 --instance 8f24 ops create /project1 nullDAT outcome_fix_probe
+uv run td --json --timeout 10 --instance 8f24 ops get /project1/outcome_fix_probe
+uv run td --json --timeout 10 --instance 8f24 ops destroy /project1/outcome_fix_probe
 
-$requestId = '01a06774-2222-7333-8444-555566667777'
-uv run td --json --instance 8926 ops tox import `
+$requestId = '01a0677d-2222-7333-8444-555566667777'
+uv run td --json --instance 8f24 ops tox import `
   /project1/runtime_acceptance E:\td-cli\.tmp-runtime-acceptance-source.tox `
   E:\td-cli outcome_replay_probe --trusted --replace --max-operators 1000 `
   --no-wait --request-id $requestId
@@ -88,7 +93,7 @@ if ($process.CommandLine -notmatch 'td_cli\.daemon\.cli serve') {
 Stop-Process -Id $state.pid
 uv run td-daemon start
 uv run td --json requests get $requestId
-uv run td --json --instance 8926 ops destroy `
+uv run td --json --instance 8f24 ops destroy `
   /project1/runtime_acceptance/outcome_replay_probe --recursive --max-operators 1000
 ```
 
