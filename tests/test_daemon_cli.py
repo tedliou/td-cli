@@ -47,11 +47,21 @@ def test_start_spawns_the_public_serve_command_for_each_runtime(
     monkeypatch.setattr(cli, "data_root", lambda: tmp_path)
     monkeypatch.setattr(cli, "secure_layout", lambda _: None)
     monkeypatch.setattr(cli, "_probe", lambda _: next(probes))
-    monkeypatch.setattr(cli.subprocess, "Popen", lambda argv, **_: spawned.append(argv))
+    monkeypatch.setattr(
+        cli.subprocess,
+        "Popen",
+        lambda argv, **options: spawned.append((argv, options)),
+    )
     monkeypatch.setattr(sys, "frozen", frozen, raising=False)
     monkeypatch.setattr(sys, "executable", r"C:\Programs\td-daemon.exe")
 
     result = CliRunner().invoke(cli.app, ["start"])
 
     assert result.exit_code == 0, result.output
-    assert spawned == [expected]
+    assert len(spawned) == 1
+    command, options = spawned[0]
+    assert command == expected
+    assert options["creationflags"] == (
+        cli.subprocess.CREATE_NO_WINDOW | cli.subprocess.CREATE_NEW_PROCESS_GROUP
+    )
+    assert "startupinfo" not in options

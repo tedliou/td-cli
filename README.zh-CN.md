@@ -73,7 +73,8 @@ Agent scheduler 或 locked TouchDesigner 验收变更，必须遵循
 ## Daemon
 
 Daemon 是每位 Windows 用户一个的验证背景程序，只绑定 `127.0.0.1:9982`，状态位於
-`%LOCALAPPDATA%\touchdesigner-cli`。
+`%LOCALAPPDATA%\touchdesigner-cli`。`td-daemon start` 会在背景程序就绪后返回，且不会留下
+打开的控制台窗口。
 
 ```powershell
 uv run td-daemon start

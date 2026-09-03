@@ -142,8 +142,28 @@ async def test_registration_stays_synchronizing_until_agent_replay(tmp_path: Pat
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("outcome_status", "outcome_result", "outcome_error"),
+    [
+        ("succeeded", {"path": "/secret-path"}, None),
+        (
+            "failed",
+            None,
+            {
+                "code": "operator_not_found",
+                "message": "operator_not_found",
+                "details": {},
+                "retryable": False,
+            },
+        ),
+    ],
+)
 async def test_full_v2_handshake_is_ordered_durable_and_redacted(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    outcome_status: str,
+    outcome_result: object,
+    outcome_error: object,
 ) -> None:
     caplog.set_level(logging.INFO)
     server, thread, port = await start_server(create_transport_app(tmp_path, token=TOKEN))
@@ -177,23 +197,32 @@ async def test_full_v2_handshake_is_ordered_durable_and_redacted(
         await client.emit("request_accepted", {**connection, "request_id": REQUEST_ID})
         authorization = await asyncio.wait_for(execute, 2)
         assert authorization["execution_id"]
+        outcome = {
+            **connection,
+            "request_id": REQUEST_ID,
+            "execution_id": authorization["execution_id"],
+            "status": outcome_status,
+            "result": outcome_result,
+            "error": outcome_error,
+        }
         await client.emit(
-            "request_outcome",
+            "request_outcome_chunk",
             {
                 **connection,
                 "request_id": REQUEST_ID,
                 "execution_id": authorization["execution_id"],
-                "status": "succeeded",
-                "result": {"path": "/secret-path"},
-                "error": None,
+                "chunk_index": 0,
+                "chunk_count": 1,
+                "payload": json.dumps(outcome, separators=(",", ":"), sort_keys=True),
             },
         )
         acknowledgment = await asyncio.wait_for(recorded, 2)
         assert acknowledgment["execution_id"] == authorization["execution_id"]
         assert order == ["dispatch", "execute", "recorded"]
         _, snapshot = await get_json(port, f"/v2/requests/{REQUEST_ID}")
-        assert snapshot["status"] == "succeeded"
-        assert snapshot["result"] == {"path": "/secret-path"}
+        assert snapshot["status"] == outcome_status
+        assert snapshot["result"] == outcome_result
+        assert snapshot["error"] == outcome_error
         serialized = "\n".join(record.getMessage() for record in caplog.records)
         assert TOKEN not in serialized
         assert "/secret-path" not in serialized
