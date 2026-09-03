@@ -177,15 +177,23 @@ async def test_full_v2_handshake_is_ordered_durable_and_redacted(
         await client.emit("request_accepted", {**connection, "request_id": REQUEST_ID})
         authorization = await asyncio.wait_for(execute, 2)
         assert authorization["execution_id"]
+        outcome = {
+            **connection,
+            "request_id": REQUEST_ID,
+            "execution_id": authorization["execution_id"],
+            "status": "succeeded",
+            "result": {"path": "/secret-path"},
+            "error": None,
+        }
         await client.emit(
-            "request_outcome",
+            "request_outcome_chunk",
             {
                 **connection,
                 "request_id": REQUEST_ID,
                 "execution_id": authorization["execution_id"],
-                "status": "succeeded",
-                "result": {"path": "/secret-path"},
-                "error": None,
+                "chunk_index": 0,
+                "chunk_count": 1,
+                "payload": json.dumps(outcome, separators=(",", ":"), sort_keys=True),
             },
         )
         acknowledgment = await asyncio.wait_for(recorded, 2)

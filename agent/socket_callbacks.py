@@ -32,7 +32,10 @@ def onReceiveEvent(dat, rowIndex, message, event):
             scheduleExecution(dat, request_id, execution_id)
     elif event == "request_dispatch":
         result_event, payload = agent.reserve(message)
-        dat.emit(result_event, data=payload)
+        if result_event == "request_outcome":
+            emitOutcome(dat, payload)
+        else:
+            dat.emit(result_event, data=payload)
     elif event == "request_execute":
         if agent.authorize(message):
             scheduleExecution(dat, message["request_id"], message["execution_id"])

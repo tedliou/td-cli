@@ -272,9 +272,12 @@ def test_registration_replays_all_execution_phases_before_dispatch() -> None:
     )
     callbacks["onReceiveEvent"](socket, 0, {"connection_id": "connection-1"}, "registered")
     assert extension.connection_id == "connection-1"
-    assert [event for event, _ in socket.emitted[:-1]] == ["request_outcome_chunk"] * len(
-        socket.emitted[:-1]
-    )
+    replayed = socket.emitted[:-1]
+    assert [event for event, _ in replayed] == ["request_outcome_chunk"] * len(replayed)
+    assert json.loads("".join(chunk["payload"] for _, chunk in replayed)) == {
+        **outcome,
+        "connection_id": "connection-1",
+    }
     assert socket.emitted[-1] == (
         "execution_sync",
         {"instance_id": "instance-1", "connection_id": "connection-1", "records": []},
@@ -329,6 +332,30 @@ def test_dispatch_accepts_without_execution_then_authorization_uses_main_thread_
     event, chunk = socket.emitted[-1]
     assert event == "request_outcome_chunk"
     assert json.loads(chunk["payload"])["error"] is None
+
+
+def test_duplicate_dispatch_chunks_a_retained_failure_with_null_result() -> None:
+    extension = FakeAgentExtension()
+    extension.connection_id = "connection-1"
+    outcome = {
+        **extension.heartbeat_payload(),
+        "request_id": "request-2",
+        "execution_id": "execution-1",
+        "status": "failed",
+        "result": None,
+        "error": {"code": "operator_not_found"},
+    }
+    extension.reserve = lambda _: ("request_outcome", outcome)
+    socket = FakeSocket()
+    callbacks = run_path(
+        str(Path("agent/socket_callbacks.py")),
+        init_globals={"parent": lambda: component(extension)},
+    )
+
+    callbacks["onReceiveEvent"](socket, 0, {"request_id": "request-2"}, "request_dispatch")
+
+    assert [event for event, _ in socket.emitted] == ["request_outcome_chunk"]
+    assert json.loads(socket.emitted[0][1]["payload"]) == outcome
 
 
 def test_orderly_draining_uses_independent_time_and_unregisters_when_empty() -> None:

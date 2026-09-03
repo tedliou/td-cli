@@ -59,8 +59,45 @@ With the root timeline paused, the corrected artifact produced these outcomes:
 The maximum locked execution measurements were 0.019 ms for `fast_read`,
 2.126 ms for `bounded_scan_or_export`, 18.353 ms for `bounded_mutation`, and
 123.707 ms for `trusted_asset_mutation`. They are within the previously
-recorded margins; the transport correction adds no event for small outcomes
-and removes one runtime branch.
+recorded 0.020, 2.130, 18.437, and 133.494 ms maxima respectively. The gate was
+that no execution class exceed its 2026-09-01 maximum. The transport correction
+adds no event for small outcomes and removes one runtime branch.
+
+The corrective CLI probes were run against selector `8926` in the disposable
+project created by `tools/locked_runtime_acceptance.py`:
+
+```powershell
+uv run td --json --timeout 10 --instance 8926 ops children /project1
+uv run td --json --timeout 10 --instance 8926 project metadata
+uv run td --json --timeout 10 --instance 8926 ops create /project1 nullDAT outcome_fix_probe
+uv run td --json --timeout 10 --instance 8926 ops get /project1/outcome_fix_probe
+uv run td --json --timeout 10 --instance 8926 ops destroy /project1/outcome_fix_probe
+
+$requestId = '01a06774-2222-7333-8444-555566667777'
+uv run td --json --instance 8926 ops tox import `
+  /project1/runtime_acceptance E:\td-cli\.tmp-runtime-acceptance-source.tox `
+  E:\td-cli outcome_replay_probe --trusted --replace --max-operators 1000 `
+  --no-wait --request-id $requestId
+Start-Sleep -Milliseconds 50
+$state = Get-Content `
+  $env:LOCALAPPDATA\touchdesigner-cli\run\daemon.json -Raw | ConvertFrom-Json
+$process = Get-CimInstance Win32_Process -Filter "ProcessId = $($state.pid)"
+if ($process.CommandLine -notmatch 'td_cli\.daemon\.cli serve') {
+  throw 'Daemon PID identity check failed'
+}
+Stop-Process -Id $state.pid
+uv run td-daemon start
+uv run td --json requests get $requestId
+uv run td --json --instance 8926 ops destroy `
+  /project1/runtime_acceptance/outcome_replay_probe --recursive --max-operators 1000
+```
+
+Daemon CPU was measured as the `Get-Process` `TotalProcessorTime` delta across
+10 seconds after the Instance returned Online; working-set growth used the same
+process before/after samples. Frozen-window validation snapshotted all process
+IDs with a nonzero `MainWindowHandle`, ran `dist\td-daemon.exe start`, then
+asserted that the serve PID had handle zero and that the post-start snapshot
+contained no new visible process. Two `start/status/stop` cycles followed.
 
 ## Locked TouchDesigner evidence
 
