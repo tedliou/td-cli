@@ -20,6 +20,48 @@ the application retains outcomes until an explicit Daemon acknowledgment and
 replays them after reconnect. It does not retry an authorized mutation:
 https://socket.io/docs/v4/delivery-guarantees/
 
+## 2026-09-03 outcome transport correction
+
+The v0.3.0 Agent used a direct SocketIO DAT event for an outcome that fit in
+one chunk, but every outcome has either a null `result` or null `error`.
+TouchDesigner 2025.32050 rejected that raw dictionary in `emitOutcome`, so the
+Request remained `running` and the per-Instance FIFO correctly held later
+Requests in `queued`. Reconnect happened to succeed because retained outcomes
+were already forced through the JSON-string chunk path.
+
+The corrected Agent has one outbound outcome path: every immediate and replayed
+outcome uses the existing bounded JSON chunks. A small outcome is still one
+Socket.IO event. The Daemon continues to accept the v0.3.0 direct event for
+Protocol 2 receive compatibility, but the Agent does not use it as a fallback.
+
+Locked TouchDesigner 2025.32050 rebuilt source revision
+`3d37625b83d9410dc63f8048f64527f38d53589bea36387b04b4aa065c7217da`
+as artifact SHA-256
+`66c2ec1b1f3faea180929c20c5ba861789221164d011e735a7b3f729d75f935b`.
+With the root timeline paused, the corrected artifact produced these outcomes:
+
+- `ops children /project1` and `project metadata` both completed on their first
+  Connection generation; Daemon dispatch-to-outcome time was 31 ms for each;
+- create, inspect, and destroy of `/project1/outcome_fix_probe` all succeeded,
+  and the Agent retained zero records after acknowledgment;
+- a 50 ms Daemon process kill during a 1,000-Operator trusted import did not
+  retry the mutation; reconnect replay refined the same Request ID to
+  `succeeded`, after which the 1,000-Operator probe was removed;
+- ten Agent reinitializations left no Operator errors, and the 6.5-second
+  window still emitted exactly three heartbeats;
+- with one Online Instance, the Daemon used 31.25 ms CPU over 10 seconds
+  (0.312% of one core), retained a 69.31 MiB working set with zero measured
+  growth, and added no polling loop; and
+- the frozen Daemon completed `start`, `status`, `stop`, and restart twice with
+  no new visible top-level window and a zero `MainWindowHandle` on the serve
+  process.
+
+The maximum locked execution measurements were 0.019 ms for `fast_read`,
+2.126 ms for `bounded_scan_or_export`, 18.353 ms for `bounded_mutation`, and
+123.707 ms for `trusted_asset_mutation`. They are within the previously
+recorded margins; the transport correction adds no event for small outcomes
+and removes one runtime branch.
+
 ## Locked TouchDesigner evidence
 
 The disposable acceptance harness in `tools/locked_runtime_acceptance.py` ran
