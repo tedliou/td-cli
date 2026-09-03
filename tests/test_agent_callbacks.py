@@ -284,7 +284,7 @@ def test_registration_replays_all_execution_phases_before_dispatch() -> None:
     )
 
 
-def test_dispatch_accepts_without_execution_then_authorization_uses_main_thread_run() -> None:
+def test_dispatch_authorizes_main_thread_execution_and_chunks_outcomes() -> None:
     extension = FakeAgentExtension()
     extension.connection_id = "connection-1"
     socket = FakeSocket()
@@ -332,6 +332,20 @@ def test_dispatch_accepts_without_execution_then_authorization_uses_main_thread_
     event, chunk = socket.emitted[-1]
     assert event == "request_outcome_chunk"
     assert json.loads(chunk["payload"])["error"] is None
+
+    failed = {
+        **extension.heartbeat_payload(),
+        "request_id": "request-3",
+        "execution_id": "execution-2",
+        "status": "failed",
+        "result": None,
+        "error": {"code": "operator_not_found"},
+    }
+    extension.execute_authorized = lambda *_: failed
+    callbacks["executeScheduled"](socket, "request-3", "execution-2")
+    event, chunk = socket.emitted[-1]
+    assert event == "request_outcome_chunk"
+    assert json.loads(chunk["payload"]) == failed
 
 
 def test_duplicate_dispatch_chunks_a_retained_failure_with_null_result() -> None:
