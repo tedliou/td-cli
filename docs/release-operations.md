@@ -71,6 +71,6 @@ irm https://github.com/tedliou/td-cli/releases/latest/download/uninstall.ps1 | i
 ```
 
 For inspection-first use, download the script and `SHA256SUMS`, compare its
-published digest, inspect it, then execute it. The executables remain unsigned
-in v0.3.0; checksum verification does not bypass PowerShell, SmartScreen, or
+published digest, inspect it, then execute it. The executables remain unsigned;
+checksum verification does not bypass PowerShell, SmartScreen, or
 Defender policy.
