@@ -45,6 +45,15 @@ The final Agent artifact for #111 is 34830 bytes, SHA
 `06ce79ea641abf2804fadfc4195b01e3bba83be047101d745a3db84481c416b8`.
 Its code differs from the prior cold-open artifact only by the derived table read
 predicate. Compatible side-load and derived reads above used this exact artifact.
+The final artwork subsequently saved and cold-opened this exact Agent artifact:
+52 output channels, 44 original values with maximum error zero, 20 pulse counts,
+five malformed messages, stale-state and sender isolation checks all passed.
+Cold open reset the 52 channels, preserved callback source and relative media
+paths, and received two bundles covering all 14 addresses (28 messages).
+The saved artwork is 60146 bytes, SHA
+`87159531604d8997a4833699de3a88386566fbe1c0920884da41237836dab8af`.
+Its repository records `docs/osc-live-acceptance.json` and
+`docs/osc-reopen-acceptance.json`; both were independently read and report passed.
 
 ## Simplification and independent review
 
