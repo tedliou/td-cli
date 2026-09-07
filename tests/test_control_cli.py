@@ -43,6 +43,26 @@ class FakeDaemonClient:
         }
 
 
+def test_project_save_submits_explicit_path_and_digest(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "--json",
+            "project",
+            "save",
+            "E:/work/project.toe",
+            "--expected-sha256",
+            "a" * 64,
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert FakeDaemonClient.submitted == {
+        "name": "project.save",
+        "input": {"expected_path": "E:/work/project.toe", "expected_sha256": "a" * 64},
+    }
+
+
 def test_ops_get_submits_typed_command_and_emits_protocol_envelope(monkeypatch) -> None:
     monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
 

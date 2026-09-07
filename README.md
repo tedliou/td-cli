@@ -94,7 +94,7 @@ The fixed layout contains `state\daemon.db`, `state\auth.token`,
 Deleting `state\auth.token` while the Daemon is stopped performs manual token
 recovery; every Agent Component must reconnect afterward.
 
-Protocol v3 is the only runtime protocol; there is no v1 alias or fallback. A
+Protocol v3 is the only runtime protocol; there is no v2 alias or fallback. A
 Request moves through `queued`, `dispatched`, `accepted`, and `running` before a
 terminal outcome. The Daemon persists before dispatch, permits one authorized
 Request per Instance in FIFO order, and isolates every reconnect with a new
@@ -132,6 +132,38 @@ the public result is committed. Command, heartbeat, and drain timers use TouchDe
 the main thread. Extension initialization uses the official SocketIO Reset
 parameter, and clears the transient auth DAT after connection. Power Off mode is
 not supported.
+
+<!-- doc-section: offline-upgrade -->
+
+## Upgrade the embedded Agent
+
+`td-agent upgrade-project` is the fixed offline upgrade entry point, independent
+of runtime Protocol. Its verified migration is canonical Agent 0.3.1 → 0.4.0
+on TouchDesigner 2025.32050; identical 0.4.0 is a no-op. Arbitrary historical
+or future versions are not implied. Save your work and close **all TouchDesigner
+processes** first: the command refuses active processes and never closes them.
+Use the new CLI bundle and its trusted artifact and manifest:
+
+```powershell
+$bundle = "$env:LOCALAPPDATA/Programs/touchdesigner-cli/current"
+$project = (Resolve-Path ./MyProject.toe).Path
+$sha = (Get-FileHash $project -Algorithm SHA256).Hash.ToLower()
+& "$bundle/td-agent.exe" upgrade-project $project --artifact "$bundle/td-agent.tox" --manifest "$bundle/manifest.json" --tools-dir "C:/Program Files/Derivative/TouchDesigner/bin" --expected-sha256 $sha --timeout 90
+```
+
+The command uses locked vendor tools in scratch space, identifies the known
+Agent, verifies every unrelated project file, creates a unique verified backup,
+and atomically replaces the project. Unknown or modified Agents, ambiguous
+matches, external linkage, unsupported builds, changed inputs and failed round
+trips are rejected. Disabled external-TOX paths remain inert metadata.
+Exclusive ownership of the closed project is required throughout. Pre-replacement
+failure preserves the original; backups remain available for review.
+
+Start the upgraded daemon before reopening the project and rediscovering the
+Instance selector. Protocol rejection disables the connection until the next
+Agent initialization; it does not retry incompatible protocols. Historical 0.3.1
+tools lack this entry point: use the new `td-agent` for the first migration.
+Future releases retain the command and explicitly extend the tested migration matrix.
 
 <!-- doc-section: operator-control -->
 

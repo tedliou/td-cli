@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
+from td_cli.agent_upgrade import UpgradeError, upgrade_project
 from td_cli.cli_support import print_version
 
 app = typer.Typer(no_args_is_help=True)
@@ -98,6 +100,24 @@ def build_instructions(
     )
     typer.echo(f"TouchDesigner {manifest['locked_touchdesigner_version']} Textport command:")
     typer.echo(command)
+
+
+@app.command("upgrade-project")
+def upgrade_project_command(
+    project: Annotated[Path, typer.Argument(exists=True, dir_okay=False)],
+    artifact: Annotated[Path, typer.Option(exists=True, dir_okay=False)],
+    manifest: Annotated[Path, typer.Option(exists=True, dir_okay=False)],
+    tools_dir: Annotated[Path, typer.Option(exists=True, file_okay=False)],
+    expected_sha256: Annotated[str, typer.Option()],
+    timeout: Annotated[float, typer.Option(min=1, max=120)] = 90,
+) -> None:
+    """Upgrade a closed saved project using a trusted Agent and locked vendor tools."""
+    try:
+        result = upgrade_project(project, artifact, manifest, tools_dir, expected_sha256, timeout)
+    except (UpgradeError, OSError, ValueError, subprocess.SubprocessError) as exc:
+        typer.echo(f"upgrade failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo(json.dumps(result, separators=(",", ":"), sort_keys=True))
 
 
 if __name__ == "__main__":

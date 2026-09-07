@@ -242,6 +242,39 @@ def test_socket_close_invalidates_heartbeat_generation() -> None:
     assert stopped == [True]
 
 
+def test_registration_rejection_is_terminal_without_retry_or_outcome_loss() -> None:
+    extension = FakeAgentExtension()
+    extension.records = [{"phase": "outcome", "request_id": "retained"}]
+    extension.connection_id = "stale"
+    socket = FakeSocket()
+    auth = ["secret"]
+    stopped = []
+    scheduled = []
+    callbacks = run_path(
+        str(Path("agent/socket_callbacks.py")),
+        init_globals={
+            "parent": lambda: component(extension),
+            "op": FakeOp(
+                {
+                    "auth_table": auth,
+                    "heartbeat_execute": SimpleNamespace(
+                        module=SimpleNamespace(stopScheduler=lambda: stopped.append(True))
+                    ),
+                }
+            ),
+            "run": lambda *a, **kw: scheduled.append((a, kw)),
+        },
+    )
+    callbacks["onReceiveEvent"](socket, 0, {"code": "protocol_incompatible"}, "registration_error")
+    assert not extension.runtime_active
+    assert extension.connection_id is None
+    assert not socket.par.active
+    assert auth == []
+    assert stopped == [True]
+    assert scheduled == []
+    assert extension.records == [{"phase": "outcome", "request_id": "retained"}]
+
+
 def test_stale_close_cannot_stop_new_socket_generation() -> None:
     extension = FakeAgentExtension()
     extension.begin_socket_generation()

@@ -118,6 +118,34 @@ Daemon 完成记录。上限为 64 条、每条 canonical outcome 256 KiB、合�
 独立的 `TDResources` 时间参考，所有 TouchDesigner object 访问仍只在主线程。Extension
 初始化使用官方 SocketIO Reset 参数，连接后清除暂存 auth DAT。Power Off 模式不受支持。
 
+<!-- doc-section: offline-upgrade -->
+
+## 升级项目内嵌 Agent
+
+`td-agent upgrade-project` 是独立于 runtime Protocol 的固定离线升级入口。
+目前已验证 canonical Agent 0.3.1 → 0.4.0、TouchDesigner 2025.32050；
+相同 0.4.0 仅验证、不改文件，不代表任意历史或未来版本都受支持。
+先保存作品并关闭**所有 TouchDesigner 进程**；命令会拒绝仍有进程的情况，
+不会自动关闭它们。使用新版 CLI 包及其可信 artifact／manifest：
+
+```powershell
+$bundle = "$env:LOCALAPPDATA/Programs/touchdesigner-cli/current"
+$project = (Resolve-Path ./MyProject.toe).Path
+$sha = (Get-FileHash $project -Algorithm SHA256).Hash.ToLower()
+& "$bundle/td-agent.exe" upgrade-project $project --artifact "$bundle/td-agent.tox" --manifest "$bundle/manifest.json" --tools-dir "C:/Program Files/Derivative/TouchDesigner/bin" --expected-sha256 $sha --timeout 90
+```
+
+命令只在临时副本使用锁定版本的官方工具，识别既有 Agent、验证其余作品
+文件不变，建立唯一且经过验证的备份，再原子替换原文件。未知或修改过的
+Agent、多重匹配、外部链接、不支持的 build、输入变化及 round-trip 失败均拒绝。
+停用的 external-TOX 路径作为无作用的元数据保留。
+整个操作期间需独占已关闭的项目；替换前失败保留原文件，备份留供检查。
+
+先启动升级后的 daemon，再打开项目并重新查询 Instance selector。
+协议拒绝会停用连接直到下次 Agent 初始化，不重试不兼容协议。
+历史 0.3.1 工具没有此入口，首次迁移应调用新版 `td-agent`。
+后续版本维持命令入口，明确扩充已验证的迁移范围。
+
 <!-- doc-section: operator-control -->
 
 ## 基本 Operator 控制

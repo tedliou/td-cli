@@ -22,9 +22,9 @@ uniquely identifies the known embedded Agent, preserves its operator path, and
 replaces only its known component subtree in scratch space. A vendor round trip
 and a second expansion must preserve every unrelated file byte for byte. Unknown
 Agent children, external linkage, versions, builds, ambiguous matches, active
-matching processes, or changed source digests fail without replacing the source.
+TouchDesigner processes, or changed source digests fail without replacing the source.
 The original receives a unique verified backup before same-volume atomic replace.
-Process and digest checks cannot exclude a writer racing the final replace;
+All TouchDesigner processes must be closed: launch command lines cannot prove which project is currently open. Digest checks cannot exclude a writer racing the final replace;
 exclusive project ownership remains an operational precondition.
 
 This CLI entry point is the durable upgrade interface, not a fallback command
