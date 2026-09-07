@@ -335,7 +335,10 @@ td --json --instance <selector> dat table replace /project1/grid '[["name","valu
 td --json --instance <selector> dat table patch /project1/grid '[["updated"]]' --row-offset 1 --column-offset 1
 ```
 
-Only exact `textDAT` and `tableDAT` Operators are accepted. Mutation rejects a
+Text access requires `textDAT`; table writes require `tableDAT`. Bounded table
+reads accept any DAT with table-formatted data (`isTable`), including CHOP to DAT
+for reading actual CHOP output values. Reads use normal dependency cooking, without
+forcing cooks. Mutation rejects a
 non-empty File parameter or enabled Sync File mode, root and Agent Component
 protected paths, non-rectangular/non-string cells, and patches outside current
 dimensions. Content is limited to 32 KiB of UTF-8, with at most 256 rows, 256

@@ -285,7 +285,7 @@ td --json --instance <selector> dat table replace /project1/grid '[["name","valu
 td --json --instance <selector> dat table patch /project1/grid '[["updated"]]' --row-offset 1 --column-offset 1
 ```
 
-只接受精確 `textDAT`／`tableDAT`。外部 File／Sync File、protected path、非 rectangular／非 string
+文字存取限 `textDAT`，表格寫入限 `tableDAT`；有界表格讀取接受 `isTable` 為真的 DAT，包含用於讀取實際 CHOP 輸出值的 CHOP to DAT。讀取遵循一般相依 cook，不強制 cook。外部 File／Sync File、protected path、非 rectangular／非 string
 cell 及越界 patch 都會被拒絕。Content 上限 32 KiB UTF-8、256 rows、256 columns、4096 cells、每
 cell 16 KiB。Mutation 會 read back 完整內容與尺寸，失敗時復原整份 DAT。這些 Command 不執行
 DAT、不 import module、不 evaluate content，也不接受 filesystem path。

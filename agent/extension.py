@@ -372,7 +372,9 @@ class OperatorControl:
         }
 
     def _get_table_dat(self, payload):
-        operator = self._require_dat(payload, "tableDAT")
+        operator = self._operator(payload)
+        if str(operator.family) != "DAT" or not operator.isTable:
+            raise AgentCommandError("dat_type_mismatch")
         try:
             total_rows = int(operator.numRows)
             total_columns = int(operator.numCols)

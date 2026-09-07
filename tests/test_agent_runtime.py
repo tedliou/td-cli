@@ -389,6 +389,7 @@ class FakeCell:
 class FakeTextDat(FakeOperator):
     def __init__(self, path: str, text: str = "", *, file="", syncfile=False) -> None:
         super().__init__(path, op_type="textDAT", family="DAT")
+        self.isTable = False
         self.text = text
         self.par = SimpleNamespace(file=FakeDatParameter(file), syncfile=FakeDatParameter(syncfile))
 
@@ -396,6 +397,7 @@ class FakeTextDat(FakeOperator):
 class FakeTableDat(FakeOperator):
     def __init__(self, path: str, rows=None, *, file="", syncfile=False) -> None:
         super().__init__(path, op_type="tableDAT", family="DAT")
+        self.isTable = True
         self._rows = [list(row) for row in (rows or [])]
         self.par = SimpleNamespace(file=FakeDatParameter(file), syncfile=FakeDatParameter(syncfile))
 
@@ -1372,6 +1374,40 @@ def test_table_dat_get_returns_an_explicit_bounded_window_and_dimensions() -> No
                 },
             }
         )
+
+
+def test_derived_table_read_is_bounded_but_writes_remain_rejected() -> None:
+    table = FakeTableDat("/project1/readback", [["alpha", "0.75"], ["beta", "0.25"]])
+    table.OPType = "choptoDAT"
+    control = make_control({table.path: table}.get)
+    result = control.execute(
+        {
+            "name": "dat.table.get",
+            "input": {
+                "operator_path": table.path,
+                "row_offset": 0,
+                "column_offset": 0,
+                "row_count": 1,
+                "column_count": 2,
+                "max_bytes": 32,
+            },
+        }
+    )
+    assert result["rows"] == [["alpha", "0.75"]]
+    assert result["total_rows"] == 2
+    with pytest.raises(module.AgentCommandError, match="dat_type_mismatch"):
+        control.execute(
+            {
+                "name": "dat.table.replace",
+                "input": {
+                    "operator_path": table.path,
+                    "rows": [["overwritten"]],
+                },
+            }
+        )
+    table.isTable = False
+    with pytest.raises(module.AgentCommandError, match="dat_type_mismatch"):
+        control.execute({"name": "dat.table.get", "input": {"operator_path": table.path}})
 
 
 def test_table_dat_replace_and_patch_return_exact_verified_complete_state() -> None:

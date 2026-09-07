@@ -183,3 +183,25 @@ def test_stale_project_precondition_preserves_original(migration):
     with pytest.raises(upgrade.UpgradeError, match="digest changed"):
         upgrade.upgrade_project(project, artifact, evidence, temporary, "0" * 64)
     assert hashlib.sha256(project.read_bytes()).digest() == hashlib.sha256(original).digest()
+
+
+def test_changed_event_subscriptions_are_not_reported_as_canonical(migration):
+    project, artifact, evidence, _ = migration
+    for path, prefix in ((project, "project1/my_agent"), (artifact, "td_agent")):
+        with zipfile.ZipFile(path, "a") as archive:
+            archive.writestr(
+                prefix + "/events_table.table", "modified" if path == project else "events"
+            )
+    evidence.write_text(
+        json.dumps(
+            {
+                "artifact_sha256": upgrade.digest(artifact),
+                "touchdesigner_version": upgrade.BUILD,
+            }
+        )
+    )
+    original = project.read_bytes()
+    result = invoke(migration)
+    assert result.exit_code == 1
+    assert "modified runtime structure" in result.output
+    assert project.read_bytes() == original
