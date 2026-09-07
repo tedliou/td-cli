@@ -78,7 +78,7 @@ def create_transport_app(
     outbound_capacity: int = 64,
     execution_leases: dict[str, float] | None = None,
 ) -> socketio.ASGIApp:
-    """Create thin authenticated Protocol v2 adapters around RequestLifecycle."""
+    """Create thin authenticated Protocol v3 adapters around RequestLifecycle."""
     sio = socketio.AsyncServer(
         async_mode="asgi", cors_allowed_origins=[], max_http_buffer_size=256 * 1024
     )
@@ -155,7 +155,7 @@ def create_transport_app(
                     "selector": _selector(instance_id, ids),
                     "status": item.status if item.status == "draining" else state["status"],
                     "agent_version": item.agent_version,
-                    "protocol_version": 2,
+                    "protocol_version": 3,
                     "capabilities": sorted(item.capabilities),
                     "last_heartbeat_at": item.last_heartbeat_at,
                     "offline_expires_at": item.offline_expires_at,
@@ -513,9 +513,18 @@ def _effect_outbound(effect: LifecycleEffect, drain_timeout: float) -> _Outbound
         "connection_id": effect.connection_id,
     }
     if effect.kind == "registered":
-        return _Outbound("registered", {**envelope, "protocol_version": 2})
+        return _Outbound("registered", {**envelope, "protocol_version": 3})
     if effect.kind == "request_dispatch":
-        return _Outbound("request_dispatch", {**effect.payload, **envelope})
+        return _Outbound(
+            "request_dispatch",
+            {
+                **effect.payload,
+                **envelope,
+                "command": json.dumps(
+                    effect.payload["command"], separators=(",", ":"), sort_keys=True
+                ),
+            },
+        )
     if effect.kind == "request_execute":
         return _Outbound(
             "request_execute",
@@ -552,7 +561,7 @@ def _registration(data: object) -> tuple[str, str, list[str]] | None:
     if (
         not isinstance(versions, list)
         or any(type(version) is not int for version in versions)
-        or versions != [2]
+        or versions != [3]
         or data.get("td_build") != LOCKED_TOUCHDESIGNER_VERSION
     ):
         return None

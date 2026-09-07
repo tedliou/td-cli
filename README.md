@@ -94,7 +94,7 @@ The fixed layout contains `state\daemon.db`, `state\auth.token`,
 Deleting `state\auth.token` while the Daemon is stopped performs manual token
 recovery; every Agent Component must reconnect afterward.
 
-Protocol v2 is the only runtime protocol; there is no v1 alias or fallback. A
+Protocol v3 is the only runtime protocol; there is no v1 alias or fallback. A
 Request moves through `queued`, `dispatched`, `accepted`, and `running` before a
 terminal outcome. The Daemon persists before dispatch, permits one authorized
 Request per Instance in FIFO order, and isolates every reconnect with a new
@@ -138,7 +138,7 @@ not supported.
 ## Basic network control
 
 List the Instances, select an Online Instance, and use an explicit Selector
-whenever more than one is available. Protocol v2 can create cataloged built-in
+whenever more than one is available. Protocol v3 can create cataloged built-in
 Operators, inspect and configure their Parameters, and edit same-family wiring:
 
 ```powershell
@@ -186,7 +186,7 @@ td --json --instance <selector> parameters sequence-replace /project1/target Ite
 
 Bind sources are generated solely from a typed Operator/Parameter identity.
 Export mode accepts a typed CHOP Operator/channel identity only when that exact
-export already exists in TouchDesigner; Protocol v2 does not synthesize CHOP
+export already exists in TouchDesigner; Protocol v3 does not synthesize CHOP
 export tables or emulate an export with an expression. Sequence replacement is
 bounded to 128 blocks and 256 Parameters per block, reads back the complete
 ordered state, and restores the prior block count, order, names, modes, values,
@@ -313,6 +313,31 @@ complete content and dimensions, then restores and verifies the entire prior
 DAT on failure; distinct unavailable, non-writable, rollback-failed, and
 uncertain-outcome errors preserve honest state. These Commands never execute
 DATs, import modules, evaluate content, or accept filesystem paths.
+
+<!-- doc-section: project-save -->
+## Save the current project
+
+`project.save` writes the existing current local `.toe` only. First inspect
+`project metadata`, exclude other writers, then compute the disk digest:
+
+```powershell
+$projectPath = 'E:\artwork\Artwork.toe'
+$digest = (Get-FileHash -LiteralPath $projectPath -Algorithm SHA256).Hash.ToLowerInvariant()
+td --json --instance <selector> project save $projectPath --expected-sha256 $digest
+```
+
+The path and SHA-256 must match at preflight. This is not an atomic lock against
+other processes. Files are bounded to 64 MiB; linked/reparse paths are rejected.
+The command returns the actual disk path, byte count and SHA-256. It does not
+save external TOX files or choose a new project name. A post-save verification
+failure is `project_save_outcome_unknown`; inspect the retained Request and disk
+before deciding what to do. Never automatically repeat an uncertain save.
+
+Protocol v3 preserves boolean, integer and null Command values as JSON text at
+the SocketIO boundary. Upgrade the CLI, Daemon and embedded Agent together;
+v2/v3 registrations are rejected in both directions. Editable `StrMenu`
+parameters such as Select CHOP `channames` accept arbitrary strings; ordinary
+`Menu` parameters still require an advertised menu name.
 
 <!-- doc-section: operator-catalog -->
 

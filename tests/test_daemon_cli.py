@@ -12,13 +12,13 @@ def test_status_reports_authenticated_unhealthy_daemon(tmp_path: Path, monkeypat
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     (run_dir / "daemon.json").write_text(
-        json.dumps({"pid": 42, "release_version": "test", "protocol_versions": [2]}),
+        json.dumps({"pid": 42, "release_version": "test", "protocol_versions": [3]}),
         encoding="utf-8",
     )
     monkeypatch.setattr(
         cli,
         "_probe",
-        lambda _: {"ready": False, "release_version": "test", "protocol_versions": [2]},
+        lambda _: {"ready": False, "release_version": "test", "protocol_versions": [3]},
     )
 
     assert cli._status_payload(tmp_path)["status"] == "starting/unhealthy"
@@ -43,7 +43,7 @@ def test_start_spawns_the_public_serve_command_for_each_runtime(
     tmp_path: Path, monkeypatch, frozen: bool, expected: list[str]
 ) -> None:
     spawned = []
-    probes = iter([None, {"ready": True, "protocol_versions": [2]}])
+    probes = iter([None, {"ready": True, "protocol_versions": [3]}])
     monkeypatch.setattr(cli, "data_root", lambda: tmp_path)
     monkeypatch.setattr(cli, "secure_layout", lambda _: None)
     monkeypatch.setattr(cli, "_probe", lambda _: next(probes))

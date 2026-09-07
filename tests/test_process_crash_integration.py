@@ -47,7 +47,7 @@ uvicorn.run(
                 raise RuntimeError("Daemon subprocess exited during startup")
             try:
                 response = await session.get(
-                    f"http://127.0.0.1:{port}/v2/health",
+                    f"http://127.0.0.1:{port}/v3/health",
                     headers={"Authorization": f"Bearer {TOKEN}"},
                 )
                 if response.status == 200:
@@ -93,7 +93,7 @@ async def test_public_transport_recovers_each_abrupt_process_boundary(
             "register",
             {
                 "instance_id": INSTANCE_ID,
-                "protocol_versions": [2],
+                "protocol_versions": [3],
                 "agent_version": "test-agent",
                 "td_build": "2025.32050",
                 "capabilities": ["ops.get"],
@@ -104,7 +104,7 @@ async def test_public_transport_recovers_each_abrupt_process_boundary(
             await agent.emit("execution_sync", {**connection, "records": []})
         async with ClientSession() as session:
             response = await session.post(
-                f"http://127.0.0.1:{port}/v2/requests",
+                f"http://127.0.0.1:{port}/v3/requests",
                 headers={"Authorization": f"Bearer {TOKEN}"},
                 json={
                     "request_id": request_id,
@@ -127,7 +127,7 @@ async def test_public_transport_recovers_each_abrupt_process_boundary(
         process = await start_daemon_process(root, port)
         async with ClientSession() as session:
             response = await session.get(
-                f"http://127.0.0.1:{port}/v2/requests/{request_id}",
+                f"http://127.0.0.1:{port}/v3/requests/{request_id}",
                 headers={"Authorization": f"Bearer {TOKEN}"},
             )
             assert response.status == 200

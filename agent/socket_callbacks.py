@@ -1,4 +1,6 @@
-"""Canonical SocketIO DAT callbacks for the Protocol v2 execution handshake."""
+"""Canonical SocketIO DAT callbacks for the Protocol v3 execution handshake."""
+
+import json
 
 
 def onOpen(dat):
@@ -30,7 +32,37 @@ def onReceiveEvent(dat, rowIndex, message, event):
         )
         for request_id, execution_id in agent.authorized_records():
             scheduleExecution(dat, request_id, execution_id)
+    elif event == "registration_error":
+        agent.runtime_active = False
+        agent.connection_id = None
+        op("heartbeat_execute").module.stopScheduler()
+        dat.par.active = False
+        agent.clear_auth(op("auth_table"))
     elif event == "request_dispatch":
+        try:
+            wire_command = message["command"]
+            if not isinstance(wire_command, str):
+                raise TypeError("command must be JSON text")
+            command = json.loads(wire_command)
+            if (
+                not isinstance(command, dict)
+                or set(command) != {"name", "input"}
+                or not isinstance(command["name"], str)
+                or not isinstance(command["input"], dict)
+            ):
+                raise ValueError("invalid Command object")
+        except (KeyError, TypeError, ValueError):
+            dat.emit(
+                "request_rejected",
+                data={
+                    "instance_id": message.get("instance_id"),
+                    "connection_id": message.get("connection_id"),
+                    "request_id": message.get("request_id"),
+                    "code": "command_wire_invalid",
+                },
+            )
+            return
+        message = {**message, "command": command}
         result_event, payload = agent.reserve(message)
         if result_event == "request_outcome":
             emitOutcome(dat, payload)
@@ -67,13 +99,13 @@ def onReceiveEvent(dat, rowIndex, message, event):
 
 
 def executeScheduled(dat, request_id, execution_id):
-    outcome = parent().ext.Agent.execute_authorized(request_id, execution_id)
+    outcome = dat.parent().ext.Agent.execute_authorized(request_id, execution_id)
     if outcome is not None:
         emitOutcome(dat, outcome)
 
 
 def emitOutcome(dat, outcome):
-    for chunk in parent().ext.Agent.outcome_chunks(outcome):
+    for chunk in dat.parent().ext.Agent.outcome_chunks(outcome):
         dat.emit("request_outcome_chunk", data=chunk)
 
 
@@ -89,7 +121,7 @@ def scheduleExecution(dat, request_id, execution_id):
 
 
 def onClose(dat, failure):
-    del dat, failure
+    del failure
     agent = parent().ext.Agent
     if not agent.end_socket_generation():
         return
@@ -99,7 +131,7 @@ def onClose(dat, failure):
 
 
 def finishDraining(dat):
-    agent = parent().ext.Agent
+    agent = dat.parent().ext.Agent
     if agent.connection_id:
         dat.emit("unregister", data=agent.heartbeat_payload())
         dat.par.active = False

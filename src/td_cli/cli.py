@@ -79,7 +79,7 @@ def _reject_instance_on_query(ctx: typer.Context) -> None:
 
 def _emit(ctx: typer.Context, data: object, *, request: dict[str, Any] | None = None) -> None:
     if ctx.obj["json"]:
-        envelope: dict[str, object] = {"protocol_version": 2, "data": data}
+        envelope: dict[str, object] = {"protocol_version": 3, "data": data}
         if request is not None:
             envelope["request"] = {"request_id": request["request_id"], "status": request["status"]}
         typer.echo(json.dumps(envelope, separators=(",", ":"), ensure_ascii=True))
@@ -101,7 +101,7 @@ def _fail(ctx: typer.Context, error: ClientError) -> None:
     code = exits.get(error.code, 5)
     if ctx.obj["json"]:
         envelope: dict[str, object] = {
-            "protocol_version": 2,
+            "protocol_version": 3,
             "error": {
                 "code": error.code,
                 "message": error.code,
@@ -198,7 +198,7 @@ def version_info(
                 raise
         data = {
             "release_version": __version__,
-            "protocol_versions": [2],
+            "protocol_versions": [3],
             "daemon_release_version": daemon_version,
         }
         original = ctx.obj["json"]
@@ -1142,6 +1142,24 @@ def project_snapshot(
     _command(ctx, "project.snapshot", dedicated, input, input_file, no_wait, request_id)
 
 
+@project_app.command("save")
+def project_save(
+    ctx: typer.Context,
+    expected_path: Annotated[str | None, typer.Argument()] = None,
+    expected_sha256: Annotated[str | None, typer.Option("--expected-sha256")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: bool = False,
+    request_id: str | None = None,
+) -> None:
+    dedicated = (
+        {"expected_path": expected_path, "expected_sha256": expected_sha256}
+        if expected_path is not None or expected_sha256 is not None
+        else None
+    )
+    _command(ctx, "project.save", dedicated, input, input_file, no_wait, request_id)
+
+
 @binary_app.command("export")
 def binary_export(
     ctx: typer.Context,
@@ -1193,7 +1211,7 @@ def events_read(
 
 
 def run() -> None:
-    """Run the CLI while preserving Protocol v2 JSON for parser failures."""
+    """Run the CLI while preserving Protocol v3 JSON for parser failures."""
     try:
         exit_code = app(standalone_mode=False)
         if isinstance(exit_code, int) and exit_code:
@@ -1203,7 +1221,7 @@ def run() -> None:
             typer.echo(
                 json.dumps(
                     {
-                        "protocol_version": 2,
+                        "protocol_version": 3,
                         "error": {
                             "code": "invalid_arguments",
                             "message": "invalid_arguments",

@@ -1,4 +1,4 @@
-"""Strict public Protocol v2 models shared by the Daemon and Agent Component."""
+"""Strict public Protocol v3 models shared by the Daemon and Agent Component."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from td_cli.command_catalog import (
 
 __all__ = ["OperatorInput"]
 
-PROTOCOL_VERSION = 2
+PROTOCOL_VERSION = 3
 PROTOCOL_VERSIONS = (PROTOCOL_VERSION,)
 
 

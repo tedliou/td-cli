@@ -87,7 +87,7 @@ uv run td-daemon serve
 `run\daemon.json`。只有在 Daemon 停止時刪除 `state\auth.token` 才是手動 token recovery；之後
 所有 Agent Component 都必須重新連線。
 
-Protocol v2 是唯一 runtime protocol，不提供 v1 alias 或 fallback。Request 依序經過
+Protocol v3 是唯一 runtime protocol，不提供 v1 alias 或 fallback。Request 依序經過
 `queued`、`dispatched`、`accepted`、`running` 後才進入終態。Daemon 必須先持久化再派送，
 每個 Instance 依 FIFO 僅允許一個已授權 Request，且每次重連都以新的 Connection ID 隔離。
 授權後斷線會成為 `unknown`；td-cli 絕不自動重試，但同一 execution 保留的結果之後可將它細化為
@@ -261,6 +261,28 @@ td --json --instance <selector> dat table patch /project1/grid '[["updated"]]' -
 cell 及越界 patch 都會被拒絕。Content 上限 32 KiB UTF-8、256 rows、256 columns、4096 cells、每
 cell 16 KiB。Mutation 會 read back 完整內容與尺寸，失敗時復原整份 DAT。這些 Command 不執行
 DAT、不 import module、不 evaluate content，也不接受 filesystem path。
+
+<!-- doc-section: project-save -->
+## 保存目前專案
+
+`project.save` 只保存目前已存在的本機 `.toe`。先以 `project metadata` 確認
+路徑、排除其他寫入者，再取得磁碟檔案摘要：
+
+```powershell
+$projectPath = 'E:\artwork\Artwork.toe'
+$digest = (Get-FileHash -LiteralPath $projectPath -Algorithm SHA256).Hash.ToLowerInvariant()
+td --json --instance <selector> project save $projectPath --expected-sha256 $digest
+```
+
+路徑與 SHA-256 必須在執行前相符；這不是跨程序的原子鎖。檔案上限 64 MiB，
+拒絕連結／reparse 路徑。成功結果包含實際磁碟路徑、位元組數及 SHA-256。
+不另存新檔名，也不保存外部 TOX。保存後無法確認結果時回報
+`project_save_outcome_unknown`；先查 retained Request 與磁碟，不自動重做。
+
+Protocol v3 在 SocketIO 邊界以 JSON 文字保留 Command 的布林、整數及 null 型別。
+CLI、Daemon 與專案內嵌 Agent 必須一起升級；v2/v3 雙向拒絕註冊。
+可編輯的 `StrMenu`（例如 Select CHOP 的 `channames`）接受任意字串，
+一般 `Menu` 仍只接受列出的選項名稱。
 
 <!-- doc-section: operator-catalog -->
 

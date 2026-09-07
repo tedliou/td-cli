@@ -1722,7 +1722,7 @@ class OperatorControl:
             "momentary": "boolean",
             "pulse": "pulse",
             "menu": "menu",
-            "strmenu": "menu",
+            "strmenu": "string",
             "python": "python",
             "sequence": "sequence",
             "object": "operator",
@@ -2394,6 +2394,7 @@ class AgentExt:
         "events.read",
         "project.metadata",
         "project.snapshot",
+        "project.save",
     )
 
     def __init__(self, owner_comp, operator_lookup=None, project_info=None, app_info=None):
@@ -2463,6 +2464,20 @@ class AgentExt:
         state.setdefault("current_socket_generation", None)
         state.setdefault("heartbeat_emissions", 0)
         self._state = state
+        connection_state = owner_comp.fetch("_td_cli_connection_state", None, search=False)
+        if (
+            connection_state is None
+            or connection_state["runtime_session_id"] != runtime_session_id
+            or connection_state.get("owner_id") != owner_comp.id
+        ):
+            connection_state = {
+                "runtime_session_id": runtime_session_id,
+                "owner_id": owner_comp.id,
+                "socket_generations": [],
+                "current_socket_generation": None,
+            }
+            owner_comp.store("_td_cli_connection_state", connection_state)
+        self._connection_state = connection_state
         self.connection_id = None
         self.draining = False
         self.last_heartbeat_at = 0.0
@@ -2491,7 +2506,7 @@ class AgentExt:
 
     def onDestroyTD(self):
         self.runtime_active = False
-        self._state["current_socket_generation"] = None
+        self._connection_state["current_socket_generation"] = None
         self.connection_id = None
         self.stop_heartbeat()
         socket_dat = self.owner_comp.op("socketio1")
@@ -2527,18 +2542,18 @@ class AgentExt:
 
     def begin_socket_generation(self):
         generation = str(uuid.uuid4())
-        self._state["socket_generations"].append(generation)
-        self._state["current_socket_generation"] = generation
+        self._connection_state["socket_generations"].append(generation)
+        self._connection_state["current_socket_generation"] = generation
         return generation
 
     def end_socket_generation(self):
-        generations = self._state["socket_generations"]
+        generations = self._connection_state["socket_generations"]
         if not generations:
             return False
         generation = generations.pop(0)
-        if generation != self._state["current_socket_generation"]:
+        if generation != self._connection_state["current_socket_generation"]:
             return False
-        self._state["current_socket_generation"] = None
+        self._connection_state["current_socket_generation"] = None
         self.connection_id = None
         self.stop_heartbeat()
         return True
@@ -2761,10 +2776,13 @@ class AgentExt:
         return value
 
     def execute_command(self, command):
+        self.operator_control.protected_path = str(self.owner_comp.path)
         name = command["name"]
         payload = command["input"]
         if name == "project.metadata":
             return self._project_metadata()
+        if name == "project.save":
+            return self._save_project(payload)
         if name == "events.read":
             return self._events(payload)
         if name == "batch.execute":
@@ -2825,6 +2843,66 @@ class AgentExt:
             "sha256": hashlib.sha256(raw).hexdigest(),
             "data_base64": base64.b64encode(raw).decode("ascii"),
         }
+
+    @staticmethod
+    def _project_file_digest(path):
+        maximum = 64 * 1024 * 1024
+        before = path.stat()
+        if not 0 < before.st_size <= maximum:
+            raise ValueError("project size outside limit")
+        digest = hashlib.sha256()
+        size = 0
+        with path.open("rb") as stream:
+            while size <= maximum:
+                chunk = stream.read(min(1024 * 1024, maximum + 1 - size))
+                if not chunk:
+                    break
+                digest.update(chunk)
+                size += len(chunk)
+        after = path.stat()
+        identity = ("st_dev", "st_ino", "st_size", "st_mtime_ns")
+        if (
+            size > maximum
+            or size != after.st_size
+            or any(getattr(before, field) != getattr(after, field) for field in identity)
+        ):
+            raise ValueError("project changed during read")
+        return size, digest.hexdigest()
+
+    def _save_project(self, payload):
+        try:
+            path = Path(payload["expected_path"])
+            current = Path(self.project_info.folder) / self.project_info.name
+            if (
+                not path.is_absolute()
+                or str(path).startswith("\\\\")
+                or ":" in str(path)[2:]
+                or path.suffix.lower() != ".toe"
+                or path != current
+            ):
+                raise AgentCommandError("project_path_mismatch")
+            flag = getattr(__import__("stat"), "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+            for item in (path, *path.parents):
+                if getattr(item.lstat(), "st_file_attributes", 0) & flag:
+                    raise ValueError("reparse path")
+            if not path.is_file():
+                raise ValueError("not a regular file")
+            _, digest = self._project_file_digest(path)
+            if digest != payload["expected_sha256"]:
+                raise AgentCommandError("project_file_changed")
+        except AgentCommandError:
+            raise
+        except Exception as error:
+            raise AgentCommandError("project_file_unavailable") from error
+        try:
+            if self.project_info.save(str(path), saveExternalToxs=False) is not True:
+                raise ValueError("save not confirmed")
+            if Path(self.project_info.folder) / self.project_info.name != path:
+                raise ValueError("current project changed")
+            size, digest = self._project_file_digest(path)
+            return {"path": str(path), "size_bytes": size, "sha256": digest}
+        except Exception as error:
+            raise AgentCommandError("project_save_outcome_unknown") from error
 
     def _project_metadata(self):
         if self.project_info is None:

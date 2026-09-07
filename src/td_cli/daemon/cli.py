@@ -26,6 +26,7 @@ from td_cli.daemon.runtime_files import (
     secure_layout,
 )
 from td_cli.daemon.transport import create_transport_app
+from td_cli.protocol import PROTOCOL_VERSION
 
 app = typer.Typer(no_args_is_help=True)
 ENDPOINT = "http://127.0.0.1:9982"
@@ -77,12 +78,12 @@ def _probe(root: Path) -> dict[str, object] | None:
         if token is None:
             return None
         response = httpx.get(
-            f"{ENDPOINT}/v2/health",
+            f"{ENDPOINT}/v3/health",
             headers={"Authorization": f"Bearer {token}"},
             timeout=0.5,
         )
         payload = response.json() if response.status_code == 200 else None
-        return payload if payload and 2 in payload.get("protocol_versions", []) else None
+        return payload if payload and PROTOCOL_VERSION in payload.get("protocol_versions", []) else None
     except (OSError, RuntimeError, httpx.HTTPError):
         return None
 
@@ -142,7 +143,7 @@ def serve() -> None:
             .replace("+00:00", "Z"),
             "endpoint": "127.0.0.1:9982",
             "release_version": __version__,
-            "protocol_versions": [2],
+            "protocol_versions": [PROTOCOL_VERSION],
         }
         run_path = root / "run" / "daemon.json"
         temporary = run_path.with_suffix(".tmp")
@@ -211,7 +212,7 @@ def stop() -> None:
         return
     try:
         httpx.post(
-            f"{ENDPOINT}/v2/shutdown", headers={"Authorization": f"Bearer {token}"}, timeout=6
+            f"{ENDPOINT}/v3/shutdown", headers={"Authorization": f"Bearer {token}"}, timeout=6
         )
     except httpx.HTTPError:
         raise typer.Exit(3) from None
@@ -255,7 +256,7 @@ def _install_windows_shutdown_handler(server: uvicorn.Server, token: str) -> obj
 def _request_orderly_shutdown(server: uvicorn.Server, token: str) -> None:
     try:
         httpx.post(
-            f"{ENDPOINT}/v2/shutdown",
+            f"{ENDPOINT}/v3/shutdown",
             headers={"Authorization": f"Bearer {token}"},
             timeout=6,
         )

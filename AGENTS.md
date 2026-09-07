@@ -25,6 +25,9 @@ Issue 與規格均使用 GitHub Issues 管理。詳見 `docs/agents/issue-tracke
 
 ### Runtime reliability
 
+- 每完成三個可獨立驗收的大階段及發版前，檢查本輪重複、過時路徑與耦合；依實際證據重構、簡化，完成回歸驗證及獨立 review，不累積臨時 fallback。
+- 外部命令須有總逾時；輪詢須有截止時間，單次等待不超過 60 秒。逾時後查既有 Request outcome，不自動重送 mutation。
+
 變更 Protocol、Daemon transport、RequestLifecycle、RequestStore、Agent callback／scheduler、
 Socket.IO integration 或 locked TouchDesigner acceptance 時，必須先讀取並遵循
 `.agents/skills/td-runtime-reliability/SKILL.md`。

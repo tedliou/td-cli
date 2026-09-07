@@ -3,6 +3,8 @@ from pathlib import Path
 from runpy import run_path
 from types import SimpleNamespace
 
+import pytest
+
 
 class FakeAgentExtension:
     def __init__(self) -> None:
@@ -124,6 +126,7 @@ class FakeAgentExtension:
 class FakeSocket:
     def __init__(self) -> None:
         self.emitted = []
+        self.parent = lambda: component(self.extension)
         self.par = SimpleNamespace(active=True)
 
     def emit(self, event, *, data) -> None:
@@ -143,6 +146,7 @@ def component(extension, reinitialize=None):
     pulse = SimpleNamespace(pulse=reinitialize or (lambda: None))
     return SimpleNamespace(
         ext=SimpleNamespace(Agent=extension),
+        op=lambda name: extension.socket,
         extensions=[extension],
         par=SimpleNamespace(reinitextensions=pulse),
     )
@@ -151,9 +155,11 @@ def component(extension, reinitialize=None):
 def test_connection_starts_generation_tagged_independent_heartbeat_scheduler() -> None:
     extension = FakeAgentExtension()
     socket = FakeSocket()
+    socket.extension = extension
     auth_table = object()
     scheduled = []
     lookup = FakeOp({"auth_table": auth_table, "socketio1": socket})
+    extension.socket = socket
 
     callbacks = run_path(
         str(Path("agent/heartbeat_execute.py")),
@@ -171,13 +177,13 @@ def test_connection_starts_generation_tagged_independent_heartbeat_scheduler() -
     assert scheduled[0][2] == {"delayMilliSeconds": 2000, "delayRef": lookup.TDResources}
 
     extension.connection_id = "connection-1"
-    callbacks["schedulerTick"](generation)
+    callbacks["schedulerTick"](generation, scheduled[0][1][1])
     assert socket.emitted == [("heartbeat", extension.heartbeat_payload())]
     assert extension.heartbeat_marks == 1
     assert len(scheduled) == 2
 
     callbacks["stopScheduler"]()
-    callbacks["schedulerTick"](generation)
+    callbacks["schedulerTick"](generation, scheduled[0][1][1])
     assert len(scheduled) == 2
 
 
@@ -185,6 +191,7 @@ def test_socket_open_registers_named_extension() -> None:
     extension = FakeAgentExtension()
     extension.draining = True
     socket = FakeSocket()
+    socket.extension = extension
     heartbeat_calls = []
     auth_table = SimpleNamespace(clear=lambda: heartbeat_calls.append("clear-auth"))
     lookup = FakeOp(
@@ -218,12 +225,18 @@ def test_socket_close_invalidates_heartbeat_generation() -> None:
             ),
         }
     )
+    scheduled = []
     callbacks = run_path(
         str(Path("agent/socket_callbacks.py")),
-        init_globals={"parent": lambda: component(extension), "op": lookup},
+        init_globals={
+            "parent": lambda: component(extension),
+            "op": lookup,
+            "run": lambda *args, **kwargs: scheduled.append((args, kwargs)),
+        },
     )
 
     callbacks["onClose"](FakeSocket(), object())
+    assert scheduled == []
 
     assert extension.connection_id is None
     assert stopped == [True]
@@ -266,6 +279,7 @@ def test_registration_replays_all_execution_phases_before_dispatch() -> None:
     }
     extension.records = [{"phase": "outcome", **outcome}]
     socket = FakeSocket()
+    socket.extension = extension
     callbacks = run_path(
         str(Path("agent/socket_callbacks.py")),
         init_globals={"parent": lambda: component(extension)},
@@ -288,6 +302,7 @@ def test_dispatch_authorizes_main_thread_execution_and_chunks_outcomes() -> None
     extension = FakeAgentExtension()
     extension.connection_id = "connection-1"
     socket = FakeSocket()
+    socket.extension = extension
     scheduled = []
     lookup = FakeOp({})
 
@@ -302,7 +317,15 @@ def test_dispatch_authorizes_main_thread_execution_and_chunks_outcomes() -> None
             "op": lookup,
         },
     )
-    callbacks["onReceiveEvent"](socket, 0, {"request_id": "request-2"}, "request_dispatch")
+    callbacks["onReceiveEvent"](
+        socket,
+        0,
+        {
+            "request_id": "request-2",
+            "command": json.dumps({"name": "ops.get", "input": {"operator_path": "/project1"}}),
+        },
+        "request_dispatch",
+    )
     assert socket.emitted == [
         (
             "request_accepted",
@@ -361,21 +384,72 @@ def test_duplicate_dispatch_chunks_a_retained_failure_with_null_result() -> None
     }
     extension.reserve = lambda _: ("request_outcome", outcome)
     socket = FakeSocket()
+    socket.extension = extension
     callbacks = run_path(
         str(Path("agent/socket_callbacks.py")),
         init_globals={"parent": lambda: component(extension)},
     )
 
-    callbacks["onReceiveEvent"](socket, 0, {"request_id": "request-2"}, "request_dispatch")
+    callbacks["onReceiveEvent"](
+        socket,
+        0,
+        {
+            "request_id": "request-2",
+            "command": json.dumps({"name": "ops.get", "input": {"operator_path": "/project1"}}),
+        },
+        "request_dispatch",
+    )
 
     assert [event for event, _ in socket.emitted] == ["request_outcome_chunk"]
     assert json.loads(socket.emitted[0][1]["payload"]) == outcome
+
+
+@pytest.mark.parametrize("wire", [None, {}, "[]", "{", '{"name":"ops.get"}'])
+def test_dispatch_rejects_malformed_wire_without_reserving(wire):
+    extension = FakeAgentExtension()
+
+    def reserve(_):
+        raise AssertionError("malformed command reached reserve")
+
+    extension.reserve = reserve
+    socket = FakeSocket()
+    socket.extension = extension
+    callbacks = run_path(
+        str(Path("agent/socket_callbacks.py")),
+        init_globals={"parent": lambda: component(extension)},
+    )
+    callbacks["onReceiveEvent"](socket, 0, {"command": wire, "request_id": "r"}, "request_dispatch")
+    assert socket.emitted[-1][0] == "request_rejected"
+    assert socket.emitted[-1][1]["code"] == "command_wire_invalid"
+
+
+def test_dispatch_json_preserves_nested_scalar_types():
+    extension = FakeAgentExtension()
+    captured = []
+
+    def reserve(request):
+        captured.append(request["command"])
+        return "request_accepted", {"request_id": "r"}
+
+    extension.reserve = reserve
+    socket = FakeSocket()
+    socket.extension = extension
+    callbacks = run_path(
+        str(Path("agent/socket_callbacks.py")),
+        init_globals={"parent": lambda: component(extension)},
+    )
+    command = {"name": "batch.execute", "input": {"values": [True, False, 0, 1, None, '腦波"']}}
+    callbacks["onReceiveEvent"](socket, 0, {"command": json.dumps(command)}, "request_dispatch")
+    values = captured[0]["input"]["values"]
+    assert [type(value) for value in values] == [bool, bool, int, int, type(None), str]
+    assert captured == [command]
 
 
 def test_orderly_draining_uses_independent_time_and_unregisters_when_empty() -> None:
     extension = FakeAgentExtension()
     extension.connection_id = "connection-1"
     socket = FakeSocket()
+    socket.extension = extension
     scheduled = []
     lookup = FakeOp({})
     callbacks = run_path(
