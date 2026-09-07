@@ -2,28 +2,30 @@
 
 
 def startScheduler():
-    generation = parent().ext.Agent.start_heartbeat()
-    scheduleTick(generation)
+    component = parent()
+    generation = component.ext.Agent.start_heartbeat()
+    scheduleTick(generation, component)
 
 
 def stopScheduler():
     parent().ext.Agent.stop_heartbeat()
 
 
-def scheduleTick(generation):
+def scheduleTick(generation, component):
     run(
         schedulerTick,
         generation,
+        component,
         delayMilliSeconds=2000,
         delayRef=op.TDResources,
     )
 
 
-def schedulerTick(generation):
-    agent = parent().ext.Agent
+def schedulerTick(generation, component):
+    agent = component.ext.Agent
     if not agent.heartbeat_active(generation):
         return
     if agent.connection_id:
         agent.mark_heartbeat()
-        op("socketio1").emit("heartbeat", data=agent.heartbeat_payload())
-    scheduleTick(generation)
+        component.op("socketio1").emit("heartbeat", data=agent.heartbeat_payload())
+    scheduleTick(generation, component)

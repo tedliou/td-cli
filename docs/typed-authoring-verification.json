@@ -1,0 +1,18 @@
+{
+  "validated": true,
+  "touchdesigner_version": "2025.32050",
+  "artifact_sha256": "06ce79ea641abf2804fadfc4195b01e3bba83be047101d745a3db84481c416b8",
+  "source_revision": "ef29a52b2d63ddebdfe26d2114e9075520afc9565b42185053aee373e502a6b0",
+  "evidence": "docs/typed-authoring-acceptance.md",
+  "automated_tests_passed": 462,
+  "locked_checks": [
+    "typed boolean mutation and readback",
+    "open StrMenu pattern mutation and readback",
+    "current project save and disk digest",
+    "offline canonical 0.3.1 to 0.4.0 migration",
+    "identical-target no-op",
+    "compatible Agent side-load and retained heartbeat",
+    "derived CHOP-to-DAT actual value read",
+    "final artwork 52-channel OSC acceptance and cold reopen"
+  ]
+}

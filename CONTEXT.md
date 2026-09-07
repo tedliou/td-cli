@@ -81,7 +81,7 @@ A submission of one Command carrying a Request ID whose result remains queryable
 _Avoid_: command invocation
 
 **Protocol Version**:
-The version of the wire messages and JSON schemas shared by the daemon and Agent Component. Protocol v1 does not imply that the pre-1.0 CLI surface has a SemVer stability guarantee.
+The version of the wire messages and JSON schemas shared by the daemon and Agent Component. Protocol v3 carries the typed Command as canonical JSON text across SocketIO DAT so booleans and numbers retain their types. It does not imply that the pre-1.0 CLI surface has a SemVer stability guarantee. Offline Agent upgrades are independent of this runtime Protocol.
 _Avoid_: CLI version, Release version
 
 **Unknown Request**:

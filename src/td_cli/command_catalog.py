@@ -1,4 +1,4 @@
-"""Command definitions and input validation for Protocol v2."""
+"""Command definitions and input validation for Protocol v3."""
 
 from __future__ import annotations
 
@@ -422,6 +422,19 @@ class ProjectMetadataInput(StrictModel):
     pass
 
 
+class ProjectSaveInput(StrictModel):
+    expected_path: str
+    expected_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @field_validator("expected_path")
+    @classmethod
+    def current_local_toe(cls, value: str) -> str:
+        _valid_local_windows_path(value)
+        if PureWindowsPath(value).suffix.lower() != ".toe":
+            raise ValueError("expected_path must name a .toe file")
+        return value
+
+
 class BinaryExportInput(OperatorInput):
     format: Literal["tox", "png"]
     max_bytes: int = Field(default=194_560, ge=1, le=194_560)
@@ -840,6 +853,12 @@ COMMAND_CATALOG = CommandCatalog(
             ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
         ),
         CommandDefinition(
+            "project.save",
+            ProjectSaveInput,
+            CommandEffect.MUTATION,
+            ExecutionClass.TRUSTED_ASSET_MUTATION,
+        ),
+        CommandDefinition(
             "binary.export",
             BinaryExportInput,
             CommandEffect.READ_ONLY,
@@ -886,6 +905,7 @@ CommandInput = (
     | ReplaceSequenceInput
     | SnapshotInput
     | ProjectMetadataInput
+    | ProjectSaveInput
     | BinaryExportInput
     | EventsReadInput
     | BatchExecuteInput
