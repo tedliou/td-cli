@@ -55,25 +55,5 @@ def probe():
             ),
             encoding="utf-8",
         )
-        run(observe_connection, component, delayMilliSeconds=15000, delayRef=op.TDResources)
     except Exception:  # noqa: BLE001 - preserve exact locked-runtime failure evidence.
         RESULT.write_text(json.dumps({"error": traceback.format_exc()}), encoding="utf-8")
-
-
-def observe_connection(component):
-    agent = component.ext.Agent
-    (REPO / ".tmp-connection-observation.json").write_text(
-        json.dumps(
-            {
-                "path": component.path,
-                "protected_path": agent.operator_control.protected_path,
-                "connection_id": agent.connection_id,
-                "runtime_active": agent.runtime_active,
-                "heartbeat_active": agent._heartbeat_generation is not None,
-                "errors": component.errors(recurse=True),
-                "socket_text": component.op("socketio1").text,
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
-    )

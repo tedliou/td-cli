@@ -83,7 +83,11 @@ def _probe(root: Path) -> dict[str, object] | None:
             timeout=0.5,
         )
         payload = response.json() if response.status_code == 200 else None
-        return payload if payload and PROTOCOL_VERSION in payload.get("protocol_versions", []) else None
+        return (
+            payload
+            if payload and PROTOCOL_VERSION in payload.get("protocol_versions", [])
+            else None
+        )
     except (OSError, RuntimeError, httpx.HTTPError):
         return None
 

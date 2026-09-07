@@ -135,9 +135,10 @@ def identify(root: Path, target: Path) -> tuple[Path, bool]:
     if {p.name for p in component.iterdir()} != {p.name for p in target.iterdir()}:
         raise UpgradeError("embedded Agent has unknown or missing children")
     for candidate in component.iterdir():
-        if candidate.suffix == ".n" or candidate.name == "events_table.table":
-            if candidate.read_bytes() != (target / candidate.name).read_bytes():
-                raise UpgradeError("embedded Agent has modified runtime structure")
+        if (
+            candidate.suffix == ".n" or candidate.name == "events_table.table"
+        ) and candidate.read_bytes() != (target / candidate.name).read_bytes():
+            raise UpgradeError("embedded Agent has modified runtime structure")
     # Parameters define extension initialization and relative callback references.
     for candidate in component.glob("*.parm"):
         actual = candidate.read_bytes()
