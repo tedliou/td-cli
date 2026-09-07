@@ -53,8 +53,8 @@ def unused_port() -> int:
 def registration_payload() -> dict[str, object]:
     return {
         "instance_id": INSTANCE_ID,
-        "protocol_versions": [2],
-        "agent_version": "0.3.1",
+        "protocol_versions": [3],
+        "agent_version": "0.4.0",
         "td_build": "2025.32050",
         "capabilities": ["ops.get"],
     }
@@ -100,7 +100,12 @@ async def get_json(port: int, path: str) -> tuple[int, object]:
 
 
 @pytest.mark.asyncio
-async def test_authentication_and_registration_fail_closed(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "incompatible_fields", [{"td_build": "2025.99999"}, {"protocol_versions": [2]}]
+)
+async def test_authentication_and_registration_fail_closed(
+    tmp_path: Path, incompatible_fields
+) -> None:
     server, thread, port = await start_server(create_transport_app(tmp_path, token=TOKEN))
     unauthenticated = socketio.AsyncClient(reconnection=False)
     incompatible = socketio.AsyncClient(reconnection=False)
@@ -112,7 +117,7 @@ async def test_authentication_and_registration_fail_closed(tmp_path: Path) -> No
         with pytest.raises(socketio.exceptions.ConnectionError):
             await unauthenticated.connect(f"http://127.0.0.1:{port}", auth={"token": "wrong"})
         await incompatible.connect(f"http://127.0.0.1:{port}", auth={"token": TOKEN})
-        await incompatible.emit("register", {**registration_payload(), "td_build": "2025.99999"})
+        await incompatible.emit("register", {**registration_payload(), **incompatible_fields})
         assert (await asyncio.wait_for(registration_error, 2))["code"] == "protocol_incompatible"
     finally:
         if incompatible.connected:
@@ -126,11 +131,11 @@ async def test_registration_stays_synchronizing_until_agent_replay(tmp_path: Pat
     client = socketio.AsyncClient(reconnection=False)
     try:
         connection = await register(client, port, synchronize=False)
-        _, before = await get_json(port, "/v2/instances")
+        _, before = await get_json(port, "/v3/instances")
         assert before[0]["status"] == "synchronizing"
         await client.emit("execution_sync", {**connection, "records": []})
         for _ in range(50):
-            _, after = await get_json(port, "/v2/instances")
+            _, after = await get_json(port, "/v3/instances")
             if after[0]["status"] == "online":
                 break
             await asyncio.sleep(0.01)
@@ -158,7 +163,7 @@ async def test_registration_stays_synchronizing_until_agent_replay(tmp_path: Pat
         ),
     ],
 )
-async def test_full_v2_handshake_is_ordered_durable_and_redacted(
+async def test_full_v3_handshake_is_ordered_durable_and_redacted(
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
     outcome_status: str,
@@ -183,7 +188,7 @@ async def test_full_v2_handshake_is_ordered_durable_and_redacted(
         connection = await register(client, port)
         async with ClientSession() as session:
             response = await session.post(
-                f"http://127.0.0.1:{port}/v2/requests",
+                f"http://127.0.0.1:{port}/v3/requests",
                 headers={"Authorization": f"Bearer {TOKEN}"},
                 json={
                     "request_id": REQUEST_ID,
@@ -194,6 +199,8 @@ async def test_full_v2_handshake_is_ordered_durable_and_redacted(
             assert response.status == 201
         request = await asyncio.wait_for(dispatched, 2)
         assert request["status"] == "dispatched"
+        assert isinstance(request["command"], str)
+        assert json.loads(request["command"])["input"]["operator_path"] == "/secret-path"
         await client.emit("request_accepted", {**connection, "request_id": REQUEST_ID})
         authorization = await asyncio.wait_for(execute, 2)
         assert authorization["execution_id"]
@@ -219,7 +226,7 @@ async def test_full_v2_handshake_is_ordered_durable_and_redacted(
         acknowledgment = await asyncio.wait_for(recorded, 2)
         assert acknowledgment["execution_id"] == authorization["execution_id"]
         assert order == ["dispatch", "execute", "recorded"]
-        _, snapshot = await get_json(port, f"/v2/requests/{REQUEST_ID}")
+        _, snapshot = await get_json(port, f"/v3/requests/{REQUEST_ID}")
         assert snapshot["status"] == outcome_status
         assert snapshot["result"] == outcome_result
         assert snapshot["error"] == outcome_error
@@ -248,7 +255,7 @@ async def test_reconnect_reconciles_matching_retained_outcome(tmp_path: Path) ->
         first_connection = await register(first, port)
         async with ClientSession() as session:
             response = await session.post(
-                f"http://127.0.0.1:{port}/v2/requests",
+                f"http://127.0.0.1:{port}/v3/requests",
                 headers={"Authorization": f"Bearer {TOKEN}"},
                 json={
                     "request_id": REQUEST_ID,
@@ -262,7 +269,7 @@ async def test_reconnect_reconciles_matching_retained_outcome(tmp_path: Path) ->
         authorization = await asyncio.wait_for(execute, 2)
         await first.disconnect()
         for _ in range(50):
-            _, unknown = await get_json(port, f"/v2/requests/{REQUEST_ID}")
+            _, unknown = await get_json(port, f"/v3/requests/{REQUEST_ID}")
             if unknown["status"] == "unknown":
                 break
             await asyncio.sleep(0.01)
@@ -286,7 +293,7 @@ async def test_reconnect_reconciles_matching_retained_outcome(tmp_path: Path) ->
             },
         )
         await asyncio.wait_for(recorded, 2)
-        _, succeeded = await get_json(port, f"/v2/requests/{REQUEST_ID}")
+        _, succeeded = await get_json(port, f"/v3/requests/{REQUEST_ID}")
         assert succeeded["status"] == "succeeded"
     finally:
         for client in (first, second):
@@ -312,7 +319,7 @@ async def test_reconnect_reassembles_bounded_outcome_chunks_before_synchronizing
         first_connection = await register(first, port)
         async with ClientSession() as session:
             response = await session.post(
-                f"http://127.0.0.1:{port}/v2/requests",
+                f"http://127.0.0.1:{port}/v3/requests",
                 headers={"Authorization": f"Bearer {TOKEN}"},
                 json={
                     "request_id": REQUEST_ID,
@@ -353,10 +360,10 @@ async def test_reconnect_reassembles_bounded_outcome_chunks_before_synchronizing
         await second.emit("execution_sync", {**second_connection, "records": []})
 
         await asyncio.wait_for(recorded, 2)
-        _, succeeded = await get_json(port, f"/v2/requests/{REQUEST_ID}")
+        _, succeeded = await get_json(port, f"/v3/requests/{REQUEST_ID}")
         assert succeeded["status"] == "succeeded"
         assert succeeded["result"] == {"payload": "x" * 70_000}
-        _, instances = await get_json(port, "/v2/instances")
+        _, instances = await get_json(port, "/v3/instances")
         assert instances[0]["status"] == "online"
     finally:
         for client in (first, second):
@@ -384,7 +391,7 @@ async def test_replacement_disconnects_old_sender_before_new_generation_dispatch
         assert first.connected is False
         async with ClientSession() as session:
             response = await session.post(
-                f"http://127.0.0.1:{port}/v2/requests",
+                f"http://127.0.0.1:{port}/v3/requests",
                 headers={"Authorization": f"Bearer {TOKEN}"},
                 json={
                     "request_id": REQUEST_ID,
@@ -415,7 +422,7 @@ async def test_draining_and_offline_states_control_admission(tmp_path: Path) -> 
         await asyncio.wait_for(heartbeat.wait(), 2)
         async with ClientSession() as session:
             rejected = await session.post(
-                f"http://127.0.0.1:{port}/v2/requests",
+                f"http://127.0.0.1:{port}/v3/requests",
                 headers={"Authorization": f"Bearer {TOKEN}"},
                 json={
                     "request_id": REQUEST_ID,
@@ -430,10 +437,10 @@ async def test_draining_and_offline_states_control_admission(tmp_path: Path) -> 
                 break
             await asyncio.sleep(0.01)
         assert client.connected is False
-        _, offline = await get_json(port, "/v2/instances")
+        _, offline = await get_json(port, "/v3/instances")
         assert offline[0]["status"] == "offline"
         await asyncio.sleep(1.1)
-        _, expired = await get_json(port, "/v2/instances")
+        _, expired = await get_json(port, "/v3/instances")
         assert expired == []
     finally:
         if client.connected:
@@ -460,7 +467,7 @@ async def test_sender_failure_degrades_health_without_logging_payloads(
         await client.connect(f"http://127.0.0.1:{port}", auth={"token": TOKEN})
         await client.emit("register", registration_payload())
         for _ in range(100):
-            _, health = await get_json(port, "/v2/health")
+            _, health = await get_json(port, "/v3/health")
             if health["ready"] is False:
                 break
             await asyncio.sleep(0.01)
@@ -497,7 +504,7 @@ async def test_sender_saturation_degrades_health_fail_closed(
         for _ in range(8):
             await client.emit("heartbeat", connection)
         for _ in range(100):
-            _, health = await get_json(port, "/v2/health")
+            _, health = await get_json(port, "/v3/health")
             if health["ready"] is False:
                 break
             await asyncio.sleep(0.01)

@@ -115,8 +115,9 @@ class FakeOwner:
     def __init__(self) -> None:
         self.values: dict[str, object] = {}
         self.path = "/project1/td_agent"
+        self.id = id(self)
 
-    def fetch(self, key: str, default: object = None) -> object:
+    def fetch(self, key: str, default: object = None, *, search=True) -> object:
         return self.values.get(key, default)
 
     def store(self, key: str, value: object) -> None:
@@ -388,6 +389,7 @@ class FakeCell:
 class FakeTextDat(FakeOperator):
     def __init__(self, path: str, text: str = "", *, file="", syncfile=False) -> None:
         super().__init__(path, op_type="textDAT", family="DAT")
+        self.isTable = False
         self.text = text
         self.par = SimpleNamespace(file=FakeDatParameter(file), syncfile=FakeDatParameter(syncfile))
 
@@ -395,6 +397,7 @@ class FakeTextDat(FakeOperator):
 class FakeTableDat(FakeOperator):
     def __init__(self, path: str, rows=None, *, file="", syncfile=False) -> None:
         super().__init__(path, op_type="tableDAT", family="DAT")
+        self.isTable = True
         self._rows = [list(row) for row in (rows or [])]
         self.par = SimpleNamespace(file=FakeDatParameter(file), syncfile=FakeDatParameter(syncfile))
 
@@ -1371,6 +1374,40 @@ def test_table_dat_get_returns_an_explicit_bounded_window_and_dimensions() -> No
                 },
             }
         )
+
+
+def test_derived_table_read_is_bounded_but_writes_remain_rejected() -> None:
+    table = FakeTableDat("/project1/readback", [["alpha", "0.75"], ["beta", "0.25"]])
+    table.OPType = "choptoDAT"
+    control = make_control({table.path: table}.get)
+    result = control.execute(
+        {
+            "name": "dat.table.get",
+            "input": {
+                "operator_path": table.path,
+                "row_offset": 0,
+                "column_offset": 0,
+                "row_count": 1,
+                "column_count": 2,
+                "max_bytes": 32,
+            },
+        }
+    )
+    assert result["rows"] == [["alpha", "0.75"]]
+    assert result["total_rows"] == 2
+    with pytest.raises(module.AgentCommandError, match="dat_type_mismatch"):
+        control.execute(
+            {
+                "name": "dat.table.replace",
+                "input": {
+                    "operator_path": table.path,
+                    "rows": [["overwritten"]],
+                },
+            }
+        )
+    table.isTable = False
+    with pytest.raises(module.AgentCommandError, match="dat_type_mismatch"):
+        control.execute({"name": "dat.table.get", "input": {"operator_path": table.path}})
 
 
 def test_table_dat_replace_and_patch_return_exact_verified_complete_state() -> None:
@@ -2473,6 +2510,36 @@ def test_replacing_agent_component_in_same_runtime_preserves_identity_and_record
     assert replacement.execution_records == {"request": {"phase": "reserved"}}
 
 
+def test_sideloaded_agent_connection_generations_do_not_stop_each_other():
+    first = AgentExt(FakeOwner())
+    second = AgentExt(FakeOwner())
+    first.begin_socket_generation()
+    second.begin_socket_generation()
+    second.rebind_connection("second-connection")
+    generation = second.start_heartbeat()
+    assert first.end_socket_generation() is True
+    assert second.connection_id == "second-connection"
+    assert second.heartbeat_active(generation)
+    assert second.end_socket_generation() is True
+
+
+def test_copied_connection_storage_is_reset_for_the_new_operator():
+    import copy
+
+    first_owner = FakeOwner()
+    first = AgentExt(first_owner)
+    first.begin_socket_generation()
+    second_owner = FakeOwner()
+    second_owner.values = copy.deepcopy(first_owner.values)
+    second = AgentExt(second_owner)
+    second.begin_socket_generation()
+    second.rebind_connection("copied-connection")
+    generation = second.start_heartbeat()
+    assert second.end_socket_generation() is True
+    assert second.connection_id is None
+    assert not second.heartbeat_active(generation)
+
+
 def test_phase_2_runtime_state_is_migrated_without_changing_instance_identity() -> None:
     instance_id = str(uuid.uuid4())
     builtins._td_cli_agent_state = {
@@ -3399,6 +3466,94 @@ def test_phase_3_observation_binary_metadata_and_events_are_bounded() -> None:
         "errors": ["sample error"],
         "next_after": 1,
     }
+
+
+def test_strmenu_accepts_channel_patterns_while_menu_rejects_unknown_members():
+    operator = FakeOperator("/project1/select1")
+    parameter = FakeParameter("*")
+    parameter.style = "StrMenu"
+    parameter.isMenu = True
+    parameter.menuNames = ["alpha", "beta"]
+    operator.par.channames = parameter
+    control = make_control({operator.path: operator}.get)
+    command = {
+        "name": "parameters.set",
+        "input": {
+            "operator_path": operator.path,
+            "parameter": "channames",
+            "mode": "constant",
+            "value": "alpha beta gamma*",
+        },
+    }
+    assert control.execute(command)["value"] == "alpha beta gamma*"
+    parameter.style = "Menu"
+    with pytest.raises(module.AgentCommandError, match="parameter_value_invalid"):
+        control.execute(command)
+
+
+def test_current_project_save_checks_disk_version_and_returns_verified_file(tmp_path):
+    import hashlib
+
+    path = tmp_path / "work.toe"
+    path.write_bytes(b"before")
+    calls = []
+
+    def save(filename, *, saveExternalToxs):
+        calls.append((filename, saveExternalToxs))
+        path.write_bytes(b"saved project")
+        return True
+
+    project = SimpleNamespace(name=path.name, folder=str(tmp_path), save=save)
+    agent = AgentExt(FakeOwner(), project_info=project)
+    command = {
+        "name": "project.save",
+        "input": {
+            "expected_path": str(path),
+            "expected_sha256": hashlib.sha256(b"before").hexdigest(),
+        },
+    }
+    COMMAND_CATALOG.validate_input(command["name"], command["input"])
+    assert agent.execute_command(command) == {
+        "path": str(path),
+        "size_bytes": 13,
+        "sha256": hashlib.sha256(b"saved project").hexdigest(),
+    }
+    assert calls == [(str(path), False)]
+    with pytest.raises(module.AgentCommandError, match="project_file_changed"):
+        agent.execute_command(command)
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("failure", ["false", "exception", "missing"])
+def test_current_project_save_does_not_retry_an_unverifiable_save(tmp_path, failure):
+    import hashlib
+
+    path = tmp_path / "work.toe"
+    path.write_bytes(b"before")
+    calls = []
+
+    def save(filename, *, saveExternalToxs):
+        calls.append(filename)
+        if failure == "exception":
+            raise OSError("write failed")
+        if failure == "missing":
+            path.unlink()
+        return failure != "false"
+
+    agent = AgentExt(
+        FakeOwner(), project_info=SimpleNamespace(name=path.name, folder=str(tmp_path), save=save)
+    )
+    with pytest.raises(module.AgentCommandError, match="project_save_outcome_unknown"):
+        agent.execute_command(
+            {
+                "name": "project.save",
+                "input": {
+                    "expected_path": str(path),
+                    "expected_sha256": hashlib.sha256(b"before").hexdigest(),
+                },
+            }
+        )
+    assert len(calls) == 1
 
 
 def test_agent_rejects_mutation_batch_before_any_mutation() -> None:

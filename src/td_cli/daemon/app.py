@@ -109,7 +109,7 @@ def create_app(
         if not secrets.compare_digest(supplied, token):
             raise HTTPException(status_code=404, detail="Not Found")
 
-    @app.get("/v2/health", dependencies=[Depends(authenticate)])
+    @app.get("/v3/health", dependencies=[Depends(authenticate)])
     def health() -> dict[str, object]:
         logging_healthy = runtime_health() if runtime_health is not None else True
         return {
@@ -120,14 +120,14 @@ def create_app(
             "schema_version": 2,
         }
 
-    @app.get("/v2/instances", dependencies=[Depends(authenticate)])
+    @app.get("/v3/instances", dependencies=[Depends(authenticate)])
     async def list_instances() -> list[dict[str, object]]:
         if instances is None:
             return []
         result = instances()
         return await result if inspect.isawaitable(result) else result
 
-    @app.post("/v2/shutdown", status_code=202, dependencies=[Depends(authenticate)])
+    @app.post("/v3/shutdown", status_code=202, dependencies=[Depends(authenticate)])
     async def request_shutdown() -> dict[str, bool]:
         if shutdown is not None:
             result = shutdown()
@@ -135,7 +135,7 @@ def create_app(
                 await result
         return {"draining": True}
 
-    @app.post("/v2/requests", status_code=201, dependencies=[Depends(authenticate)])
+    @app.post("/v3/requests", status_code=201, dependencies=[Depends(authenticate)])
     async def submit(payload: SubmitRequest, response: Response) -> dict[str, object]:
         assert store is not None
         snapshot = RequestSnapshot.pending(
@@ -156,7 +156,7 @@ def create_app(
             return persisted
         return persisted
 
-    @app.get("/v2/requests/{request_id}", dependencies=[Depends(authenticate)])
+    @app.get("/v3/requests/{request_id}", dependencies=[Depends(authenticate)])
     async def get_request(request_id: str) -> dict[str, object]:
         assert store is not None
         snapshot = await store.get(request_id)

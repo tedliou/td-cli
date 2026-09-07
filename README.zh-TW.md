@@ -87,7 +87,7 @@ uv run td-daemon serve
 `run\daemon.json`。只有在 Daemon 停止時刪除 `state\auth.token` 才是手動 token recovery；之後
 所有 Agent Component 都必須重新連線。
 
-Protocol v2 是唯一 runtime protocol，不提供 v1 alias 或 fallback。Request 依序經過
+Protocol v3 是唯一 runtime protocol，不提供 v1 alias 或 fallback。Request 依序經過
 `queued`、`dispatched`、`accepted`、`running` 後才進入終態。Daemon 必須先持久化再派送，
 每個 Instance 依 FIFO 僅允許一個已授權 Request，且每次重連都以新的 Connection ID 隔離。
 授權後斷線會成為 `unknown`；td-cli 絕不自動重試，但同一 execution 保留的結果之後可將它細化為
@@ -117,6 +117,34 @@ Daemon 完成記錄。上限為 64 筆、每筆 canonical outcome 256 KiB、合�
 區塊，重組完成後才提交公開結果。Command、heartbeat 與 drain timer 使用 TouchDesigner
 獨立的 `TDResources` 時間參考，所有 TouchDesigner object 存取仍只在主執行緒。Extension
 初始化使用官方 SocketIO Reset 參數，連線後清除暫存 auth DAT。Power Off 模式不受支援。
+
+<!-- doc-section: offline-upgrade -->
+
+## 升級專案內嵌 Agent
+
+`td-agent upgrade-project` 是獨立於 runtime Protocol 的固定離線升級入口。
+目前已驗證 canonical Agent 0.3.1 → 0.4.0、TouchDesigner 2025.32050；
+相同 0.4.0 僅驗證、不改檔，不代表任意歷史或未來版本都受支援。
+先儲存作品並關閉**所有 TouchDesigner 程序**；命令會拒絕仍有程序的情況，
+不會自動關閉它們。使用新版 CLI 套件及其可信 artifact／manifest：
+
+```powershell
+$bundle = "$env:LOCALAPPDATA/Programs/touchdesigner-cli/current"
+$project = (Resolve-Path ./MyProject.toe).Path
+$sha = (Get-FileHash $project -Algorithm SHA256).Hash.ToLower()
+& "$bundle/td-agent.exe" upgrade-project $project --artifact "$bundle/td-agent.tox" --manifest "$bundle/manifest.json" --tools-dir "C:/Program Files/Derivative/TouchDesigner/bin" --expected-sha256 $sha --timeout 90
+```
+
+命令只在暫存副本使用鎖定版本的官方工具，辨識既有 Agent、驗證其餘作品
+檔案不變，建立唯一且驗證過的備份，再原子替換原檔。未知或改過的 Agent、
+多重匹配、外部連結、不支援的 build、輸入變更及 round-trip 失敗均拒絕。
+停用的 external-TOX 路徑作為無作用的中繼資料保留。
+整個操作期間需獨占已關閉的專案；替換前失敗保留原檔，備份留供檢查。
+
+先啟動升級後的 daemon，再開啟專案並重新查詢 Instance selector。
+協議拒絕會停用連線直到下次 Agent 初始化，不重試不相容協議。
+歷史 0.3.1 工具沒有此入口，首次遷移應呼叫新版 `td-agent`。
+後續版本維持命令入口，明確擴充已驗證的遷移範圍。
 
 <!-- doc-section: operator-control -->
 
@@ -257,10 +285,32 @@ td --json --instance <selector> dat table replace /project1/grid '[["name","valu
 td --json --instance <selector> dat table patch /project1/grid '[["updated"]]' --row-offset 1 --column-offset 1
 ```
 
-只接受精確 `textDAT`／`tableDAT`。外部 File／Sync File、protected path、非 rectangular／非 string
+文字存取限 `textDAT`，表格寫入限 `tableDAT`；有界表格讀取接受 `isTable` 為真的 DAT，包含用於讀取實際 CHOP 輸出值的 CHOP to DAT。讀取遵循一般相依 cook，不強制 cook。外部 File／Sync File、protected path、非 rectangular／非 string
 cell 及越界 patch 都會被拒絕。Content 上限 32 KiB UTF-8、256 rows、256 columns、4096 cells、每
 cell 16 KiB。Mutation 會 read back 完整內容與尺寸，失敗時復原整份 DAT。這些 Command 不執行
 DAT、不 import module、不 evaluate content，也不接受 filesystem path。
+
+<!-- doc-section: project-save -->
+## 保存目前專案
+
+`project.save` 只保存目前已存在的本機 `.toe`。先以 `project metadata` 確認
+路徑、排除其他寫入者，再取得磁碟檔案摘要：
+
+```powershell
+$projectPath = 'E:\artwork\Artwork.toe'
+$digest = (Get-FileHash -LiteralPath $projectPath -Algorithm SHA256).Hash.ToLowerInvariant()
+td --json --instance <selector> project save $projectPath --expected-sha256 $digest
+```
+
+路徑與 SHA-256 必須在執行前相符；這不是跨程序的原子鎖。檔案上限 64 MiB，
+拒絕連結／reparse 路徑。成功結果包含實際磁碟路徑、位元組數及 SHA-256。
+不另存新檔名，也不保存外部 TOX。保存後無法確認結果時回報
+`project_save_outcome_unknown`；先查 retained Request 與磁碟，不自動重做。
+
+Protocol v3 在 SocketIO 邊界以 JSON 文字保留 Command 的布林、整數及 null 型別。
+CLI、Daemon 與專案內嵌 Agent 必須一起升級；v2/v3 雙向拒絕註冊。
+可編輯的 `StrMenu`（例如 Select CHOP 的 `channames`）接受任意字串，
+一般 `Menu` 仍只接受列出的選項名稱。
 
 <!-- doc-section: operator-catalog -->
 
