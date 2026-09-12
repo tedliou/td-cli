@@ -33,6 +33,7 @@ def onReceiveEvent(dat, rowIndex, message, event):
         for request_id, execution_id in agent.authorized_records():
             scheduleExecution(dat, request_id, execution_id)
     elif event == "registration_error":
+        agent.set_connection_status("registration_error")
         agent.runtime_active = False
         agent.connection_id = None
         op("heartbeat_execute").module.stopScheduler()
@@ -125,9 +126,15 @@ def onClose(dat, failure):
     agent = parent().ext.Agent
     if not agent.end_socket_generation():
         return
+    agent.set_connection_status("connecting")
     op("heartbeat_execute").module.stopScheduler()
     if agent.runtime_active:
-        agent.refresh_auth(op("auth_table"))
+        try:
+            agent.refresh_auth(op("auth_table"))
+        except FileNotFoundError:
+            dat.par.active = False
+            agent.set_connection_status("waiting_for_daemon")
+            op("heartbeat_execute").module.startScheduler()
 
 
 def finishDraining(dat):

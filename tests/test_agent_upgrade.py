@@ -42,16 +42,20 @@ def migration(tmp_path, monkeypatch):
         for name in upgrade.SCRIPT_NAMES:
             value = json.dumps(info) if name == "agent_manifest" else version + name
             (root / (name + ".text")).write_text(value)
-        (root / "socketio1.parm").write_text("?\nactive 0 off\n?\n")
+        (root / "socketio1.parm").write_text("?\nactive 0 off\n?\n", newline="\n")
         root.with_suffix(".n").write_bytes(b"COMP:base\ntile 1 2 3 4\nend\n")
-        root.with_suffix(".parm").write_text("?\nenableexternaltox 0 off\n?\n")
+        root.with_suffix(".parm").write_text("?\nenableexternaltox 0 off\n?\n", newline="\n")
         return root
 
     source_root = tmp_path / "source"
     source = component(source_root / "project1" / "my_agent", "0.3.1")
     (source_root / "media.parm").write_bytes(b"relative media path\x00unchanged")
     target_root = tmp_path / "target"
-    component(target_root / "td_agent", "0.4.0")
+    target_component = component(target_root / "td_agent", "0.5.0")
+    target_component.with_suffix(".cparm").write_bytes(b"known connection-state definition")
+    target_component.with_suffix(".parm").write_bytes(
+        b"?\nenableexternaltox 0 off\nConnectionstate 67109184 stopped\n?\n"
+    )
     project = packed(source_root, tmp_path / "work.toe")
     artifact = packed(target_root, tmp_path / "agent.tox")
     evidence = tmp_path / "manifest.json"
@@ -98,7 +102,8 @@ def test_public_upgrade_preserves_graph_path_and_backup_then_is_noop(migration):
     assert Path(report["backup"]).read_bytes() == original
     with zipfile.ZipFile(project) as archive:
         assert archive.read("media.parm") == b"relative media path\x00unchanged"
-        assert b'"0.4.0"' in archive.read("project1/my_agent/agent_manifest.text")
+        assert b'"0.5.0"' in archive.read("project1/my_agent/agent_manifest.text")
+        assert archive.read("project1/my_agent.cparm") == b"known connection-state definition"
     upgraded = project.read_bytes()
     second = invoke(migration)
     assert second.exit_code == 0, second.output

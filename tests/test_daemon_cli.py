@@ -48,8 +48,8 @@ def test_start_spawns_the_public_serve_command_for_each_runtime(
     monkeypatch.setattr(cli, "secure_layout", lambda _: None)
     monkeypatch.setattr(cli, "_probe", lambda _: next(probes))
     monkeypatch.setattr(
-        cli.subprocess,
-        "Popen",
+        cli,
+        "launch_detached",
         lambda argv, **options: spawned.append((argv, options)),
     )
     monkeypatch.setattr(sys, "frozen", frozen, raising=False)
@@ -61,7 +61,13 @@ def test_start_spawns_the_public_serve_command_for_each_runtime(
     assert len(spawned) == 1
     command, options = spawned[0]
     assert command == expected
-    assert options["creationflags"] == (
-        cli.subprocess.CREATE_NO_WINDOW | cli.subprocess.CREATE_NEW_PROCESS_GROUP
-    )
-    assert "startupinfo" not in options
+    assert options["hidden"] is True
+    assert result.output == ""
+
+
+def test_dead_pid_metadata_is_stopped(tmp_path, monkeypatch):
+    (tmp_path / "run").mkdir()
+    (tmp_path / "run" / "daemon.json").write_text('{"pid": 23276}')
+    monkeypatch.setattr(cli, "_probe", lambda _: None)
+    monkeypatch.setattr(cli, "_pid_alive", lambda _: False)
+    assert cli._status_payload(tmp_path)["status"] == "stopped"

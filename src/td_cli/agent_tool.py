@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
+from importlib.resources import files
 from pathlib import Path
 from typing import Annotated
 
@@ -12,6 +14,26 @@ from td_cli.agent_upgrade import UpgradeError, upgrade_project
 from td_cli.cli_support import print_version
 
 app = typer.Typer(no_args_is_help=True)
+
+
+@app.command("install-skill")
+def install_skill(
+    destination: Annotated[Path | None, typer.Option()] = None,
+    replace: Annotated[bool, typer.Option("--replace")] = False,
+) -> None:
+    """Install the bundled td-cli skill; replacement is explicit."""
+    target = destination or (
+        Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))) / "skills" / "td-cli"
+    )
+    if target.exists() and any(target.iterdir()) and not replace:
+        typer.echo("Skill destination is not empty; inspect it, then use --replace", err=True)
+        raise typer.Exit(1)
+    source = files("td_cli.data").joinpath("skill", "td-cli")
+    for name in ("SKILL.md", "references/sessions.md", "references/touchdesigner.md"):
+        output = target / name
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(source.joinpath(name).read_bytes())
+    typer.echo(json.dumps({"path": str(target.resolve()), "installed": True}))
 
 
 @app.callback()

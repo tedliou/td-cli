@@ -6,6 +6,24 @@ from typer.testing import CliRunner
 
 from td_cli import cli
 
+
+def test_version_query_never_starts_a_daemon(monkeypatch):
+    import httpx
+
+    starts = []
+    monkeypatch.setattr("td_cli.client.ensure_running", lambda **kw: starts.append(True))
+    monkeypatch.setattr(
+        httpx,
+        "request",
+        lambda *a, **k: httpx.Response(
+            200, json={"release_version": "test", "protocol_versions": [3]}
+        ),
+    )
+    result = CliRunner().invoke(cli.app, ["version", "--json"])
+    assert result.exit_code == 0, result.output
+    assert starts == []
+
+
 INSTANCE = {
     "instance_id": "8cf81688-b9a4-4c39-9f92-31c77319c761",
     "selector": "8cf8",

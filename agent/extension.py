@@ -2496,15 +2496,39 @@ class AgentExt:
         self.runtime_active = False
         socket_dat.par.active = False
         auth_table.clear()
+        self.runtime_active = True
+        try:
+            self.maintain_connection()
+        except Exception:
+            self.runtime_active = False
+            raise
+        self.owner_comp.op("heartbeat_execute").module.startScheduler()
+
+    def set_connection_status(self, status):
+        self.connection_status = status
+        parameter = getattr(getattr(self.owner_comp, "par", None), "Connectionstate", None)
+        if parameter is not None:
+            parameter.val = status
+
+    def maintain_connection(self):
+        if not self.runtime_active or self.connection_id or self.draining:
+            return
+        socket_dat = self.owner_comp.op("socketio1")
+        if socket_dat.par.active:
+            return  # SocketIO DAT owns network reconnect; do not reset it on each tick.
+        auth_table = self.owner_comp.op("auth_table")
         try:
             self.refresh_auth(auth_table)
-            socket_dat.par.active = True
-            socket_dat.par.reset.pulse()
+        except FileNotFoundError:
+            self.set_connection_status("waiting_for_daemon")
+            return
         except Exception:
-            socket_dat.par.active = False
             auth_table.clear()
+            self.set_connection_status("auth_error")
             raise
-        self.runtime_active = True
+        self.set_connection_status("connecting")
+        socket_dat.par.active = True
+        socket_dat.par.reset.pulse()
 
     def onDestroyTD(self):
         self.runtime_active = False
@@ -2537,6 +2561,7 @@ class AgentExt:
 
     def rebind_connection(self, connection_id):
         self.connection_id = connection_id
+        self.set_connection_status("online")
         for record in self.execution_records.values():
             record["connection_id"] = connection_id
             if record["phase"] == "outcome":
