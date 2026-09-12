@@ -1,5 +1,5 @@
 {
-  "agent_version": "0.5.0",
+  "agent_version": "0.6.0",
   "locked_touchdesigner_version": "2025.32050",
   "protocol_versions": [3],
   "read_only_commands": ["ops.get", "ops.inspect", "ops.children", "ops.connections", "ops.hierarchy.connections", "ops.state.get", "dat.text.get", "dat.table.get", "parameters.get", "parameters.list", "parameters.sequence.get", "project.snapshot", "project.metadata", "binary.export", "events.read", "batch.execute"],

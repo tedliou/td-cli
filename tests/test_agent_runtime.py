@@ -344,6 +344,8 @@ class FakeOperator:
         self.lock = False
         self.viewer = False
         self.expose = True
+        self.display = False
+        self.render = False
         self.inputConnectors = [
             FakeConnector(self, index, is_input=True) for index in range(inputs)
         ]
@@ -1064,6 +1066,8 @@ def test_operator_state_get_returns_only_the_locked_common_state_contract() -> N
             "lock": False,
             "viewer": True,
             "expose": True,
+            "display": False,
+            "render": False,
         },
     }
 
@@ -1140,6 +1144,8 @@ def test_operator_state_set_applies_and_returns_the_exact_verified_patch() -> No
             "lock": True,
             "viewer": True,
             "expose": False,
+            "display": False,
+            "render": False,
         },
     }
 
