@@ -91,6 +91,8 @@ class OperatorControl:
         ("viewer", "viewer", "boolean"),
         ("expose", "expose", "boolean"),
         ("lock", "lock", "boolean"),
+        ("display", "display", "boolean"),
+        ("render", "render", "boolean"),
     )
     MAX_DAT_CONTENT_BYTES = 32_768
     MAX_TABLE_ROWS = 256

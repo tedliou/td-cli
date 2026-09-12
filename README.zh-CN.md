@@ -195,6 +195,8 @@ td --json --instance <selector> ops inspect /project1/source --max-items 100
 POP buffers、DAT content 或 Python objects，也不主动 cook。可变长度数据受 `--max-items`
 限制（默认 100、最高 1000），溢位会失败而不截断。
 
+以 `ops state set /project1/geo/shape --display --render` 启用 SOP 几何标志，`--no-display` 与 `--no-render` 关闭。`ops state get` 可读回两者。Display 选择查看内容，Render 选择渲染几何；仍须设置 Geometry COMP 与 Render TOP。这些标志本身不会停止 cook 或释放内存。
+
 <!-- doc-section: parameter-control -->
 
 ## Parameter 控制

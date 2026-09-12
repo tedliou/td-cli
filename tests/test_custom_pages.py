@@ -126,6 +126,22 @@ def create_command():
     }
 
 
+def test_display_render_patch_is_typed_and_verified():
+    from test_agent_runtime import FakeOperator
+
+    operator = FakeOperator("/project1/shape", family="SOP")
+    operator.display = operator.render = False
+    command = Command.model_validate(
+        {
+            "name": "ops.state.set",
+            "input": {"operator_path": operator.path, "display": True, "render": True},
+        }
+    )
+    result = make_control(lambda path: operator).execute(command.model_dump())
+    assert result["state"]["display"] is True
+    assert result["state"]["render"] is True
+
+
 def test_page_creation_returns_readable_range_and_duplicate_preserves_existing_page():
     comp = ExternalComp()
     control = make_control(lambda path: comp)

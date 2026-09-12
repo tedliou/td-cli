@@ -229,6 +229,8 @@ and overflow fails without truncation. It never downloads pixels, geometry, POP
 buffers, DAT content, or arbitrary Python objects and never explicitly cooks an
 Operator. Existing dedicated Commands remain the content and mutation seams.
 
+Use `ops state set /project1/geo/shape --display --render` to enable SOP geometry flags; `--no-display` and `--no-render` clear them. `ops state get` reads both flags back. Display selects viewer content; Render selects geometry for rendering. The Geometry COMP and Render TOP must also be configured. These flags do not themselves stop cooking or free memory.
+
 <!-- doc-section: parameter-control -->
 
 Parameter inspection is style-driven and distinguishes booleans, integers,

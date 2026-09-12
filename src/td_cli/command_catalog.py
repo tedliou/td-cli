@@ -139,8 +139,10 @@ OPERATOR_STATE_FIELDS = (
     "viewer",
     "expose",
     "lock",
+    "display",
+    "render",
 )
-OPERATOR_STATE_BOOLEAN_FIELDS = ("bypass", "viewer", "expose", "lock")
+OPERATOR_STATE_BOOLEAN_FIELDS = ("bypass", "viewer", "expose", "lock", "display", "render")
 MAX_DAT_CONTENT_BYTES = 32_768
 MAX_TABLE_ROWS = 256
 MAX_TABLE_COLUMNS = 256
@@ -159,6 +161,8 @@ class SetOperatorStateInput(OperatorInput):
     viewer: bool | None = None
     expose: bool | None = None
     lock: bool | None = None
+    display: bool | None = None
+    render: bool | None = None
 
     @model_validator(mode="after")
     def patch_is_not_empty(self) -> SetOperatorStateInput:

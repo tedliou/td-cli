@@ -449,6 +449,8 @@ def ops_state_set(
     lock: Annotated[bool | None, typer.Option("--lock/--no-lock")] = None,
     viewer: Annotated[bool | None, typer.Option("--viewer/--no-viewer")] = None,
     expose: Annotated[bool | None, typer.Option("--expose/--no-expose")] = None,
+    display: Annotated[bool | None, typer.Option("--display/--no-display")] = None,
+    render: Annotated[bool | None, typer.Option("--render/--no-render")] = None,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
@@ -467,6 +469,8 @@ def ops_state_set(
         "lock": lock,
         "viewer": viewer,
         "expose": expose,
+        "display": display,
+        "render": render,
     }
     if any(value is not None for value in patch.values()) and operator_path is None:
         _fail(ctx, ClientError("invalid_arguments"))
