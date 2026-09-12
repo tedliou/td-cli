@@ -1,6 +1,7 @@
 import asyncio
 import json
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -83,7 +84,7 @@ async def test_v1_migration_preserves_terminal_and_recovers_nonterminal(tmp_path
         "request_id": "018f47ec-7f3b-7a34-8f31-2ad70b6f6e2b",
         "status": "succeeded",
         "result": {"path": "/terminal"},
-        "completed_at": "2026-09-01T00:00:02.000Z",
+        "completed_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
     }
     for item in (queued, terminal):
         connection.execute(

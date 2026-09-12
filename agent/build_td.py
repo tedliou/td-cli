@@ -41,6 +41,9 @@ def build(source_dir, output_path, source_revision):
     if existing:
         existing.destroy()
     agent = project.create(baseCOMP, "td_agent")  # type: ignore[name-defined]
+    connection_state = agent.appendCustomPage("Connection").appendStr("Connectionstate")[0]
+    connection_state.val = "stopped"
+    connection_state.readOnly = True
 
     manifest_dat = agent.create(textDAT, "agent_manifest")  # type: ignore[name-defined]
     manifest_dat.text = (source / "manifest.json").read_text(encoding="utf-8")

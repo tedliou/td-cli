@@ -7,6 +7,12 @@ import pytest
 
 
 class FakeAgentExtension:
+    def set_connection_status(self, value):
+        self.connection_status = value
+
+    def maintain_connection(self):
+        pass
+
     def __init__(self) -> None:
         self.auth_table = None
         self.instance_id = "instance-1"

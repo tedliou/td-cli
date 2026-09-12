@@ -28,11 +28,10 @@ published checksums and adds the executables to your user `PATH`:
 irm https://github.com/tedliou/td-cli/releases/latest/download/install.ps1 | iex
 ```
 
-Open a new PowerShell window, confirm the installation, then start the Daemon:
+Open a new PowerShell window, confirm the installation:
 
 ```powershell
 td --version
-td-daemon start
 ```
 
 Drag
@@ -52,6 +51,36 @@ and TouchDesigner projects:
 ```powershell
 irm https://github.com/tedliou/td-cli/releases/latest/download/uninstall.ps1 | iex
 ```
+
+The Daemon starts quietly when an online `td` command first needs it; `--help`,
+`--version`, and the offline `ops types` catalog do not start it. Drag the Agent
+into an already-open project; you do not need to reopen TouchDesigner. The
+Agent's Connection page reports `waiting_for_daemon`, `connecting`, `online`, or
+an explicit authentication/registration error. Windows uses local
+`Win32_Process.Create` so the Daemon and explicitly launched TD are independent
+of the invoking terminal's job. No startup console window is shown.
+
+To open a saved project explicitly, without tying it to the shell lifetime:
+
+```powershell
+td --json project open C:/work/design.toe --executable 'C:/Program Files/Derivative/TouchDesigner/bin/TouchDesigner.exe'
+td --json ops types choptoDAT
+td-agent install-skill
+```
+
+`project open` returns an OS PID, not an online Agent guarantee, and never closes
+an existing Instance. `install-skill` installs the bundled, versioned `td-cli`
+skill to `$CODEX_HOME/skills/td-cli` (default `~/.codex/skills/td-cli`). Existing
+files require explicit `--replace`; `--destination` selects another skill folder.
+The skill links task-specific Derivative theory and actual CLI help. Its package
+is included in `td-agent.exe`; no separate network download is needed.
+
+Saving uses the existing live `project save <current-path> --expected-sha256
+<disk-hash>` command. A successful result includes the on-disk digest; closing TD
+is not required. A rejected disk precondition remains `project_file_changed`,
+not `protocol_incompatible`. Keep the Request ID when a save times out, inspect
+its outcome and disk state before making another mutation. An executable upgrade
+still does not replace the Agent embedded in a saved project.
 
 <!-- doc-section: development -->
 

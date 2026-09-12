@@ -26,11 +26,10 @@ td-cli 是 Codex 与 TouchDesigner Instance 之间的本机验证控制工具。
 irm https://github.com/tedliou/td-cli/releases/latest/download/install.ps1 | iex
 ```
 
-开启新的 PowerShell 窗口，确认安装并启动 Daemon：
+开启新的 PowerShell 窗口，确认安装：
 
 ```powershell
 td --version
-td-daemon start
 ```
 
 将 `%LOCALAPPDATA%\Programs\touchdesigner-cli\current\td-agent.tox` 拖入
@@ -48,6 +47,31 @@ td --json --instance <selector> ops create /project1 constantTOP source
 ```powershell
 irm https://github.com/tedliou/td-cli/releases/latest/download/uninstall.ps1 | iex
 ```
+
+需要连接的 `td` 指令会按需在后台启动 Daemon；`--help`、`--version` 与离线
+`ops types` 类型目录不会启动服务。可直接将 Agent 拖入已打开的作品，无须重开
+TouchDesigner。Agent 的 Connection 页面显示 `waiting_for_daemon`、`connecting`、
+`online` 或明确的认证／注册错误。Windows 采用本机 `Win32_Process.Create` 启动，
+使 Daemon 与明确打开的 TD 不受调用端终端 Job 生命周期牵制；后台启动不显示控制台窗口。
+
+需要明确打开已保存作品时：
+
+```powershell
+td --json project open C:/work/design.toe --executable 'C:/Program Files/Derivative/TouchDesigner/bin/TouchDesigner.exe'
+td --json ops types choptoDAT
+td-agent install-skill
+```
+
+`project open` 返回操作系统 PID，不代表 Agent 已上线，也不关闭已有 Instance。
+`install-skill` 将随版本内嵌于 `td-agent.exe` 的 `td-cli` skill 安装到
+`$CODEX_HOME/skills/td-cli`（默认 `~/.codex/skills/td-cli`），无须另外下载。
+目标目录已有内容时须明确加 `--replace`，可用 `--destination` 指定其他 skill 目录。
+Skill 按任务链接 Derivative 理论与真实的 CLI help，避免猜类型、参数和数值语义。
+
+保存使用已有的 live `project save <当前路径> --expected-sha256 <磁盘哈希>`；
+成功结果包含磁盘 SHA-256，无须关闭 TD。磁盘前置条件失败如实返回
+`project_file_changed`，不再误报 `protocol_incompatible`。保存超时保留 Request ID，
+先查 outcome 与磁盘状态再决定下一个 mutation。可执行文件升级仍不替换作品内嵌的 Agent。
 
 <!-- doc-section: development -->
 

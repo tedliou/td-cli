@@ -6,8 +6,9 @@ from typing import Any
 
 import httpx
 
-from td_cli.daemon.cli import ENDPOINT
+from td_cli.daemon.cli import ENDPOINT, ensure_running
 from td_cli.daemon.runtime_files import data_root, load_token
+from td_cli.processes import LaunchError
 from td_cli.protocol import PROTOCOL_VERSION, RequestStatus
 
 _REQUEST_STATUSES = frozenset(RequestStatus)
@@ -22,11 +23,18 @@ class ClientError(Exception):
 
 class DaemonClient:
     def __init__(
-        self, *, timeout: float, root: Path | None = None, endpoint: str = ENDPOINT
+        self,
+        *,
+        timeout: float,
+        root: Path | None = None,
+        endpoint: str = ENDPOINT,
+        autostart: bool = False,
     ) -> None:
         self.timeout = timeout
         self.root = root or data_root()
         self.endpoint = endpoint
+        self._autostart = autostart
+        self._deadline: float | None = None
 
     def _headers(self) -> dict[str, str]:
         token = load_token(self.root)
@@ -35,7 +43,16 @@ class DaemonClient:
         return {"Authorization": f"Bearer {token}"}
 
     def request(self, method: str, path: str, *, json: object = None) -> Any:
-        deadline = time.monotonic() + self.timeout
+        if self._autostart:
+            self._autostart = False
+            self._deadline = time.monotonic() + self.timeout
+            try:
+                ensure_running(timeout=min(5.0, self.timeout))
+            except (LaunchError, OSError) as error:
+                raise ClientError("daemon_unavailable", details={"reason": str(error)}) from error
+        deadline = self._deadline or (time.monotonic() + self.timeout)
+        if time.monotonic() >= deadline:
+            raise ClientError("daemon_unavailable", details={"reason": "command deadline expired"})
         backoffs = (0.0, 0.1, 0.3) if method == "GET" else (0.0,)
         response = None
         last_error: Exception | None = None
@@ -233,6 +250,10 @@ class DaemonClient:
             "parameter_sequence_rollback_failed",
             "parameter_sequence_outcome_unknown",
             "expression_invalid",
+            "project_path_mismatch",
+            "project_file_changed",
+            "project_file_unavailable",
+            "project_save_outcome_unknown",
             "wait_timeout",
             "daemon_shutdown",
             "internal_error",
@@ -308,9 +329,18 @@ class DaemonClient:
         return snapshot
 
     def wait(self, request_id: str) -> dict[str, Any]:
-        deadline = time.monotonic() + self.timeout
+        deadline = self._deadline or (time.monotonic() + self.timeout)
+        snapshot = None
         while True:
-            snapshot = self.get_request(request_id)
+            if time.monotonic() >= deadline:
+                raise ClientError(
+                    "wait_timeout", details={"request_id": request_id, "request": snapshot}
+                )
+            try:
+                snapshot = self.get_request(request_id)
+            except ClientError as error:
+                error.details.setdefault("request_id", request_id)
+                raise
             if snapshot["status"] in {
                 "succeeded",
                 "failed",

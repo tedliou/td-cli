@@ -15,6 +15,8 @@ from typer._click.exceptions import ClickException, UsageError
 from td_cli import __version__
 from td_cli.client import ClientError, DaemonClient
 from td_cli.command_catalog import MAX_DAT_CONTENT_BYTES, MAX_INSPECTION_ITEMS, MAX_TOX_FILE_BYTES
+from td_cli.operator_catalog import OPERATOR_CATALOG
+from td_cli.processes import LaunchError, launch_detached
 from td_cli.protocol import PROTOCOL_VERSION, Command
 
 app = typer.Typer(no_args_is_help=True)
@@ -69,7 +71,7 @@ def main(
 
 
 def _client(ctx: typer.Context) -> DaemonClient:
-    return DaemonClient(timeout=float(ctx.obj["timeout"]))
+    return DaemonClient(timeout=float(ctx.obj["timeout"]), autostart=True)
 
 
 def _reject_instance_on_query(ctx: typer.Context) -> None:
@@ -1239,6 +1241,65 @@ def run() -> None:
     except ClickException as error:
         error.show()
         raise SystemExit(error.exit_code) from None
+
+
+@project_app.command("open")
+def project_open(
+    ctx: typer.Context,
+    path: Annotated[Path, typer.Argument(exists=True, dir_okay=False)],
+    executable: Annotated[Path, typer.Option("--executable", exists=True, dir_okay=False)],
+) -> None:
+    """Open a saved project independently; PID returned does not mean Agent online."""
+
+    def operation() -> None:
+        _reject_instance_on_query(ctx)
+        if path.suffix.lower() != ".toe" or executable.name.lower() != "touchdesigner.exe":
+            raise ClientError("invalid_arguments")
+        try:
+            pid = launch_detached(
+                [str(executable.resolve()), str(path.resolve())],
+                cwd=path.resolve().parent,
+                hidden=False,
+            )
+        except (LaunchError, OSError) as error:
+            raise ClientError("process_launch_failed", details={"reason": str(error)}) from error
+        _emit(ctx, {"pid": pid, "path": str(path.resolve()), "status": "launched"})
+
+    _run(ctx, operation)
+
+
+@ops_app.command("types")
+def ops_types(
+    ctx: typer.Context,
+    name: Annotated[str | None, typer.Argument()] = None,
+    family: Annotated[str | None, typer.Option()] = None,
+    limit: Annotated[int, typer.Option(min=1, max=680)] = 50,
+) -> None:
+    """Query the bundled, locked-build create-support catalog without a Daemon."""
+
+    def operation() -> None:
+        _reject_instance_on_query(ctx)
+        if family is not None and family not in {"TOP", "CHOP", "DAT", "SOP", "POP", "COMP", "MAT"}:
+            raise ClientError("invalid_arguments")
+        entries = [
+            OPERATOR_CATALOG.entry(key)
+            for key in OPERATOR_CATALOG.names
+            if name is None or key == name
+        ]
+        entries = [
+            entry for entry in entries if entry and (family is None or entry["family"] == family)
+        ]
+        _emit(
+            ctx,
+            {
+                "touchdesigner_build": OPERATOR_CATALOG.touchdesigner_build,
+                "operators": entries[:limit],
+                "total": len(entries),
+                "truncated": len(entries) > limit,
+            },
+        )
+
+    _run(ctx, operation)
 
 
 if __name__ == "__main__":

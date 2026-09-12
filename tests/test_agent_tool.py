@@ -7,6 +7,20 @@ from typer.testing import CliRunner
 from td_cli.agent_tool import app, source_revision
 
 
+def test_bundled_skill_install_is_offline_and_replacement_is_explicit(tmp_path):
+    target = tmp_path / "td-cli"
+    result = CliRunner().invoke(app, ["install-skill", "--destination", str(target)])
+    assert result.exit_code == 0, result.output
+    assert (target / "SKILL.md").is_file()
+    assert (target / "references" / "sessions.md").is_file()
+    (target / "SKILL.md").write_text("user edit", encoding="utf-8")
+    assert CliRunner().invoke(app, ["install-skill", "--destination", str(target)]).exit_code == 1
+    assert (target / "SKILL.md").read_text() == "user edit"
+    result = CliRunner().invoke(app, ["install-skill", "--destination", str(target), "--replace"])
+    assert result.exit_code == 0
+    assert (target / "SKILL.md").read_text() != "user edit"
+
+
 def test_source_revision_is_stable_across_text_checkout_line_endings(
     tmp_path: Path,
 ) -> None:
@@ -36,7 +50,7 @@ def test_canonical_agent_sources_pass_structural_inspection() -> None:
     assert result.exit_code == 0, result.output
     report = json.loads(result.stdout)
     assert report == {
-        "agent_version": "0.4.0",
+        "agent_version": "0.5.0",
         "locked_touchdesigner_version": "2025.32050",
         "protocol_versions": [3],
         "required_files": [
