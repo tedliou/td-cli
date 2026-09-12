@@ -1262,6 +1262,7 @@ def project_open(
                 [str(executable.resolve()), str(path.resolve())],
                 cwd=path.resolve().parent,
                 hidden=False,
+                timeout=float(ctx.obj["timeout"]),
             )
         except (LaunchError, OSError) as error:
             raise ClientError("process_launch_failed", details={"reason": str(error)}) from error

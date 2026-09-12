@@ -115,6 +115,22 @@ Production launch deadlines are unchanged. Known test children and caller jobs
 retain explicit cleanup; a child also has a twenty-second self-exit bound.
 The complete local gate passed again (471 tests).
 
+Subsequent develop CI run `34696639728` returned the launcher's explicit unknown
+outcome after ten seconds. The trace locates this only at the whole WMI invocation,
+not a specific PowerShell/provider substep. This exposed hidden product limits:
+client startup capped the visible command budget at five seconds and project open
+ignored it in favor of ten. Both now honor the visible total command budget;
+Daemon start exposes the same bounded timeout (default thirty seconds). Request
+waiting receives only the remaining budget. No launch is retried after timeout.
+The job-semantics probe explicitly allows thirty seconds plus five seconds of
+outer observation overhead and records elapsed launch time; short-deadline unknown
+behavior has a separate deterministic regression. Product defaults are not reset
+for each phase. Incremental review also found a fixed health-probe timeout that
+could accept late readiness; both initial and polling probes now check remaining
+time before and after the response. The finding is closed with deterministic
+late-ready regressions. Final gate after these changes passed all 477 tests,
+Ruff lint/format, mypy, lock/source inspection, and diff checks.
+
 ## Remaining gates
 
 Exact-source Agent staging, CI, promotion, human release-environment approval,

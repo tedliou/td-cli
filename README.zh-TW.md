@@ -8,6 +8,8 @@ td-cli 是 Codex 與 TouchDesigner Instance 之間的本機驗證控制工具。
 介面提供型別化 Operator／Parameter 控制、有界專案觀察、二進位匯出、批次讀取、專案中繼資料與
 事件／錯誤觀察。它不開放任意 Python，也不接受遠端網路控制。
 
+冷啟動程序服務與就緒、Request 等待共用 `td --timeout` 可見總期限（預設 30 秒）。`td-daemon start --timeout 30` 設定完整啟動期限。啟動逾時代表結果未知；再次開啟前先檢查既有程序。
+
 <!-- doc-section: requirements -->
 
 ## 系統需求

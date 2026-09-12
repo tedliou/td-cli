@@ -10,6 +10,8 @@ Parameter control plus bounded project observation, binary export, batch
 execution, project metadata, and event/error observation. It never exposes
 arbitrary Python or remote network control.
 
+Cold process-service startup shares the visible `td --timeout` command budget (default 30 seconds), including readiness and Request waiting. `td-daemon start --timeout 30` sets its total startup budget. A launch timeout is an unknown outcome: inspect existing processes before opening again.
+
 <!-- doc-section: requirements -->
 
 ## Requirements
