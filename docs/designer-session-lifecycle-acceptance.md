@@ -107,6 +107,14 @@ Machine-readable observations are in `docs/evidence/designer-sessions/`.
 Only disposable copies were mutated. Original artwork regression is owned by
 its project maintainer after published installation.
 
+Promotion CI run `34696348285` exposed a test-harness deadline defect: the job
+survival probe read its result after only eight seconds although its launcher
+allows ten seconds. The corrected probe observes a bounded fifteen-second outer
+deadline, writes results atomically, and retains caller stderr/exit status.
+Production launch deadlines are unchanged. Known test children and caller jobs
+retain explicit cleanup; a child also has a twenty-second self-exit bound.
+The complete local gate passed again (471 tests).
+
 ## Remaining gates
 
 Exact-source Agent staging, CI, promotion, human release-environment approval,

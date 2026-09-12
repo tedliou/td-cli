@@ -72,14 +72,17 @@ try:
     output={'pid':pid}
 except LaunchError as e:
     output={'error':str(e)}
-Path(sys.argv[1]).write_text(json.dumps(output))
+temporary=Path(sys.argv[1]).with_suffix(".tmp")
+temporary.write_text(json.dumps(output))
+temporary.replace(sys.argv[1])
 time.sleep(20)
 """
+    errors = (tmp_path / "caller-stderr.txt").open("w+")
     caller = subprocess.Popen(
         [sys.executable, "-c", script, str(result), str(marker)],
         stdin=subprocess.PIPE,
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stderr=errors,
         creationflags=subprocess.CREATE_BREAKAWAY_FROM_JOB | subprocess.CREATE_NO_WINDOW,
     )
     child_handle = None
@@ -87,9 +90,13 @@ time.sleep(20)
         assert kernel.AssignProcessToJobObject(job, int(caller._handle))
         caller.stdin.write(b"go\n")
         caller.stdin.flush()
-        deadline = time.monotonic() + 8
+        # The launcher has a 10-second deadline; observe its result before closing the job.
+        deadline = time.monotonic() + 15
         while not result.exists() and time.monotonic() < deadline:
             time.sleep(0.02)
+        errors.flush()
+        errors.seek(0)
+        assert result.exists(), {"caller_exit": caller.poll(), "stderr": errors.read()}
         output = json.loads(result.read_text())
         assert "pid" in output, output
         child_handle = kernel.OpenProcess(0x100001, False, output["pid"])
@@ -109,3 +116,4 @@ time.sleep(20)
             caller.kill()
         caller.wait(timeout=5)
         caller.stdin.close()
+        errors.close()
