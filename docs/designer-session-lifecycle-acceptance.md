@@ -70,9 +70,45 @@ kept as a fallback. The suite's fixed September 1 completed timestamp had aged
 beyond retention; the migration test now uses a current terminal timestamp while
 preserving its behavioral assertions. No distinct reliability case was removed.
 
+## Completed acceptance and review
+
+The final local gate passed: 471 tests, Ruff lint/format, mypy (19 files),
+locked dependency resolution, Agent source inspection, and diff whitespace check.
+Independent Standards review of `1081d17...d89c923` found no blocking violations.
+Spec review found that `td version` inadvertently started the Daemon; the fix uses
+an offline client and has a regression test. Follow-up review of the migration
+and version fix found no blocking issues.
+
+- Same-PID live save on v0.5.0 PID 2640 succeeded (Request
+  `01a095b3-f16d-73e4-96f1-2a21db11738b`, 53314 bytes), disk SHA-256
+  `2ccf22dcf20b6eb9281b97934e3350d20577c8b3741712fe4bff47919a305b01`.
+  A fresh metadata Request succeeded afterward.
+- After Daemon stop, a fresh CLI call started v0.5.0 PID 6368 and reconnected
+  the same TD PID and Instance. Window enumeration every 50 ms for 150 samples
+  observed no new visible window and unchanged TD foreground HWND 3081612.
+- Cold opening the saved copy before any auth token existed used PID 21372.
+  The first CLI call started the Daemon in 3.719 seconds; a subsequent metadata
+  Request `01a095b8-ca67-7c1b-8025-9deeed402477` succeeded in that same PID.
+  `Connectionstate` read back `online`; out1 readback succeeded. A deliberately
+  wrong save checksum returned `project_file_changed` and preserved the file.
+- With timeline playback paused, locked TD PID 10840 successfully completed
+  metadata Request `01a095c2-6ff9-7a9b-ad85-d209c5559505` and node creation
+  Request `01a095c2-7474-703c-ae17-df32dd89ba07`. The scheduler remained on the
+  main thread; timeline pause did not require restarting TD.
+- Formal offline `upgrade-project` migrated an untouched artwork copy from the
+  explicitly recognized v0.4.0 Agent to v0.5.0, preserved its backup, and wrote
+  SHA-256 `e8eca6a386af1378b455a1c02bba891f2e86fd2415e17a58551c835e8debbb73`.
+  A second invocation was unchanged. Cold-open metadata in PID 8504 succeeded
+  (Request `01a095c0-25ae-7a8c-be96-3fe5000d8070`). The v0.3.1 recognition path
+  remains covered; unknown modified Agents are rejected. The new read-only
+  Connectionstate parameter is copied only after known structure validation.
+
+Machine-readable observations are in `docs/evidence/designer-sessions/`.
+Only disposable copies were mutated. Original artwork regression is owned by
+its project maintainer after published installation.
+
 ## Remaining gates
 
-Final local gate, same-PID restart/save/readback, cold reopen, missing-token locked
-runtime, daemon window/focus observation, independent code review, exact-source
-Agent staging, CI, promotion, human release-environment approval, remote download
-and installed-version verification, and final original-artwork regression.
+Exact-source Agent staging, CI, promotion, human release-environment approval,
+remote download and installed-version verification, and final original-artwork
+regression. This document does not claim those have passed.

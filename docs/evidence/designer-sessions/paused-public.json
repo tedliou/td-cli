@@ -1,0 +1,19 @@
+[
+  {
+    "args": [
+      "project",
+      "metadata"
+    ],
+    "stdout": "{\"protocol_version\":3,\"data\":{\"folder\":\"E:/td-cli/.codex/probe\",\"name\":\"paused-probe.toe\",\"saved_with\":{\"build\":\"2025.32050\",\"os_name\":\"Windows\",\"os_version\":\"10\",\"time\":\"Wed Sep  9 00:28:14 2026\",\"version\":\"099\"}},\"request\":{\"request_id\":\"01a095c2-6ff9-7a9b-ad85-d209c5559505\",\"status\":\"succeeded\"}}\n"
+  },
+  {
+    "args": [
+      "ops",
+      "create",
+      "/project1",
+      "nullDAT",
+      "paused_cli_marker"
+    ],
+    "stdout": "{\"protocol_version\":3,\"data\":{\"catalog_status\":\"supported\",\"family\":\"DAT\",\"name\":\"paused_cli_marker\",\"op_type\":\"nullDAT\",\"path\":\"/project1/paused_cli_marker\"},\"request\":{\"request_id\":\"01a095c2-7474-703c-ae17-df32dd89ba07\",\"status\":\"succeeded\"}}\n"
+  }
+]

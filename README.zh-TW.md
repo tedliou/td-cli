@@ -147,8 +147,8 @@ Daemon 完成記錄。上限為 64 筆、每筆 canonical outcome 256 KiB、合�
 ## 升級專案內嵌 Agent
 
 `td-agent upgrade-project` 是獨立於 runtime Protocol 的固定離線升級入口。
-目前已驗證 canonical Agent 0.3.1 → 0.4.0、TouchDesigner 2025.32050；
-相同 0.4.0 僅驗證、不改檔，不代表任意歷史或未來版本都受支援。
+目前已驗證 canonical Agent 0.3.1 / 0.4.0 → 0.5.0、TouchDesigner 2025.32050；
+相同 0.5.0 僅驗證、不改檔，不代表任意歷史或未來版本都受支援。
 先儲存作品並關閉**所有 TouchDesigner 程序**；命令會拒絕仍有程序的情況，
 不會自動關閉它們。使用新版 CLI 套件及其可信 artifact／manifest：
 

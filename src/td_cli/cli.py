@@ -194,7 +194,9 @@ def version_info(
         _reject_instance_on_query(ctx)
         daemon_version = None
         try:
-            daemon_version = _client(ctx).health()["release_version"]
+            daemon_version = DaemonClient(timeout=float(ctx.obj["timeout"])).health()[
+                "release_version"
+            ]
         except ClientError as error:
             if error.code not in {"daemon_unavailable", "transport_error"}:
                 raise

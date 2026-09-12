@@ -14,6 +14,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from td_cli import __version__
+
 BUILD = "2025.32050"
 LIMIT = 64 * 1024 * 1024
 SCRIPT_NAMES = (
@@ -31,6 +33,19 @@ LEGACY_HASHES = dict(
             "985f4f8ab4701485a139671ad4df6282c60c7601b0d67a5b56a589f3150f2369",
             "a9092602153be233d9ea23b4a907371a18b967a61854a590fd698b17ccbb59fe",
             "9df9b2ae5bf526ccd088e949fcbaa0be6af5e8723440d006fc6dbc8b0749c7a0",
+            "565725f8064aeac1320379325c3ab24e2e184068ea14b0e1f136f38736720fef",
+        ),
+        strict=True,
+    )
+)
+V040_HASHES = dict(
+    zip(
+        SCRIPT_NAMES,
+        (
+            "9d222e895040f4cd3130e8c72ae731304d7c3968a39c24ba82e4cc290f3b9fab",
+            "71716a7022b8d324876160ae22ead8f73247e127c0d9d9892ffa90b9b8ba28c7",
+            "bc53f027d62d3a4fbee7d41102589e75dca6baa3f9a75a1bbde3c65593014725",
+            "9f860b1066be541469c339d0e16080fa2977c234da947e2271c390efeeab58b5",
             "565725f8064aeac1320379325c3ab24e2e184068ea14b0e1f136f38736720fef",
         ),
         strict=True,
@@ -130,7 +145,13 @@ def identify(root: Path, target: Path) -> tuple[Path, bool]:
     info = manifest(component)
     hashes = script_hashes(component)
     same = hashes == script_hashes(target)
-    if not same and (info.get("agent_version") != "0.3.1" or hashes != LEGACY_HASHES):
+    version = info.get("agent_version")
+    approved = (
+        {"0.3.1": LEGACY_HASHES, "0.4.0": V040_HASHES}.get(version)
+        if isinstance(version, str)
+        else None
+    )
+    if not same and hashes != approved:
         raise UpgradeError("embedded Agent is modified or has an unsupported version")
     if {p.name for p in component.iterdir()} != {p.name for p in target.iterdir()}:
         raise UpgradeError("embedded Agent has unknown or missing children")
@@ -154,8 +175,36 @@ def identify(root: Path, target: Path) -> tuple[Path, bool]:
         root_parameters = b"\n".join(
             line for line in root_parameters.split(b"\n") if not line.startswith(b"externaltox 0 ")
         )
-    if root_parameters != target.with_suffix(".parm").read_bytes():
+
+    def without_connection_state(raw):
+        lines = raw.splitlines(keepends=True)
+        for line in lines:
+            if line.startswith(b"Connectionstate ") and line not in {
+                b"Connectionstate 67109184 " + state + b"\n"
+                for state in (
+                    b"stopped",
+                    b"waiting_for_daemon",
+                    b"connecting",
+                    b"online",
+                    b"auth_error",
+                    b"registration_error",
+                )
+            }:
+                raise UpgradeError("modified Agent connection-state parameter")
+        return b"".join(line for line in lines if not line.startswith(b"Connectionstate "))
+
+    if without_connection_state(root_parameters) != without_connection_state(
+        target.with_suffix(".parm").read_bytes()
+    ):
         raise UpgradeError("embedded Agent has modified root parameters or external linkage")
+    custom = component.with_suffix(".cparm")
+    target_custom = target.with_suffix(".cparm")
+    if same and target_custom.exists() and not custom.exists():
+        raise UpgradeError("embedded Agent is missing custom parameters")
+    if custom.exists() and (
+        not same or not target_custom.exists() or custom.read_bytes() != target_custom.read_bytes()
+    ):
+        raise UpgradeError("embedded Agent has modified custom parameters")
     if not component.with_suffix(".n").read_bytes().startswith(b"COMP:base\n"):
         raise UpgradeError("embedded Agent root is not a base COMP")
     return component, same
@@ -219,7 +268,7 @@ def upgrade_project(
         if len(targets) != 1:
             raise UpgradeError("target artifact structure is invalid")
         target = targets[0].parent
-        if manifest(target).get("agent_version") != "0.4.0":
+        if manifest(target).get("agent_version") != __version__:
             raise UpgradeError("unsupported target Agent version")
         staged = scratch / "project.toe"
         shutil.copyfile(project, staged)
@@ -233,7 +282,7 @@ def upgrade_project(
                 "path": str(project),
                 "sha256": original,
                 "agent_path": operator_path,
-                "agent_version": "0.4.0",
+                "agent_version": __version__,
             }
         # First establish a byte-preserving vendor round-trip baseline.
         vendor.collapse(staged)
@@ -250,13 +299,39 @@ def upgrade_project(
             if not replacement.is_file():
                 raise UpgradeError("nested target Agent content is unsupported")
             shutil.copyfile(replacement, component / replacement.name)
+        if target.with_suffix(".cparm").exists():
+            custom = component.with_suffix(".cparm")
+            shutil.copyfile(target.with_suffix(".cparm"), custom)
+            root_parm = component.with_suffix(".parm")
+            raw = root_parm.read_bytes()
+            root_parm.write_bytes(raw[:-2] + b"Connectionstate 67109184 stopped\n" + raw[-2:])
+            toc = staged.with_name(staged.name + ".toc")
+            if toc.exists():
+                relative = custom.relative_to(expanded).as_posix()
+                root_entry = component.with_suffix(".parm").relative_to(expanded).as_posix()
+                toc.write_text(
+                    toc.read_text(encoding="utf-8").replace(
+                        root_entry + "\n", relative + "\n" + root_entry + "\n"
+                    ),
+                    encoding="utf-8",
+                    newline="\n",
+                )
         expected = snapshot(expanded)
         vendor.collapse(staged)
         verify = scratch / "verify.toe"
         shutil.copyfile(staged, verify)
         verified = vendor.expand(verify)
-        if snapshot(verified) != expected:
-            raise UpgradeError("collapsed upgrade does not match intended project content")
+        observed = snapshot(verified)
+        if observed != expected:
+            changed = sorted(
+                key
+                for key in expected.keys() | observed.keys()
+                if expected.get(key) != observed.get(key)
+            )
+            raise UpgradeError(
+                "collapsed upgrade does not match intended project content: "
+                + ", ".join(changed[:10])
+            )
         identify(verified, target)
         payload = staged.read_bytes()
     # Cleanup completes before the only mutation of the original project.
@@ -285,7 +360,7 @@ def upgrade_project(
             "previous_sha256": original,
             "backup": str(backup),
             "agent_path": operator_path,
-            "agent_version": "0.4.0",
+            "agent_version": __version__,
         }
     finally:
         if candidate.exists():

@@ -167,8 +167,8 @@ not supported.
 ## Upgrade the embedded Agent
 
 `td-agent upgrade-project` is the fixed offline upgrade entry point, independent
-of runtime Protocol. Its verified migration is canonical Agent 0.3.1 → 0.4.0
-on TouchDesigner 2025.32050; identical 0.4.0 is a no-op. Arbitrary historical
+of runtime Protocol. Its verified migration is canonical Agent 0.3.1 / 0.4.0 → 0.5.0
+on TouchDesigner 2025.32050; identical 0.5.0 is a no-op. Arbitrary historical
 or future versions are not implied. Save your work and close **all TouchDesigner
 processes** first: the command refuses active processes and never closes them.
 Use the new CLI bundle and its trusted artifact and manifest:
