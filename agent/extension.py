@@ -73,6 +73,7 @@ class OperatorControl:
         "dat.table.replace": "_replace_table_dat",
         "dat.table.patch": "_patch_table_dat",
         "parameters.get": "_get_parameter",
+        "parameters.page.create": "_create_parameter_page",
         "parameters.list": "_list_parameters",
         "parameters.pulse": "_pulse_parameter",
         "parameters.set": "_set_parameter",
@@ -90,6 +91,8 @@ class OperatorControl:
         ("viewer", "viewer", "boolean"),
         ("expose", "expose", "boolean"),
         ("lock", "lock", "boolean"),
+        ("display", "display", "boolean"),
+        ("render", "render", "boolean"),
     )
     MAX_DAT_CONTENT_BYTES = 32_768
     MAX_TABLE_ROWS = 256
@@ -582,6 +585,86 @@ class OperatorControl:
             "rows": rows,
             "utf8_bytes": cls._table_byte_count(rows),
         }
+
+    def _create_parameter_page(self, payload):
+        operator = self._operator(payload)
+        path = str(operator.path)
+        self._require_mutable_path(path)
+        if not getattr(operator, "isCOMP", False):
+            raise AgentCommandError("operator_family_unsupported")
+        page_name = payload["page"]
+        definitions = payload["parameters"]
+        if any(str(page.name) == page_name for page in operator.pages + operator.customPages):
+            raise AgentCommandError("parameter_page_exists")
+        if any(getattr(operator.par, item["name"], None) is not None for item in definitions):
+            raise AgentCommandError("parameter_exists")
+        page = None
+        try:
+            page = operator.appendCustomPage(page_name)
+            methods = {"float": "appendFloat", "toggle": "appendToggle", "menu": "appendMenu"}
+            created = []
+            for item in definitions:
+                parameter = getattr(page, methods[item["kind"]])(
+                    item["name"], label=item["label"], replace=False
+                )[0]
+                if item["kind"] == "float":
+                    parameter.min = parameter.normMin = item["minimum"]
+                    parameter.max = parameter.normMax = item["maximum"]
+                    parameter.clampMin = parameter.clampMax = True
+                elif item["kind"] == "menu":
+                    parameter.menuNames = item["menu_names"]
+                    parameter.menuLabels = item["menu_labels"]
+                parameter.default = item["default"]
+                parameter.val = item["default"]
+                if not self._custom_parameter_matches(parameter, item, page_name):
+                    raise AgentCommandError("parameter_page_verification_failed")
+                created.append(
+                    {
+                        "descriptor": self._parameter_metadata(
+                            parameter, builtin=False, custom=True
+                        ),
+                        "value": self._parameter_result(operator, item["name"], parameter),
+                    }
+                )
+            return {"operator_path": path, "page": page_name, "parameters": created}
+        except Exception as error:
+            if self.operator_lookup(path) is None:
+                raise AgentCommandError("parameter_page_outcome_unknown") from error
+            try:
+                if page is not None:
+                    page.destroy()
+                if any(str(p.name) == page_name for p in operator.customPages):
+                    raise RuntimeError("page still present")
+            except Exception as rollback_error:
+                if self.operator_lookup(path) is None:
+                    raise AgentCommandError("parameter_page_outcome_unknown") from rollback_error
+                raise AgentCommandError("parameter_page_rollback_failed") from rollback_error
+            raise AgentCommandError("parameter_page_failed") from error
+
+    @staticmethod
+    def _custom_parameter_matches(parameter, item, page_name):
+        if (
+            str(parameter.name) != item["name"]
+            or str(parameter.label) != item["label"]
+            or str(parameter.page.name) != page_name
+            or str(parameter.style).lower() != item["kind"]
+            or parameter.eval() != item["default"]
+            or parameter.default != item["default"]
+        ):
+            return False
+        if item["kind"] == "float":
+            return (
+                parameter.min == parameter.normMin == item["minimum"]
+                and parameter.max == parameter.normMax == item["maximum"]
+                and parameter.clampMin
+                and parameter.clampMax
+            )
+        if item["kind"] == "menu":
+            return (
+                list(parameter.menuNames) == item["menu_names"]
+                and list(parameter.menuLabels) == item["menu_labels"]
+            )
+        return True
 
     def _get_operator_state(self, payload):
         operator = self._operator(payload)

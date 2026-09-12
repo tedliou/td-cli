@@ -50,7 +50,7 @@ def test_canonical_agent_sources_pass_structural_inspection() -> None:
     assert result.exit_code == 0, result.output
     report = json.loads(result.stdout)
     assert report == {
-        "agent_version": "0.5.0",
+        "agent_version": "0.6.0",
         "locked_touchdesigner_version": "2025.32050",
         "protocol_versions": [3],
         "required_files": [

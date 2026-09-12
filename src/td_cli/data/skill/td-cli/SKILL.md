@@ -26,8 +26,10 @@ bounded; a timeout only ends the wait. Retain the Request ID and inspect it usin
 `td requests get <id>` before deciding another action. Do not repeat a mutation
 whose outcome is unknown.
 
+`batch execute` accepts read-only Commands only; submit mutations individually.
+
 Preserve the user's design and unsaved work. Verify the requested graph/value
 and save result, not merely a successful submission. Improve this skill from a
 reproduced usage failure: correct the smallest relevant reference rather than
-adding a new universal workflow. Its interface examples target td-cli 0.5.0;
+adding a new universal workflow. Its interface examples target td-cli 0.6.0;
 installed help is authoritative when versions differ.

@@ -1,0 +1,23 @@
+[
+  {
+    "name": "td-agent-cli-v0.5.0-windows-x86_64.zip",
+    "returncode": 0,
+    "transfer": "206 15782579 140216 112.558513",
+    "error": "",
+    "verified": true
+  },
+  {
+    "name": "td-daemon-v0.5.0-windows-x86_64.zip",
+    "returncode": 0,
+    "transfer": "206 16038729 99984 160.411638",
+    "error": "",
+    "verified": true
+  },
+  {
+    "name": "td-v0.5.0-windows-x86_64.zip",
+    "returncode": 0,
+    "transfer": "206 11975692 130219 91.965246",
+    "error": "",
+    "verified": true
+  }
+]

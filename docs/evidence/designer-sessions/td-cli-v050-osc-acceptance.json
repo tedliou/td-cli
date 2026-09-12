@@ -1,0 +1,202 @@
+{
+  "passed": true,
+  "last_request_id": "01a095f1-f2ed-764c-864b-d081497060cb",
+  "project": {
+    "folder": "E:/collective-dream-factory",
+    "name": "CollectiveDreamFactory.toe",
+    "saved_with": {
+      "build": "2025.32050",
+      "os_name": "Windows",
+      "os_version": "10",
+      "time": "Wed Sep  9 00:28:14 2026",
+      "version": "099"
+    }
+  },
+  "channels": {
+    "bands": [
+      "alpha_absolute",
+      "beta_absolute",
+      "delta_absolute",
+      "gamma_absolute",
+      "theta_absolute"
+    ],
+    "motion": [
+      "gyro_01",
+      "gyro_02",
+      "gyro_03"
+    ],
+    "contact": [
+      "horseshoe_01",
+      "horseshoe_02",
+      "horseshoe_03",
+      "horseshoe_04",
+      "touching_forehead"
+    ],
+    "events": [
+      "jaw_clench_pulse",
+      "jaw_clench_count"
+    ],
+    "eeg": [
+      "eeg_01",
+      "eeg_02",
+      "eeg_03",
+      "eeg_04",
+      "eeg_05",
+      "eeg_06",
+      "eeg_07",
+      "eeg_08"
+    ],
+    "optics": [
+      "optics_01",
+      "optics_02",
+      "optics_03",
+      "optics_04",
+      "optics_05",
+      "optics_06",
+      "optics_07",
+      "optics_08",
+      "optics_09",
+      "optics_10",
+      "optics_11",
+      "optics_12",
+      "optics_13",
+      "optics_14",
+      "optics_15",
+      "optics_16"
+    ],
+    "battery": [
+      "batt_01",
+      "batt_02",
+      "batt_03",
+      "batt_04"
+    ],
+    "status": [
+      "receiving",
+      "age_seconds",
+      "valid_messages",
+      "invalid_messages"
+    ]
+  },
+  "maximum_value_error": 0.0,
+  "pulse_messages": 42,
+  "final_status": [
+    [
+      "address",
+      "seen",
+      "fresh",
+      "age_seconds",
+      "messages",
+      "last_error"
+    ],
+    [
+      "/muse/gyro",
+      "0",
+      "0",
+      "-1.0",
+      "0",
+      ""
+    ],
+    [
+      "/muse/eeg",
+      "0",
+      "0",
+      "-1.0",
+      "0",
+      ""
+    ],
+    [
+      "/muse/optics",
+      "0",
+      "0",
+      "-1.0",
+      "0",
+      ""
+    ],
+    [
+      "/muse/batt",
+      "0",
+      "0",
+      "-1.0",
+      "0",
+      ""
+    ],
+    [
+      "/muse/elements/horseshoe",
+      "0",
+      "0",
+      "-1.0",
+      "0",
+      ""
+    ],
+    [
+      "/muse/elements/touching_forehead",
+      "0",
+      "0",
+      "-1.0",
+      "0",
+      ""
+    ],
+    [
+      "/muse/elements/jaw_clench",
+      "0",
+      "0",
+      "-1.0",
+      "0",
+      ""
+    ],
+    [
+      "/muse/elements/alpha_absolute",
+      "1",
+      "0",
+      "15.266",
+      "1",
+      ""
+    ],
+    [
+      "/muse/elements/beta_absolute",
+      "0",
+      "0",
+      "-1.0",
+      "0",
+      ""
+    ],
+    [
+      "/muse/elements/delta_absolute",
+      "0",
+      "0",
+      "-1.0",
+      "0",
+      ""
+    ],
+    [
+      "/muse/elements/gamma_absolute",
+      "0",
+      "0",
+      "-1.0",
+      "0",
+      ""
+    ],
+    [
+      "/muse/elements/theta_absolute",
+      "0",
+      "0",
+      "-1.0",
+      "0",
+      ""
+    ]
+  ],
+  "source": [
+    [
+      "host",
+      "port",
+      "last_error"
+    ],
+    [
+      "127.0.0.1",
+      "51564",
+      "other_sender_active"
+    ]
+  ],
+  "checks_passed": true,
+  "uncertain": false
+}

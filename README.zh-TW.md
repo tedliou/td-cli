@@ -195,6 +195,8 @@ td --json --instance <selector> ops inspect /project1/source --max-items 100
 POP buffers、DAT content 或 Python objects，也不主動 cook。可變長度資料受 `--max-items`
 限制（預設 100、最高 1000），溢位會失敗而不截斷。
 
+以 `ops state set /project1/geo/shape --display --render` 啟用 SOP 幾何旗標，`--no-display` 與 `--no-render` 關閉。`ops state get` 可讀回兩者。Display 選擇檢視內容，Render 選擇算圖幾何；仍須設定 Geometry COMP 與 Render TOP。這些旗標本身不會停止 cook 或釋放記憶體。
+
 <!-- doc-section: parameter-control -->
 
 ## Parameter 控制
@@ -216,6 +218,19 @@ td --json --instance <selector> parameters sequence-replace /project1/target Ite
 Bind source 只由型別化 Operator／Parameter identity 產生。Export 只接受已存在的 CHOP
 Operator／channel identity。Sequence replacement 最多 128 blocks、每 block 256 Parameters；失敗時會
 復原並驗證完整的 block 數量、順序、名稱、mode、value 與 source。
+
+使用 `parameters page-create` 在 COMP 建立新的原生自訂參數頁。每頁支援 1–32 個純量 `float`、`toggle` 或 `menu` 控制。名稱以大寫 ASCII 字母開頭，後接小寫字母或數字（最多 32 字元）。浮點控制需有限的最小值、最大值與預設值，並啟用硬性範圍限制；選單需 1–32 個唯一名稱與對應標籤。已存在的頁面或參數名稱會被拒絕，不覆蓋。結果回傳驗證過的描述與值，後續以 `parameters list/get/set` 檢查與修改。建立失敗只移除本次新頁面；回復失敗或結果未知時，須先查詢再執行下一次修改。
+
+ASCII 跳脫後的輸入 JSON，加上每個參數一份序列化目標路徑，合計限 16,384 bytes，以保留結果描述所需空間。
+
+```powershell
+td --json --instance <selector> parameters page-create --input-file controls.json
+td --json --instance <selector> parameters list /project1/controls
+```
+
+```json
+{"operator_path":"/project1/controls","page":"Controls","parameters":[{"name":"Gyrox","label":"Gyro X","kind":"float","default":0,"minimum":-1,"maximum":1},{"name":"Manual","label":"Manual","kind":"toggle","default":true},{"name":"Source","label":"Source","kind":"menu","default":"manual","menu_names":["manual","device"],"menu_labels":["Manual","Device"]}]}
+```
 
 <!-- doc-section: regular-connections -->
 

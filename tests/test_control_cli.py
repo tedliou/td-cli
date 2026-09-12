@@ -687,6 +687,8 @@ def test_project_export_batch_and_events_cli_reach_submission_seam(
                     "lock": None,
                     "viewer": None,
                     "expose": False,
+                    "display": None,
+                    "render": None,
                 },
             },
         ),
