@@ -840,3 +840,32 @@ def test_operator_state_cli_rejects_empty_incomplete_and_out_of_bounds_patches(
     result = CliRunner().invoke(cli.app, argv)
     assert result.exit_code == 2
     assert json.loads(result.stdout)["error"]["code"] == "invalid_arguments"
+
+
+def test_project_open_observes_global_timeout(tmp_path, monkeypatch):
+    executable = tmp_path / "TouchDesigner.exe"
+    executable.touch()
+    project = tmp_path / "sample.toe"
+    project.touch()
+    observed = []
+
+    def launch(command, **options):
+        observed.append(options["timeout"])
+        return 42
+
+    monkeypatch.setattr(cli, "launch_detached", launch)
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "--json",
+            "--timeout",
+            "45",
+            "project",
+            "open",
+            str(project),
+            "--executable",
+            str(executable),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert observed == [45]

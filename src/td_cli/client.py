@@ -47,7 +47,7 @@ class DaemonClient:
             self._autostart = False
             self._deadline = time.monotonic() + self.timeout
             try:
-                ensure_running(timeout=min(5.0, self.timeout))
+                ensure_running(timeout=self.timeout)
             except (LaunchError, OSError) as error:
                 raise ClientError("daemon_unavailable", details={"reason": str(error)}) from error
         deadline = self._deadline or (time.monotonic() + self.timeout)

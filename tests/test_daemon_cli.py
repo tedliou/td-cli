@@ -46,7 +46,7 @@ def test_start_spawns_the_public_serve_command_for_each_runtime(
     probes = iter([None, {"ready": True, "protocol_versions": [3]}])
     monkeypatch.setattr(cli, "data_root", lambda: tmp_path)
     monkeypatch.setattr(cli, "secure_layout", lambda _: None)
-    monkeypatch.setattr(cli, "_probe", lambda _: next(probes))
+    monkeypatch.setattr(cli, "_probe", lambda _, **kw: next(probes))
     monkeypatch.setattr(
         cli,
         "launch_detached",
@@ -71,3 +71,32 @@ def test_dead_pid_metadata_is_stopped(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "_probe", lambda _: None)
     monkeypatch.setattr(cli, "_pid_alive", lambda _: False)
     assert cli._status_payload(tmp_path)["status"] == "stopped"
+
+
+def test_start_uses_the_explicit_total_startup_budget(monkeypatch):
+    observed = []
+    monkeypatch.setattr(cli, "ensure_running", lambda **kw: observed.append(kw["timeout"]))
+    result = CliRunner().invoke(cli.app, ["start", "--timeout", "45"])
+    assert result.exit_code == 0, result.output
+    assert observed == [45]
+
+
+@pytest.mark.parametrize("late_probe", [1, 2])
+def test_startup_rejects_ready_after_total_deadline(monkeypatch, tmp_path, late_probe):
+    clock = [0.0]
+    observed = []
+    monkeypatch.setattr(cli, "data_root", lambda: tmp_path)
+    monkeypatch.setattr(cli.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(cli, "launch_detached", lambda *a, **kw: None)
+
+    def probe(root, *, timeout):
+        observed.append(timeout)
+        if len(observed) == late_probe:
+            clock[0] = 0.11
+            return {"ready": True, "protocol_versions": [3]}
+        return None
+
+    monkeypatch.setattr(cli, "_probe", probe)
+    with pytest.raises(cli.LaunchError, match="deadline expired|timed out"):
+        cli.ensure_running(timeout=0.1)
+    assert observed == [0.1] * late_probe

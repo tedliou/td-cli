@@ -72,7 +72,7 @@ class DaemonMutex:
             ctypes.windll.kernel32.CloseHandle(self.handle)
 
 
-def _probe(root: Path) -> dict[str, object] | None:
+def _probe(root: Path, *, timeout: float = 0.5) -> dict[str, object] | None:
     try:
         token = load_token(root)
         if token is None:
@@ -80,7 +80,7 @@ def _probe(root: Path) -> dict[str, object] | None:
         response = httpx.get(
             f"{ENDPOINT}/v3/health",
             headers={"Authorization": f"Bearer {token}"},
-            timeout=0.5,
+            timeout=timeout,
         )
         payload = response.json() if response.status_code == 200 else None
         return payload
@@ -174,11 +174,21 @@ def serve() -> None:
             run_path.unlink(missing_ok=True)
 
 
-def ensure_running(*, timeout: float = 5.0) -> None:
+def ensure_running(*, timeout: float) -> None:
     """Start once, wait boundedly, and never replace an authenticated unhealthy runtime."""
     deadline = time.monotonic() + timeout
     root = data_root()
-    health = _probe(root)
+
+    def probe_within_deadline() -> dict[str, object] | None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise LaunchError("Daemon startup deadline expired")
+        health = _probe(root, timeout=min(0.5, remaining))
+        if time.monotonic() >= deadline:
+            raise LaunchError("Daemon startup deadline expired")
+        return health
+
+    health = probe_within_deadline()
     versions = health.get("protocol_versions", []) if health else []
     if health and (not isinstance(versions, list) or PROTOCOL_VERSION not in versions):
         raise LaunchError("Daemon protocol is incompatible; update explicitly")
@@ -197,7 +207,7 @@ def ensure_running(*, timeout: float = 5.0) -> None:
         raise LaunchError("Daemon startup deadline expired")
     launch_detached(command, cwd=Path.cwd(), hidden=True, timeout=remaining)
     while time.monotonic() < deadline:
-        health = _probe(root)
+        health = probe_within_deadline()
         if health and health.get("ready") is True:
             return
         time.sleep(min(0.05, max(0, deadline - time.monotonic())))
@@ -205,10 +215,12 @@ def ensure_running(*, timeout: float = 5.0) -> None:
 
 
 @app.command()
-def start() -> None:
+def start(
+    timeout: Annotated[float, typer.Option("--timeout", min=0.1, max=3600)] = 30.0,
+) -> None:
     """Start the per-user background Daemon without a console window."""
     try:
-        ensure_running()
+        ensure_running(timeout=timeout)
     except (LaunchError, OSError) as error:
         typer.echo(str(error), err=True)
         raise typer.Exit(3) from error

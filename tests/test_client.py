@@ -306,3 +306,25 @@ def test_parameter_list_rejects_unknown_introspection_enums(
     )
     with pytest.raises(ClientError, match="protocol_incompatible"):
         client(tmp_path).get_request("request-1")
+
+
+def test_startup_uses_visible_budget_and_http_receives_only_remaining(tmp_path, monkeypatch):
+    clock = [100.0]
+    observed = []
+    instance_client = client(tmp_path)
+    instance_client.timeout = 30
+    instance_client._autostart = True
+    monkeypatch.setattr("td_cli.client.time.monotonic", lambda: clock[0])
+
+    def startup(*, timeout):
+        observed.append(timeout)
+        clock[0] += 12
+
+    def request(*args, **kwargs):
+        observed.append(kwargs["timeout"])
+        return httpx.Response(200, json=[])
+
+    monkeypatch.setattr("td_cli.client.ensure_running", startup)
+    monkeypatch.setattr(httpx, "request", request)
+    assert instance_client.instances() == []
+    assert observed == [30, 18]

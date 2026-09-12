@@ -66,10 +66,11 @@ from pathlib import Path
 from td_cli.processes import launch_detached,LaunchError
 sys.stdin.readline()
 try:
+    started=time.monotonic()
     pid=launch_detached([sys.executable,'-c',
         "from pathlib import Path; import time; Path("+repr(sys.argv[2])+").write_text('running'); time.sleep(20)"],
-        cwd=Path.cwd(),hidden=True)
-    output={'pid':pid}
+        cwd=Path.cwd(),hidden=True,timeout=30)
+    output={'pid':pid,'elapsed_seconds':time.monotonic()-started}
 except LaunchError as e:
     output={'error':str(e)}
 temporary=Path(sys.argv[1]).with_suffix(".tmp")
@@ -90,8 +91,8 @@ time.sleep(20)
         assert kernel.AssignProcessToJobObject(job, int(caller._handle))
         caller.stdin.write(b"go\n")
         caller.stdin.flush()
-        # The launcher has a 10-second deadline; observe its result before closing the job.
-        deadline = time.monotonic() + 15
+        # This job-semantics probe explicitly allows a 30-second cold launch; observe its result before closing the job.
+        deadline = time.monotonic() + 35
         while not result.exists() and time.monotonic() < deadline:
             time.sleep(0.02)
         errors.flush()
@@ -117,3 +118,18 @@ time.sleep(20)
         caller.wait(timeout=5)
         caller.stdin.close()
         errors.close()
+
+
+def test_launch_timeout_is_unknown_and_does_not_retry(monkeypatch, tmp_path):
+    from td_cli import processes
+
+    calls = []
+
+    def timed_out(*args, **kwargs):
+        calls.append(kwargs["timeout"])
+        raise subprocess.TimeoutExpired(args[0], kwargs["timeout"])
+
+    monkeypatch.setattr(subprocess, "run", timed_out)
+    with pytest.raises(processes.LaunchError, match="outcome unknown"):
+        processes.launch_detached([sys.executable], cwd=tmp_path, hidden=True, timeout=0.1)
+    assert calls == [0.1]
