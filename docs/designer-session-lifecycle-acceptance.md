@@ -1,8 +1,8 @@
-# Designer-owned sessions (v0.5.0 candidate)
+# Designer-owned sessions (v0.5.0)
 
 Specification: [#114](https://github.com/tedliou/td-cli/issues/114).
 Base: `1081d17`, TouchDesigner `2025.32050`, Windows x86-64.
-This is an in-progress acceptance record, not publication evidence.
+Published release and installed-artifact evidence is recorded below.
 
 ## Diagnosis and decisions
 
@@ -72,7 +72,7 @@ preserving its behavioral assertions. No distinct reliability case was removed.
 
 ## Completed acceptance and review
 
-The final local gate passed: 471 tests, Ruff lint/format, mypy (19 files),
+The initial integrated local gate passed: 471 tests, Ruff lint/format, mypy (19 files),
 locked dependency resolution, Agent source inspection, and diff whitespace check.
 Independent Standards review of `1081d17...d89c923` found no blocking violations.
 Spec review found that `td version` inadvertently started the Daemon; the fix uses
@@ -131,8 +131,65 @@ time before and after the response. The finding is closed with deterministic
 late-ready regressions. Final gate after these changes passed all 477 tests,
 Ruff lint/format, mypy, lock/source inspection, and diff checks.
 
-## Remaining gates
+## Publication and installed acceptance
 
-Exact-source Agent staging, CI, promotion, human release-environment approval,
-remote download and installed-version verification, and final original-artwork
-regression. This document does not claim those have passed.
+[v0.5.0](https://github.com/tedliou/td-cli/releases/tag/v0.5.0) was published on
+2026-09-12 at 13:52:02 UTC as immutable Release `387586357`. The annotated tag
+points to exact main `c87c6f73352fe2c8efc7967c3d26cc5ec44e344d`.
+Implementation PRs #115, #117 and #118 and promotion #116 were merged after green
+CI. Exact-main CI `34697238535` passed. A human approved the protected release
+environment; Publish Release run `34697374785` then completed successfully.
+
+Stage run `34697263925` produced artifact `10299495630`, digest
+`sha256:bf5a775f80abf071fd83e43e1c61530276fbcb3564b08a8beead27efea4fc370`,
+expiring 2026-10-12. A fresh remote download matched its digest, source commit,
+Agent source revision and TOX hash. All seven public Release assets were downloaded
+and matched their GitHub digests; all ZIPs also matched `SHA256SUMS`.
+
+The initial GitHub CLI download timed out after 180 seconds. Direct public CDN
+transfer measured about 100 KB/s; bounded range-resume downloads completed without
+redownloading verified files. The official installer consumed those same verified
+assets through its `AssetBaseUri` option and a temporary loopback server (PID 9208,
+port 59628). The server was closed after installation. Installed executables,
+TOX, manifest and verification files match the public ZIP bytes exactly.
+
+`td`, `td-daemon` and `td-agent` report 0.5.0. A fresh installed
+`td --json --timeout 30 instances list` started the missing Daemon and returned
+success in 6.187 seconds; its empty list was expected because no TD was open.
+The Daemon was PID 21900 on `127.0.0.1:9982`.
+
+The published `td-agent install-skill` installed all three skill files into
+`C:/Users/Ted/.codex/skills/td-cli`. Their content matches exact-main canonical text
+(the Windows package uses CRLF and Git uses LF); the skill is discoverable on the
+next agent turn. Machine-readable records are `release-v050.json`,
+`installed-v050.json` and `release-download-transfers.json` in the evidence folder.
+
+Automatic execution review rejected recursive deletion of the local, nonsecret
+`.codex/stage-v050-main` staging directory with `blocked by policy`. It remains
+untouched; no alternate deletion method or policy bypass was attempted.
+
+## Original artwork regression
+
+The artwork maintainer completed the final gate using installed v0.5.0 commands.
+Formal offline migration preserved the original backup SHA-256
+`b98ccfe67b9bed9a3b689534ef3b317bd004c9cab27f325cf376c9fdf6e745da`.
+The 47-channel OSC regression passed values, errors, pulses, offline behavior and
+source isolation. Same-PID save in PID 15608 succeeded (Request
+`01a095f4-1490-7af3-aacc-bbb5f5347217`, 65770 bytes), with disk SHA-256
+`53468a917b684c2a95d4da713e079a9e6b97889a8d8332ed37de9468e4fa78ff`.
+Fresh metadata Request `01a095f4-1eb6-7380-91dd-a9a2b8a20962` succeeded in that PID.
+
+After normal window close and confirmed process exit, the installed CLI opened
+PID 22860. Agent 0.5.0 registered online as Instance
+`ee4137f0-1fe2-49e4-b449-0d36dcdb4aa7`. Cold readback passed all twelve controls,
+four direct Select CHOPs, the unique out1, and existing relative Resources media
+paths. Initial brain_ready/motion_ready were zero and temporary probes were
+removed. Two new OSC bundles then passed all twelve addresses with two messages,
+seen/fresh true and no error (Request `01a095f6-bf6f-7d7d-b85b-9ad8879638f3`).
+The disk checksum remained unchanged. The original artwork stays open for its
+user; td-cli does not own or automatically close that session.
+
+The evidence folder contains the original-save, reopen-controls, reopen-OSC and
+47-channel acceptance JSON reports. All publication, installation and artwork
+gates are complete; only the explicitly policy-blocked local staging cleanup
+remains outstanding.

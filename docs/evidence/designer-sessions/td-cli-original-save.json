@@ -1,0 +1,30 @@
+{
+  "sha_before": "e8eca6a386af1378b455a1c02bba891f2e86fd2415e17a58551c835e8debbb73",
+  "sha_after": "53468a917b684c2a95d4da713e079a9e6b97889a8d8332ed37de9468e4fa78ff",
+  "bytes": 65770,
+  "calls": [
+    {
+      "args": [
+        "project",
+        "save",
+        "E:\\collective-dream-factory\\CollectiveDreamFactory.toe",
+        "--expected-sha256",
+        "e8eca6a386af1378b455a1c02bba891f2e86fd2415e17a58551c835e8debbb73"
+      ],
+      "request_id": "01a095f4-1490-7af3-aacc-bbb5f5347217",
+      "exit": 0,
+      "stdout": "{\"protocol_version\":3,\"data\":{\"path\":\"E:\\\\collective-dream-factory\\\\CollectiveDreamFactory.toe\",\"sha256\":\"53468a917b684c2a95d4da713e079a9e6b97889a8d8332ed37de9468e4fa78ff\",\"size_bytes\":65770},\"request\":{\"request_id\":\"01a095f4-1490-7af3-aacc-bbb5f5347217\",\"status\":\"succeeded\"}}\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "project",
+        "metadata"
+      ],
+      "request_id": "01a095f4-1eb6-7380-91dd-a9a2b8a20962",
+      "exit": 0,
+      "stdout": "{\"protocol_version\":3,\"data\":{\"folder\":\"E:/collective-dream-factory\",\"name\":\"CollectiveDreamFactory.toe\",\"saved_with\":{\"build\":\"2025.32050\",\"os_name\":\"Windows\",\"os_version\":\"10\",\"time\":\"Sat Sep 12 22:09:58 2026\",\"version\":\"099\"}},\"request\":{\"request_id\":\"01a095f4-1eb6-7380-91dd-a9a2b8a20962\",\"status\":\"succeeded\"}}\n",
+      "stderr": ""
+    }
+  ]
+}

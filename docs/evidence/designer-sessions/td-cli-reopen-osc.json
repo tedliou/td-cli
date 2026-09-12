@@ -1,0 +1,127 @@
+{
+  "passed": true,
+  "bundles_sent": 2,
+  "status_response": {
+    "protocol_version": 3,
+    "data": {
+      "column_offset": 0,
+      "dat_kind": "table",
+      "operator_path": "/project1/muse_input/status",
+      "row_offset": 0,
+      "rows": [
+        [
+          "address",
+          "seen",
+          "fresh",
+          "age_seconds",
+          "messages",
+          "last_error"
+        ],
+        [
+          "/muse/gyro",
+          "1",
+          "1",
+          "1.984",
+          "2",
+          ""
+        ],
+        [
+          "/muse/eeg",
+          "1",
+          "1",
+          "1.984",
+          "2",
+          ""
+        ],
+        [
+          "/muse/optics",
+          "1",
+          "1",
+          "1.984",
+          "2",
+          ""
+        ],
+        [
+          "/muse/batt",
+          "1",
+          "1",
+          "1.984",
+          "2",
+          ""
+        ],
+        [
+          "/muse/elements/horseshoe",
+          "1",
+          "1",
+          "1.984",
+          "2",
+          ""
+        ],
+        [
+          "/muse/elements/touching_forehead",
+          "1",
+          "1",
+          "1.984",
+          "2",
+          ""
+        ],
+        [
+          "/muse/elements/jaw_clench",
+          "1",
+          "1",
+          "1.984",
+          "2",
+          ""
+        ],
+        [
+          "/muse/elements/alpha_absolute",
+          "1",
+          "1",
+          "1.984",
+          "2",
+          ""
+        ],
+        [
+          "/muse/elements/beta_absolute",
+          "1",
+          "1",
+          "1.984",
+          "2",
+          ""
+        ],
+        [
+          "/muse/elements/delta_absolute",
+          "1",
+          "1",
+          "1.984",
+          "2",
+          ""
+        ],
+        [
+          "/muse/elements/gamma_absolute",
+          "1",
+          "1",
+          "1.984",
+          "2",
+          ""
+        ],
+        [
+          "/muse/elements/theta_absolute",
+          "1",
+          "1",
+          "1.984",
+          "2",
+          ""
+        ]
+      ],
+      "total_columns": 6,
+      "total_rows": 13,
+      "utf8_bytes": 407
+    },
+    "request": {
+      "request_id": "01a095f6-bf6f-7d7d-b85b-9ad8879638f3",
+      "status": "succeeded"
+    }
+  },
+  "sha256": "53468a917b684c2a95d4da713e079a9e6b97889a8d8332ed37de9468e4fa78ff"
+}
