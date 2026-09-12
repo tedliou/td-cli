@@ -1,0 +1,68 @@
+{
+  "versions": {
+    "td": "0.5.0",
+    "td-daemon": "0.5.0",
+    "td-agent": "0.5.0"
+  },
+  "installed_files_byte_match_public_zips": [
+    "td.exe",
+    "td-daemon.exe",
+    "td-agent.exe",
+    "td-agent.tox",
+    "manifest.json",
+    "verification.json"
+  ],
+  "cold_instances_list": {
+    "exit_code": 0,
+    "elapsed_seconds": 6.187,
+    "data": [],
+    "timeout_seconds": 30
+  },
+  "daemon": {
+    "pid": 21900,
+    "endpoint": "127.0.0.1:9982",
+    "release_version": "0.5.0"
+  },
+  "skill_path": "C:/Users/Ted/.codex/skills/td-cli",
+  "skill_files": [
+    {
+      "path": "SKILL.md",
+      "installed_sha256": "e9e173e2b9154a0ea7f8a23360cf14191c9fcd91c60f60f2629b13ea56af743c",
+      "canonical_text_matches": true
+    },
+    {
+      "path": "references/sessions.md",
+      "installed_sha256": "9ca3d1d0bcb8508a3907e71e708c50651c1da728fb8c0df5a0c4dd3da023c332",
+      "canonical_text_matches": true
+    },
+    {
+      "path": "references/touchdesigner.md",
+      "installed_sha256": "7314936d3eabf71386eb705d43f1917ae78d845fd4ba3e875e3bae375da1965b",
+      "canonical_text_matches": true
+    }
+  ],
+  "skill_note": "Bundled Windows files use CRLF; canonical git text is LF. Content is identical after newline normalization.",
+  "manifest": {
+    "agent_version": "0.5.0",
+    "artifact_sha256": "1281011400ef5bca24bff4748b0e3ac01e9045944104805f8e3756cb90db30fd",
+    "locked_touchdesigner_version": "2025.32050",
+    "operators": [
+      "agent_extension",
+      "agent_manifest",
+      "auth_table",
+      "events_table",
+      "heartbeat_execute",
+      "operator_catalog",
+      "socket_callbacks",
+      "socketio1"
+    ],
+    "source_commit": "c87c6f73352fe2c8efc7967c3d26cc5ec44e344d",
+    "source_revision": "eb1de2cd2228811ea7b79e2b6293faf0c4436be2832f2054065648a1d8919a0e",
+    "touchdesigner_version": "2025.32050"
+  },
+  "temporary_installer_server": {
+    "pid": 9208,
+    "port": 59628,
+    "closed": true
+  }
+}

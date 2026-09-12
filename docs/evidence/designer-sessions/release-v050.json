@@ -1,0 +1,44 @@
+{
+  "release_id": 387586357,
+  "url": "https://github.com/tedliou/td-cli/releases/tag/v0.5.0",
+  "immutable": true,
+  "published_at": "2026-09-12T13:52:02Z",
+  "source_commit": "c87c6f73352fe2c8efc7967c3d26cc5ec44e344d",
+  "assets": [
+    {
+      "name": "install.ps1",
+      "sha256": "8de30a05752772952d86ff5865beb0c24d9b4ab0fcd7cd895af87849c17dabb0",
+      "asset_id": 559344250
+    },
+    {
+      "name": "SHA256SUMS",
+      "sha256": "d8bb54c09a0c76ccf81cd0d636d09e84aa420b340955c4f508b4daed7551266c",
+      "asset_id": 559344274
+    },
+    {
+      "name": "td-agent-cli-v0.5.0-windows-x86_64.zip",
+      "sha256": "047d9db554058437c9b30394e5c58d429ae8408c6d9324b8051692cc74e62739",
+      "asset_id": 559344318
+    },
+    {
+      "name": "td-agent-component-v0.5.0-td2025.32050.zip",
+      "sha256": "5264277eca6330129209cc96b1ddd9c5f28b23f77b1eff771665ea609b260209",
+      "asset_id": 559344344
+    },
+    {
+      "name": "td-daemon-v0.5.0-windows-x86_64.zip",
+      "sha256": "095b0e784258f19b9fd6c80ba837bcf9df2ba9f5b58d88046ff09f0bb75a1601",
+      "asset_id": 559344357
+    },
+    {
+      "name": "td-v0.5.0-windows-x86_64.zip",
+      "sha256": "322c1b1635f5c5fdd52799245bc60bafe321df3ac48d0ee66f2bbf4ed685adda",
+      "asset_id": 559344387
+    },
+    {
+      "name": "uninstall.ps1",
+      "sha256": "929456062dee6b9efbfc05fe88abb31959e504ddc0a33e2b4e7e2b130c3b1d3b",
+      "asset_id": 559344419
+    }
+  ]
+}

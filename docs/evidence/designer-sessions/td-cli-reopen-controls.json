@@ -1,0 +1,934 @@
+{
+  "passed": true,
+  "calls": [
+    {
+      "args": [
+        "project",
+        "metadata"
+      ],
+      "exit": 0,
+      "response": {
+        "protocol_version": 3,
+        "data": {
+          "folder": "E:/collective-dream-factory",
+          "name": "CollectiveDreamFactory.toe",
+          "saved_with": {
+            "build": "2025.32050",
+            "os_name": "Windows",
+            "os_version": "10",
+            "time": "Sat Sep 12 22:09:58 2026",
+            "version": "099"
+          }
+        },
+        "request": {
+          "request_id": "01a095f5-40f3-72b4-986e-b00832337fdf",
+          "status": "succeeded"
+        }
+      }
+    },
+    {
+      "args": [
+        "ops",
+        "children",
+        "/project1"
+      ],
+      "exit": 0,
+      "response": {
+        "protocol_version": 3,
+        "data": [
+          {
+            "family": "CHOP",
+            "name": "audio_out",
+            "op_type": "audiodeviceoutCHOP",
+            "path": "/project1/audio_out"
+          },
+          {
+            "family": "CHOP",
+            "name": "brain",
+            "op_type": "selectCHOP",
+            "path": "/project1/brain"
+          },
+          {
+            "family": "TOP",
+            "name": "chopto1",
+            "op_type": "choptoTOP",
+            "path": "/project1/chopto1"
+          },
+          {
+            "family": "TOP",
+            "name": "displace1",
+            "op_type": "displaceTOP",
+            "path": "/project1/displace1"
+          },
+          {
+            "family": "CHOP",
+            "name": "engagement",
+            "op_type": "selectCHOP",
+            "path": "/project1/engagement"
+          },
+          {
+            "family": "COMP",
+            "name": "geo1",
+            "op_type": "geometryCOMP",
+            "path": "/project1/geo1"
+          },
+          {
+            "family": "CHOP",
+            "name": "gyro",
+            "op_type": "selectCHOP",
+            "path": "/project1/gyro"
+          },
+          {
+            "family": "COMP",
+            "name": "interaction_signals",
+            "op_type": "baseCOMP",
+            "path": "/project1/interaction_signals"
+          },
+          {
+            "family": "COMP",
+            "name": "muse_input",
+            "op_type": "baseCOMP",
+            "path": "/project1/muse_input"
+          },
+          {
+            "family": "CHOP",
+            "name": "music_player",
+            "op_type": "audiofileinCHOP",
+            "path": "/project1/music_player"
+          },
+          {
+            "family": "CHOP",
+            "name": "noise1",
+            "op_type": "noiseCHOP",
+            "path": "/project1/noise1"
+          },
+          {
+            "family": "TOP",
+            "name": "out",
+            "op_type": "outTOP",
+            "path": "/project1/out"
+          },
+          {
+            "family": "CHOP",
+            "name": "signal_health",
+            "op_type": "selectCHOP",
+            "path": "/project1/signal_health"
+          },
+          {
+            "family": "COMP",
+            "name": "td_cli_runtime",
+            "op_type": "baseCOMP",
+            "path": "/project1/td_cli_runtime"
+          },
+          {
+            "family": "CHOP",
+            "name": "trail1",
+            "op_type": "trailCHOP",
+            "path": "/project1/trail1"
+          },
+          {
+            "family": "TOP",
+            "name": "video_player",
+            "op_type": "moviefileinTOP",
+            "path": "/project1/video_player"
+          }
+        ],
+        "request": {
+          "request_id": "01a095f5-4b27-7ca1-9ee2-7f8110eae396",
+          "status": "succeeded"
+        }
+      }
+    },
+    {
+      "args": [
+        "ops",
+        "children",
+        "/project1/interaction_signals"
+      ],
+      "exit": 0,
+      "response": {
+        "protocol_version": 3,
+        "data": [
+          {
+            "family": "CHOP",
+            "name": "alpha",
+            "op_type": "selectCHOP",
+            "path": "/project1/interaction_signals/alpha"
+          },
+          {
+            "family": "CHOP",
+            "name": "beta",
+            "op_type": "selectCHOP",
+            "path": "/project1/interaction_signals/beta"
+          },
+          {
+            "family": "DAT",
+            "name": "brain_callbacks",
+            "op_type": "textDAT",
+            "path": "/project1/interaction_signals/brain_callbacks"
+          },
+          {
+            "family": "CHOP",
+            "name": "brain_metrics",
+            "op_type": "scriptCHOP",
+            "path": "/project1/interaction_signals/brain_metrics"
+          },
+          {
+            "family": "DAT",
+            "name": "capture",
+            "op_type": "tableDAT",
+            "path": "/project1/interaction_signals/capture"
+          },
+          {
+            "family": "DAT",
+            "name": "capture_status",
+            "op_type": "tableDAT",
+            "path": "/project1/interaction_signals/capture_status"
+          },
+          {
+            "family": "DAT",
+            "name": "control_settings",
+            "op_type": "tableDAT",
+            "path": "/project1/interaction_signals/control_settings"
+          },
+          {
+            "family": "CHOP",
+            "name": "delta",
+            "op_type": "selectCHOP",
+            "path": "/project1/interaction_signals/delta"
+          },
+          {
+            "family": "CHOP",
+            "name": "gamma",
+            "op_type": "selectCHOP",
+            "path": "/project1/interaction_signals/gamma"
+          },
+          {
+            "family": "CHOP",
+            "name": "gyro",
+            "op_type": "selectCHOP",
+            "path": "/project1/interaction_signals/gyro"
+          },
+          {
+            "family": "DAT",
+            "name": "observe",
+            "op_type": "executeDAT",
+            "path": "/project1/interaction_signals/observe"
+          },
+          {
+            "family": "DAT",
+            "name": "observe_source",
+            "op_type": "textDAT",
+            "path": "/project1/interaction_signals/observe_source"
+          },
+          {
+            "family": "CHOP",
+            "name": "out1",
+            "op_type": "outCHOP",
+            "path": "/project1/interaction_signals/out1"
+          },
+          {
+            "family": "CHOP",
+            "name": "signals",
+            "op_type": "selectCHOP",
+            "path": "/project1/interaction_signals/signals"
+          },
+          {
+            "family": "CHOP",
+            "name": "theta",
+            "op_type": "selectCHOP",
+            "path": "/project1/interaction_signals/theta"
+          }
+        ],
+        "request": {
+          "request_id": "01a095f5-5547-72ea-b875-6e376ea51495",
+          "status": "succeeded"
+        }
+      }
+    },
+    {
+      "args": [
+        "parameters",
+        "get",
+        "/project1/engagement",
+        "chop"
+      ],
+      "exit": 0,
+      "response": {
+        "protocol_version": 3,
+        "data": {
+          "mode": "constant",
+          "operator_path": "/project1/engagement",
+          "parameter": "chop",
+          "source": null,
+          "unsupported_reason": null,
+          "value": "/project1/interaction_signals/out1",
+          "value_type": "operator"
+        },
+        "request": {
+          "request_id": "01a095f5-5f28-7d0b-8ca7-f942da2c1d01",
+          "status": "succeeded"
+        }
+      }
+    },
+    {
+      "args": [
+        "parameters",
+        "get",
+        "/project1/gyro",
+        "chop"
+      ],
+      "exit": 0,
+      "response": {
+        "protocol_version": 3,
+        "data": {
+          "mode": "constant",
+          "operator_path": "/project1/gyro",
+          "parameter": "chop",
+          "source": null,
+          "unsupported_reason": null,
+          "value": "/project1/interaction_signals/out1",
+          "value_type": "operator"
+        },
+        "request": {
+          "request_id": "01a095f5-6949-75b1-9b20-13bce23b811b",
+          "status": "succeeded"
+        }
+      }
+    },
+    {
+      "args": [
+        "parameters",
+        "get",
+        "/project1/brain",
+        "chop"
+      ],
+      "exit": 0,
+      "response": {
+        "protocol_version": 3,
+        "data": {
+          "mode": "constant",
+          "operator_path": "/project1/brain",
+          "parameter": "chop",
+          "source": null,
+          "unsupported_reason": null,
+          "value": "/project1/interaction_signals/out1",
+          "value_type": "operator"
+        },
+        "request": {
+          "request_id": "01a095f5-7354-778a-bfd6-aee51d108bfd",
+          "status": "succeeded"
+        }
+      }
+    },
+    {
+      "args": [
+        "parameters",
+        "get",
+        "/project1/signal_health",
+        "chop"
+      ],
+      "exit": 0,
+      "response": {
+        "protocol_version": 3,
+        "data": {
+          "mode": "constant",
+          "operator_path": "/project1/signal_health",
+          "parameter": "chop",
+          "source": null,
+          "unsupported_reason": null,
+          "value": "/project1/interaction_signals/out1",
+          "value_type": "operator"
+        },
+        "request": {
+          "request_id": "01a095f5-7db6-79bb-830d-62535e64785b",
+          "status": "succeeded"
+        }
+      }
+    },
+    {
+      "args": [
+        "parameters",
+        "get",
+        "/project1/video_player",
+        "file"
+      ],
+      "exit": 0,
+      "response": {
+        "protocol_version": 3,
+        "data": {
+          "mode": "constant",
+          "operator_path": "/project1/video_player",
+          "parameter": "file",
+          "source": null,
+          "unsupported_reason": null,
+          "value": "Resources/Video-1080P.mp4",
+          "value_type": "string"
+        },
+        "request": {
+          "request_id": "01a095f5-87ed-7ce5-9608-503b9402c6ce",
+          "status": "succeeded"
+        }
+      }
+    },
+    {
+      "args": [
+        "parameters",
+        "get",
+        "/project1/music_player",
+        "file"
+      ],
+      "exit": 0,
+      "response": {
+        "protocol_version": 3,
+        "data": {
+          "mode": "constant",
+          "operator_path": "/project1/music_player",
+          "parameter": "file",
+          "source": null,
+          "unsupported_reason": null,
+          "value": "Resources/Music-1080P.mp3",
+          "value_type": "string"
+        },
+        "request": {
+          "request_id": "01a095f5-921f-73ec-b146-8381b6457bf1",
+          "status": "succeeded"
+        }
+      }
+    },
+    {
+      "args": [
+        "ops",
+        "create",
+        "/project1",
+        "choptoDAT",
+        "_verify_upgrade_controls"
+      ],
+      "exit": 0,
+      "response": {
+        "protocol_version": 3,
+        "data": {
+          "catalog_status": "supported",
+          "family": "DAT",
+          "name": "_verify_upgrade_controls",
+          "op_type": "choptoDAT",
+          "path": "/project1/_verify_upgrade_controls"
+        },
+        "request": {
+          "request_id": "01a095f5-9c74-7206-ae18-9f881c7d2879",
+          "status": "succeeded"
+        }
+      }
+    },
+    {
+      "args": [
+        "parameters",
+        "set",
+        "/project1/_verify_upgrade_controls",
+        "names",
+        "--bool",
+        "true"
+      ],
+      "exit": 0,
+      "response": {
+        "protocol_version": 3,
+        "data": {
+          "mode": "constant",
+          "operator_path": "/project1/_verify_upgrade_controls",
+          "parameter": "names",
+          "source": null,
+          "unsupported_reason": null,
+          "value": true,
+          "value_type": "boolean"
+        },
+        "request": {
+          "request_id": "01a095f5-a644-79a4-ab42-208e93161bac",
+          "status": "succeeded"
+        }
+      }
+    },
+    {
+      "args": [
+        "parameters",
+        "set",
+        "/project1/_verify_upgrade_controls",
+        "output",
+        "--string",
+        "rowperchan"
+      ],
+      "exit": 0,
+      "response": {
+        "protocol_version": 3,
+        "data": {
+          "mode": "constant",
+          "operator_path": "/project1/_verify_upgrade_controls",
+          "parameter": "output",
+          "source": null,
+          "unsupported_reason": null,
+          "value": "rowperchan",
+          "value_type": "string"
+        },
+        "request": {
+          "request_id": "01a095f5-b052-7346-adf6-1986ceb7f8e6",
+          "status": "succeeded"
+        }
+      }
+    },
+    {
+      "args": [
+        "parameters",
+        "set",
+        "/project1/_verify_upgrade_controls",
+        "chop",
+        "--operator",
+        "/project1/interaction_signals/out1"
+      ],
+      "exit": 0,
+      "response": {
+        "protocol_version": 3,
+        "data": {
+          "mode": "constant",
+          "operator_path": "/project1/_verify_upgrade_controls",
+          "parameter": "chop",
+          "source": null,
+          "unsupported_reason": null,
+          "value": "/project1/interaction_signals/out1",
+          "value_type": "operator"
+        },
+        "request": {
+          "request_id": "01a095f5-ba84-7bfd-a17f-bc29661831c6",
+          "status": "succeeded"
+        }
+      }
+    },
+    {
+      "args": [
+        "dat",
+        "table",
+        "get",
+        "/project1/_verify_upgrade_controls",
+        "--row-count",
+        "32",
+        "--column-count",
+        "2",
+        "--max-bytes",
+        "4096"
+      ],
+      "exit": 0,
+      "response": {
+        "protocol_version": 3,
+        "data": {
+          "column_offset": 0,
+          "dat_kind": "table",
+          "operator_path": "/project1/_verify_upgrade_controls",
+          "row_offset": 0,
+          "rows": [
+            [
+              "alpha",
+              "0.2"
+            ],
+            [
+              "beta",
+              "0.2"
+            ],
+            [
+              "delta",
+              "0.2"
+            ],
+            [
+              "gamma",
+              "0.2"
+            ],
+            [
+              "theta",
+              "0.2"
+            ],
+            [
+              "alpha_beta_balance",
+              "0.5"
+            ],
+            [
+              "engagement",
+              "0.083333336"
+            ],
+            [
+              "head_nod",
+              "0"
+            ],
+            [
+              "head_turn",
+              "0"
+            ],
+            [
+              "head_tilt",
+              "0"
+            ],
+            [
+              "brain_ready",
+              "0"
+            ],
+            [
+              "motion_ready",
+              "0"
+            ]
+          ],
+          "total_columns": 2,
+          "total_rows": 12,
+          "utf8_bytes": 135
+        },
+        "request": {
+          "request_id": "01a095f5-c4ac-7c1f-b89d-d6e21158c6bc",
+          "status": "succeeded"
+        }
+      }
+    },
+    {
+      "args": [
+        "parameters",
+        "set",
+        "/project1/_verify_upgrade_controls",
+        "chop",
+        "--operator",
+        "/project1/engagement"
+      ],
+      "exit": 0,
+      "response": {
+        "protocol_version": 3,
+        "data": {
+          "mode": "constant",
+          "operator_path": "/project1/_verify_upgrade_controls",
+          "parameter": "chop",
+          "source": null,
+          "unsupported_reason": null,
+          "value": "/project1/engagement",
+          "value_type": "operator"
+        },
+        "request": {
+          "request_id": "01a095f5-cf5c-7254-9fcf-6d6640e7778e",
+          "status": "succeeded"
+        }
+      }
+    },
+    {
+      "args": [
+        "dat",
+        "table",
+        "get",
+        "/project1/_verify_upgrade_controls",
+        "--row-count",
+        "32",
+        "--column-count",
+        "2",
+        "--max-bytes",
+        "4096"
+      ],
+      "exit": 0,
+      "response": {
+        "protocol_version": 3,
+        "data": {
+          "column_offset": 0,
+          "dat_kind": "table",
+          "operator_path": "/project1/_verify_upgrade_controls",
+          "row_offset": 0,
+          "rows": [
+            [
+              "engagement",
+              "0.083333336"
+            ]
+          ],
+          "total_columns": 2,
+          "total_rows": 1,
+          "utf8_bytes": 21
+        },
+        "request": {
+          "request_id": "01a095f5-d94d-7b09-84a1-8cb3749e498f",
+          "status": "succeeded"
+        }
+      }
+    },
+    {
+      "args": [
+        "parameters",
+        "set",
+        "/project1/_verify_upgrade_controls",
+        "chop",
+        "--operator",
+        "/project1/gyro"
+      ],
+      "exit": 0,
+      "response": {
+        "protocol_version": 3,
+        "data": {
+          "mode": "constant",
+          "operator_path": "/project1/_verify_upgrade_controls",
+          "parameter": "chop",
+          "source": null,
+          "unsupported_reason": null,
+          "value": "/project1/gyro",
+          "value_type": "operator"
+        },
+        "request": {
+          "request_id": "01a095f5-e33b-745e-8064-a50216579abf",
+          "status": "succeeded"
+        }
+      }
+    },
+    {
+      "args": [
+        "dat",
+        "table",
+        "get",
+        "/project1/_verify_upgrade_controls",
+        "--row-count",
+        "32",
+        "--column-count",
+        "2",
+        "--max-bytes",
+        "4096"
+      ],
+      "exit": 0,
+      "response": {
+        "protocol_version": 3,
+        "data": {
+          "column_offset": 0,
+          "dat_kind": "table",
+          "operator_path": "/project1/_verify_upgrade_controls",
+          "row_offset": 0,
+          "rows": [
+            [
+              "head_nod",
+              "0"
+            ],
+            [
+              "head_turn",
+              "0"
+            ],
+            [
+              "head_tilt",
+              "0"
+            ]
+          ],
+          "total_columns": 2,
+          "total_rows": 3,
+          "utf8_bytes": 29
+        },
+        "request": {
+          "request_id": "01a095f5-ed6f-7ce3-a0a8-db802dbd2b31",
+          "status": "succeeded"
+        }
+      }
+    },
+    {
+      "args": [
+        "parameters",
+        "set",
+        "/project1/_verify_upgrade_controls",
+        "chop",
+        "--operator",
+        "/project1/brain"
+      ],
+      "exit": 0,
+      "response": {
+        "protocol_version": 3,
+        "data": {
+          "mode": "constant",
+          "operator_path": "/project1/_verify_upgrade_controls",
+          "parameter": "chop",
+          "source": null,
+          "unsupported_reason": null,
+          "value": "/project1/brain",
+          "value_type": "operator"
+        },
+        "request": {
+          "request_id": "01a095f5-f7e6-7bb8-a644-24c0f9be1d09",
+          "status": "succeeded"
+        }
+      }
+    },
+    {
+      "args": [
+        "dat",
+        "table",
+        "get",
+        "/project1/_verify_upgrade_controls",
+        "--row-count",
+        "32",
+        "--column-count",
+        "2",
+        "--max-bytes",
+        "4096"
+      ],
+      "exit": 0,
+      "response": {
+        "protocol_version": 3,
+        "data": {
+          "column_offset": 0,
+          "dat_kind": "table",
+          "operator_path": "/project1/_verify_upgrade_controls",
+          "row_offset": 0,
+          "rows": [
+            [
+              "alpha",
+              "0.2"
+            ],
+            [
+              "beta",
+              "0.2"
+            ],
+            [
+              "delta",
+              "0.2"
+            ],
+            [
+              "gamma",
+              "0.2"
+            ],
+            [
+              "theta",
+              "0.2"
+            ],
+            [
+              "alpha_beta_balance",
+              "0.5"
+            ]
+          ],
+          "total_columns": 2,
+          "total_rows": 6,
+          "utf8_bytes": 60
+        },
+        "request": {
+          "request_id": "01a095f6-01d2-7e2e-bd99-c0da585d5610",
+          "status": "succeeded"
+        }
+      }
+    },
+    {
+      "args": [
+        "parameters",
+        "set",
+        "/project1/_verify_upgrade_controls",
+        "chop",
+        "--operator",
+        "/project1/signal_health"
+      ],
+      "exit": 0,
+      "response": {
+        "protocol_version": 3,
+        "data": {
+          "mode": "constant",
+          "operator_path": "/project1/_verify_upgrade_controls",
+          "parameter": "chop",
+          "source": null,
+          "unsupported_reason": null,
+          "value": "/project1/signal_health",
+          "value_type": "operator"
+        },
+        "request": {
+          "request_id": "01a095f6-0c3e-7a3e-81b7-1eac0e98108e",
+          "status": "succeeded"
+        }
+      }
+    },
+    {
+      "args": [
+        "dat",
+        "table",
+        "get",
+        "/project1/_verify_upgrade_controls",
+        "--row-count",
+        "32",
+        "--column-count",
+        "2",
+        "--max-bytes",
+        "4096"
+      ],
+      "exit": 0,
+      "response": {
+        "protocol_version": 3,
+        "data": {
+          "column_offset": 0,
+          "dat_kind": "table",
+          "operator_path": "/project1/_verify_upgrade_controls",
+          "row_offset": 0,
+          "rows": [
+            [
+              "brain_ready",
+              "0"
+            ],
+            [
+              "motion_ready",
+              "0"
+            ]
+          ],
+          "total_columns": 2,
+          "total_rows": 2,
+          "utf8_bytes": 25
+        },
+        "request": {
+          "request_id": "01a095f6-1653-7a1f-bfa8-3f63f714c4fe",
+          "status": "succeeded"
+        }
+      }
+    },
+    {
+      "args": [
+        "ops",
+        "destroy",
+        "/project1/_verify_upgrade_controls"
+      ],
+      "exit": 0,
+      "response": {
+        "protocol_version": 3,
+        "data": {
+          "destroyed": true,
+          "detached_connections": [],
+          "operator_count": 1,
+          "operator_path": "/project1/_verify_upgrade_controls"
+        },
+        "request": {
+          "request_id": "01a095f6-209a-7dcc-ab7d-bb5c58f14456",
+          "status": "succeeded"
+        }
+      }
+    }
+  ],
+  "last_request_id": "01a095f6-209a-7dcc-ab7d-bb5c58f14456",
+  "channels": {
+    "interaction_signals/out1": {
+      "alpha": 0.2,
+      "beta": 0.2,
+      "delta": 0.2,
+      "gamma": 0.2,
+      "theta": 0.2,
+      "alpha_beta_balance": 0.5,
+      "engagement": 0.083333336,
+      "head_nod": 0.0,
+      "head_turn": 0.0,
+      "head_tilt": 0.0,
+      "brain_ready": 0.0,
+      "motion_ready": 0.0
+    },
+    "engagement": {
+      "engagement": 0.083333336
+    },
+    "gyro": {
+      "head_nod": 0.0,
+      "head_turn": 0.0,
+      "head_tilt": 0.0
+    },
+    "brain": {
+      "alpha": 0.2,
+      "beta": 0.2,
+      "delta": 0.2,
+      "gamma": 0.2,
+      "theta": 0.2,
+      "alpha_beta_balance": 0.5
+    },
+    "signal_health": {
+      "brain_ready": 0.0,
+      "motion_ready": 0.0
+    }
+  },
+  "checks_passed": true,
+  "uncertain": false
+}
