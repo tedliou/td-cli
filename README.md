@@ -255,6 +255,19 @@ bounded to 128 blocks and 256 Parameters per block, reads back the complete
 ordered state, and restores the prior block count, order, names, modes, values,
 and sources if any mutation is rejected.
 
+Create a new native custom parameter page on a COMP with `parameters page-create`. Definitions support 1–32 scalar `float`, `toggle`, or `menu` controls. Names start with an uppercase ASCII letter followed by lowercase letters/digits (maximum 32 characters). Floats use finite minimum/maximum/default values and hard clamps; menus have 1–32 unique names and matching labels. Existing pages or parameter names are rejected without replacement. The result includes verified descriptors and values; inspect/edit later with `parameters list/get/set`. Failed creation removes only the new page; a failed rollback or unknown outcome requires inspection before further mutation.
+
+The ASCII-escaped input JSON plus one serialized target path per parameter is limited to 16,384 bytes to reserve space for result metadata.
+
+```powershell
+td --json --instance <selector> parameters page-create --input-file controls.json
+td --json --instance <selector> parameters list /project1/controls
+```
+
+```json
+{"operator_path":"/project1/controls","page":"Controls","parameters":[{"name":"Gyrox","label":"Gyro X","kind":"float","default":0,"minimum":-1,"maximum":1},{"name":"Manual","label":"Manual","kind":"toggle","default":true},{"name":"Source","label":"Source","kind":"menu","default":"manual","menu_names":["manual","device"],"menu_labels":["Manual","Device"]}]}
+```
+
 <!-- doc-section: regular-connections -->
 
 Inspect every regular input and output connector before changing a graph. The

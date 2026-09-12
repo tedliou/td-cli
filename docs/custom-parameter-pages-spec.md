@@ -15,6 +15,8 @@ same slider range. Toggle defaults are boolean. Menus contain 1–32 unique stab
 names and corresponding labels, and a default name. Parameter names use a capital
 ASCII letter followed by lowercase ASCII letters/digits (maximum 32 characters).
 Existing pages or parameter names are rejected before mutation; no overwrite.
+The ASCII-escaped input JSON plus one serialized target path per parameter must
+fit 16,384 bytes, leaving capacity for the returned descriptor/value metadata.
 
 Return the created parameters through the existing parameter descriptor/value
 contract. Existing `parameters list/get/set` remain the inspection/editing seam.

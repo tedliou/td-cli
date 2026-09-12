@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import math
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import PureWindowsPath
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -38,6 +39,74 @@ class OperatorInput(StrictModel):
 
 class ChildrenInput(OperatorInput):
     op_type: str | None = None
+
+
+class CustomParameterDefinition(StrictModel):
+    name: str = Field(pattern=r"^[A-Z][a-z0-9]{0,31}$")
+    label: str = Field(min_length=1, max_length=128)
+
+
+class CustomFloatDefinition(CustomParameterDefinition):
+    kind: Literal["float"]
+    default: float = Field(allow_inf_nan=False)
+    minimum: float = Field(allow_inf_nan=False)
+    maximum: float = Field(allow_inf_nan=False)
+
+    @field_validator("default", "minimum", "maximum", mode="before")
+    @classmethod
+    def reject_boolean(cls, value: Any) -> Any:
+        if isinstance(value, bool):
+            raise ValueError("numeric controls do not accept booleans")  # noqa: TRY004 - Pydantic validator
+        return value
+
+    @model_validator(mode="after")
+    def valid_range(self) -> CustomFloatDefinition:
+        if not self.minimum <= self.default <= self.maximum or self.minimum >= self.maximum:
+            raise ValueError("default must be inside an increasing range")
+        return self
+
+
+class CustomToggleDefinition(CustomParameterDefinition):
+    kind: Literal["toggle"]
+    default: bool
+
+
+class CustomMenuDefinition(CustomParameterDefinition):
+    kind: Literal["menu"]
+    default: str
+    menu_names: list[str] = Field(min_length=1, max_length=32)
+    menu_labels: list[str] = Field(min_length=1, max_length=32)
+
+    @model_validator(mode="after")
+    def valid_menu(self) -> CustomMenuDefinition:
+        if (
+            len(self.menu_names) != len(self.menu_labels)
+            or len(set(self.menu_names)) != len(self.menu_names)
+            or self.default not in self.menu_names
+            or any(not item or len(item) > 128 for item in self.menu_names + self.menu_labels)
+        ):
+            raise ValueError("invalid menu names, labels or default")
+        return self
+
+
+class CreateParameterPageInput(OperatorInput):
+    page: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z][A-Za-z0-9 ]*$")
+    parameters: list[
+        Annotated[
+            CustomFloatDefinition | CustomToggleDefinition | CustomMenuDefinition,
+            Field(discriminator="kind"),
+        ]
+    ] = Field(min_length=1, max_length=32)
+
+    @model_validator(mode="after")
+    def unique_names(self) -> CreateParameterPageInput:
+        if len({item.name for item in self.parameters}) != len(self.parameters):
+            raise ValueError("parameter names must be unique")
+        size = len(json.dumps(self.model_dump(), ensure_ascii=True).encode("ascii"))
+        size += len(json.dumps(self.operator_path, ensure_ascii=True)) * len(self.parameters)
+        if size > 16384:
+            raise ValueError("parameter page definition exceeds the 16384-byte JSON budget")
+        return self
 
 
 class ConnectionsInput(OperatorInput):
@@ -559,6 +628,16 @@ def _parameter_result(result: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _parameter_page_result(result: dict[str, Any]) -> dict[str, Any]:
+    for item in result.get("parameters", []):
+        if isinstance(item, dict):
+            if isinstance(item.get("descriptor"), dict):
+                item["descriptor"] = _parameter_descriptor(item["descriptor"])
+            if isinstance(item.get("value"), dict):
+                item["value"] = _parameter_result(item["value"])
+    return result
+
+
 def _sequence_result(result: dict[str, Any]) -> dict[str, Any]:
     result.setdefault("max_blocks", None)
     for block in result.get("blocks", []):
@@ -746,6 +825,13 @@ COMMAND_CATALOG = CommandCatalog(
             _parameter_result,
         ),
         CommandDefinition(
+            "parameters.page.create",
+            CreateParameterPageInput,
+            CommandEffect.MUTATION,
+            ExecutionClass.BOUNDED_MUTATION,
+            _parameter_page_result,
+        ),
+        CommandDefinition(
             "parameters.list",
             OperatorInput,
             CommandEffect.READ_ONLY,
@@ -900,6 +986,7 @@ CommandInput = (
     | ConnectOperatorsInput
     | DisconnectOperatorsInput
     | ParameterInput
+    | CreateParameterPageInput
     | SetParameterInput
     | SequenceInput
     | ReplaceSequenceInput

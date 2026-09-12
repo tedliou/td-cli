@@ -217,6 +217,19 @@ Bind source 只由类型化 Operator／Parameter identity 产生。Export 只接
 Operator／channel identity。Sequence replacement 最多 128 blocks、每 block 256 Parameters；失败时会
 恢复并验证完整的 block 数量、顺序、名称、mode、value 与 source。
 
+使用 `parameters page-create` 在 COMP 创建新的原生自定义参数页。每页支持 1–32 个标量 `float`、`toggle` 或 `menu` 控件。名称以大写 ASCII 字母开头，后接小写字母或数字（最多 32 字符）。浮点控件需有限的最小值、最大值与默认值，并启用硬性范围限制；菜单需 1–32 个唯一名称与对应标签。已存在的页面或参数名称会被拒绝，不覆盖。结果返回已验证的描述与值，后续以 `parameters list/get/set` 检查与修改。创建失败只移除本次新页面；回滚失败或结果未知时，须先查询再执行下一次修改。
+
+ASCII 转义后的输入 JSON，加上每个参数一份序列化目标路径，合计限 16,384 bytes，以保留结果描述所需空间。
+
+```powershell
+td --json --instance <selector> parameters page-create --input-file controls.json
+td --json --instance <selector> parameters list /project1/controls
+```
+
+```json
+{"operator_path":"/project1/controls","page":"Controls","parameters":[{"name":"Gyrox","label":"Gyro X","kind":"float","default":0,"minimum":-1,"maximum":1},{"name":"Manual","label":"Manual","kind":"toggle","default":true},{"name":"Source","label":"Source","kind":"menu","default":"manual","menu_names":["manual","device"],"menu_labels":["Manual","Device"]}]}
+```
+
 <!-- doc-section: regular-connections -->
 
 ## Regular Connection

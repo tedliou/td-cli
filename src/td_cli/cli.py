@@ -1070,6 +1070,18 @@ def parameters_set(
     _command(ctx, "parameters.set", dedicated, input, input_file, no_wait, request_id)
 
 
+@parameters_app.command("page-create")
+def parameters_page_create(
+    ctx: typer.Context,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    """Create a new COMP custom page from bounded float, toggle and menu definitions."""
+    _command(ctx, "parameters.page.create", None, input, input_file, no_wait, request_id)
+
+
 @parameters_app.command("sequence-get")
 def parameters_sequence_get(
     ctx: typer.Context,
