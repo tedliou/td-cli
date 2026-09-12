@@ -153,6 +153,9 @@ class FakeConnector:
 
 
 class FakeOperator:
+    def appendCustomPage(self, name):
+        return SimpleNamespace(appendStr=lambda name: [SimpleNamespace()])
+
     def __init__(self, name: str, parent=None) -> None:
         self.name = name
         self.parent = parent

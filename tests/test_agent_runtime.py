@@ -151,6 +151,7 @@ class RuntimeOwner(FakeOwner):
         super().__init__()
         self.auth = FakeAuthTable()
         self.reset_count = 0
+        self.scheduler_starts = 0
         self.socket = SimpleNamespace(
             par=SimpleNamespace(
                 active=False,
@@ -162,11 +163,34 @@ class RuntimeOwner(FakeOwner):
         self.reset_count += 1
 
     def op(self, name: str):
+        if name == "heartbeat_execute":
+            return SimpleNamespace(module=SimpleNamespace(startScheduler=self._start_scheduler))
         if name == "auth_table":
             return self.auth
         if name == "socketio1":
             return self.socket
         return super().op(name)
+
+    def _start_scheduler(self):
+        self.scheduler_starts += 1
+
+
+def test_missing_token_recovers_in_same_runtime_when_daemon_is_installed(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    owner = RuntimeOwner()
+    agent = AgentExt(owner)
+    identity = agent.instance_id
+    agent.onInitTD()
+    assert agent.runtime_active
+    assert not owner.socket.par.active
+    assert owner.scheduler_starts == 1
+    token = tmp_path / "touchdesigner-cli" / "state" / "auth.token"
+    token.parent.mkdir(parents=True)
+    token.write_text("a" * 64, encoding="ascii")
+    agent.maintain_connection()
+    assert owner.socket.par.active
+    assert agent.instance_id == identity
+    assert owner.reset_count == 1
 
 
 def test_runtime_initialization_fails_closed_for_malformed_auth_token(

@@ -1,0 +1,36 @@
+[
+  {
+    "args": [
+      "instances",
+      "list"
+    ],
+    "result": "{\"protocol_version\":3,\"data\":[{\"instance_id\":\"982c8145-6ff4-4292-93c3-0eb3ee92784f\",\"connection_id\":\"979d4438-55fe-4b35-aa16-91476a8f1c6c\",\"selector\":\"982c\",\"status\":\"online\",\"agent_version\":\"0.5.0\",\"protocol_version\":3,\"capabilities\":[\"batch.execute\",\"binary.export\",\"dat.table.get\",\"dat.table.patch\",\"dat.table.replace\",\"dat.text.get\",\"dat.text.set\",\"events.read\",\"ops.children\",\"ops.connect\",\"ops.connections\",\"ops.copy\",\"ops.create\",\"ops.destroy\",\"ops.disconnect\",\"ops.get\",\"ops.hierarchy.connect\",\"ops.hierarchy.connections\",\"ops.hierarchy.disconnect\",\"ops.inspect\",\"ops.move\",\"ops.rename\",\"ops.state.get\",\"ops.state.set\",\"ops.tox.import\",\"parameters.get\",\"parameters.list\",\"parameters.pulse\",\"parameters.sequence.get\",\"parameters.sequence.replace\",\"parameters.set\",\"project.metadata\",\"project.save\",\"project.snapshot\"],\"last_heartbeat_at\":\"2026-09-12T13:05:46.318Z\",\"offline_expires_at\":null}]}\n"
+  },
+  {
+    "args": [
+      "ops",
+      "get",
+      "/project1/interaction_signals/out1"
+    ],
+    "result": "{\"protocol_version\":3,\"data\":{\"family\":\"CHOP\",\"name\":\"out1\",\"op_type\":\"outCHOP\",\"path\":\"/project1/interaction_signals/out1\"},\"request\":{\"request_id\":\"01a095b9-5e4f-7c76-83e3-870c1c03e9f2\",\"status\":\"succeeded\"}}\n"
+  },
+  {
+    "args": [
+      "parameters",
+      "get",
+      "/project1/td_cli_runtime/td_agent",
+      "Connectionstate"
+    ],
+    "result": "{\"protocol_version\":3,\"data\":{\"mode\":\"constant\",\"operator_path\":\"/project1/td_cli_runtime/td_agent\",\"parameter\":\"Connectionstate\",\"source\":null,\"unsupported_reason\":null,\"value\":\"online\",\"value_type\":\"string\"},\"request\":{\"request_id\":\"01a095b9-62cb-7dfb-a89f-1142505bada8\",\"status\":\"succeeded\"}}\n"
+  },
+  {
+    "args": [
+      "project",
+      "save",
+      "E:\\td-cli\\.codex\\probe\\cold-probe.toe",
+      "--expected-sha256",
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ],
+    "result": "{\"protocol_version\":3,\"error\":{\"code\":\"project_file_changed\",\"message\":\"project_file_changed\",\"details\":{\"request\":{\"request_id\":\"01a095b9-6753-76fb-b851-d2e6aaa2f169\",\"instance_id\":\"982c8145-6ff4-4292-93c3-0eb3ee92784f\",\"command\":{\"input\":{\"expected_path\":\"E:\\\\td-cli\\\\.codex\\\\probe\\\\cold-probe.toe\",\"expected_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"name\":\"project.save\"},\"status\":\"failed\",\"execution_id\":\"fbeffd79-b9a0-4c99-acab-221126f82e12\",\"submitted_at\":\"2026-09-12T13:05:50.945Z\",\"dispatched_at\":\"2026-09-12T13:05:50.947Z\",\"accepted_at\":\"2026-09-12T13:05:50.951Z\",\"execute_authorized_at\":\"2026-09-12T13:05:50.953Z\",\"completed_at\":\"2026-09-12T13:05:50.985Z\",\"result\":null,\"error\":{\"code\":\"project_file_changed\",\"details\":{},\"message\":\"project_file_changed\",\"retryable\":false}}},\"retryable\":false},\"request\":{\"request_id\":\"01a095b9-6753-76fb-b851-d2e6aaa2f169\",\"status\":\"failed\"}}\n"
+  }
+]

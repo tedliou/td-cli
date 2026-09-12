@@ -42,6 +42,7 @@ def secure_layout(root: Path) -> None:
             capture_output=True,
             text=True,
             check=False,
+            timeout=5,
         )
         if completed.returncode:
             raise RuntimeError(f"cannot secure state ACL: {completed.stderr.strip()}")
@@ -58,6 +59,7 @@ def secure_layout(root: Path) -> None:
         capture_output=True,
         text=True,
         check=False,
+        timeout=5,
     )
     if completed.returncode:
         raise RuntimeError(f"cannot remove broad state ACL: {completed.stderr.strip()}")
@@ -85,6 +87,7 @@ def _validate_acl(root: Path, *, allow_inherited: bool = False) -> None:
         capture_output=True,
         text=True,
         check=False,
+        timeout=5,
     )
     if completed.returncode or completed.stderr.strip():
         raise RuntimeError("cannot validate state ACL")

@@ -13,6 +13,43 @@ def client(tmp_path: Path) -> DaemonClient:
     return DaemonClient(timeout=1, root=tmp_path)
 
 
+def test_save_precondition_failure_remains_observable(tmp_path, monkeypatch):
+    snapshot = {"status": "failed", "error": {"code": "project_file_changed"}}
+    monkeypatch.setattr(DaemonClient, "request", lambda *a, **k: snapshot)
+    assert client(tmp_path).get_request("save-request") == snapshot
+
+
+def test_autostart_occurs_once_before_http_and_never_retries_a_mutation(tmp_path, monkeypatch):
+    events = []
+    instance_client = client(tmp_path)
+    instance_client._autostart = True
+    monkeypatch.setattr("td_cli.client.ensure_running", lambda **kw: events.append("start"))
+
+    def request(method, *a, **kw):
+        events.append(method)
+        if method == "POST":
+            raise httpx.ConnectError("lost response")
+        return httpx.Response(200, json=[])
+
+    monkeypatch.setattr(httpx, "request", request)
+    assert instance_client.instances() == []
+    with pytest.raises(ClientError) as error:
+        instance_client.submit("known-request", "instance", {})
+    assert events == ["start", "GET", "POST"]
+    assert error.value.details["request_id"] == "known-request"
+
+
+def test_poll_failure_retains_request_id(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        DaemonClient,
+        "get_request",
+        lambda *a: (_ for _ in ()).throw(ClientError("daemon_unavailable")),
+    )
+    with pytest.raises(ClientError) as error:
+        client(tmp_path).wait("known-request")
+    assert error.value.details["request_id"] == "known-request"
+
+
 def test_read_only_query_retries_with_fixed_backoffs(tmp_path: Path, monkeypatch) -> None:
     attempts = 0
     sleeps = []
@@ -269,3 +306,25 @@ def test_parameter_list_rejects_unknown_introspection_enums(
     )
     with pytest.raises(ClientError, match="protocol_incompatible"):
         client(tmp_path).get_request("request-1")
+
+
+def test_startup_uses_visible_budget_and_http_receives_only_remaining(tmp_path, monkeypatch):
+    clock = [100.0]
+    observed = []
+    instance_client = client(tmp_path)
+    instance_client.timeout = 30
+    instance_client._autostart = True
+    monkeypatch.setattr("td_cli.client.time.monotonic", lambda: clock[0])
+
+    def startup(*, timeout):
+        observed.append(timeout)
+        clock[0] += 12
+
+    def request(*args, **kwargs):
+        observed.append(kwargs["timeout"])
+        return httpx.Response(200, json=[])
+
+    monkeypatch.setattr("td_cli.client.ensure_running", startup)
+    monkeypatch.setattr(httpx, "request", request)
+    assert instance_client.instances() == []
+    assert observed == [30, 18]

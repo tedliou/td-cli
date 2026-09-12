@@ -1,0 +1,41 @@
+{
+  "project": "E:\\td-cli\\.codex\\probe\\build-probe.toe",
+  "sha_before": "e44f23def17e56b7f97578e7ae048b56bf5850f2e651ef11d217b7d5d763a017",
+  "calls": [
+    {
+      "args": [
+        "ops",
+        "children",
+        "/project1"
+      ],
+      "request_id": "01a095b3-ecd8-75ff-8359-7709c503caf1",
+      "exit": 0,
+      "stdout": "{\"protocol_version\":3,\"data\":[{\"family\":\"CHOP\",\"name\":\"audio_out\",\"op_type\":\"audiodeviceoutCHOP\",\"path\":\"/project1/audio_out\"},{\"family\":\"CHOP\",\"name\":\"brain\",\"op_type\":\"selectCHOP\",\"path\":\"/project1/brain\"},{\"family\":\"TOP\",\"name\":\"chopto1\",\"op_type\":\"choptoTOP\",\"path\":\"/project1/chopto1\"},{\"family\":\"TOP\",\"name\":\"displace1\",\"op_type\":\"displaceTOP\",\"path\":\"/project1/displace1\"},{\"family\":\"CHOP\",\"name\":\"engagement\",\"op_type\":\"selectCHOP\",\"path\":\"/project1/engagement\"},{\"family\":\"COMP\",\"name\":\"geo1\",\"op_type\":\"geometryCOMP\",\"path\":\"/project1/geo1\"},{\"family\":\"CHOP\",\"name\":\"gyro\",\"op_type\":\"selectCHOP\",\"path\":\"/project1/gyro\"},{\"family\":\"COMP\",\"name\":\"interaction_signals\",\"op_type\":\"baseCOMP\",\"path\":\"/project1/interaction_signals\"},{\"family\":\"COMP\",\"name\":\"muse_input\",\"op_type\":\"baseCOMP\",\"path\":\"/project1/muse_input\"},{\"family\":\"CHOP\",\"name\":\"music_player\",\"op_type\":\"audiofileinCHOP\",\"path\":\"/project1/music_player\"},{\"family\":\"CHOP\",\"name\":\"noise1\",\"op_type\":\"noiseCHOP\",\"path\":\"/project1/noise1\"},{\"family\":\"TOP\",\"name\":\"out\",\"op_type\":\"outTOP\",\"path\":\"/project1/out\"},{\"family\":\"CHOP\",\"name\":\"signal_health\",\"op_type\":\"selectCHOP\",\"path\":\"/project1/signal_health\"},{\"family\":\"COMP\",\"name\":\"td_cli_runtime\",\"op_type\":\"baseCOMP\",\"path\":\"/project1/td_cli_runtime\"},{\"family\":\"CHOP\",\"name\":\"trail1\",\"op_type\":\"trailCHOP\",\"path\":\"/project1/trail1\"},{\"family\":\"TOP\",\"name\":\"video_player\",\"op_type\":\"moviefileinTOP\",\"path\":\"/project1/video_player\"}],\"request\":{\"request_id\":\"01a095b3-ecd8-75ff-8359-7709c503caf1\",\"status\":\"succeeded\"}}\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "project",
+        "save",
+        "E:\\td-cli\\.codex\\probe\\build-probe.toe",
+        "--expected-sha256",
+        "e44f23def17e56b7f97578e7ae048b56bf5850f2e651ef11d217b7d5d763a017"
+      ],
+      "request_id": "01a095b3-f16d-73e4-96f1-2a21db11738b",
+      "exit": 0,
+      "stdout": "{\"protocol_version\":3,\"data\":{\"path\":\"E:\\\\td-cli\\\\.codex\\\\probe\\\\build-probe.toe\",\"sha256\":\"2ccf22dcf20b6eb9281b97934e3350d20577c8b3741712fe4bff47919a305b01\",\"size_bytes\":53314},\"request\":{\"request_id\":\"01a095b3-f16d-73e4-96f1-2a21db11738b\",\"status\":\"succeeded\"}}\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "project",
+        "metadata"
+      ],
+      "request_id": "01a095b3-f5fb-7e86-bdb8-5e1d19e58ac1",
+      "exit": 0,
+      "stdout": "{\"protocol_version\":3,\"data\":{\"folder\":\"E:/td-cli/.codex/probe\",\"name\":\"build-probe.toe\",\"saved_with\":{\"build\":\"2025.32050\",\"os_name\":\"Windows\",\"os_version\":\"10\",\"time\":\"Sat Sep 12 20:59:54 2026\",\"version\":\"099\"}},\"request\":{\"request_id\":\"01a095b3-f5fb-7e86-bdb8-5e1d19e58ac1\",\"status\":\"succeeded\"}}\n",
+      "stderr": ""
+    }
+  ],
+  "sha_after": "2ccf22dcf20b6eb9281b97934e3350d20577c8b3741712fe4bff47919a305b01"
+}

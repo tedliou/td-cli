@@ -6,6 +6,24 @@ from typer.testing import CliRunner
 
 from td_cli import cli
 
+
+def test_version_query_never_starts_a_daemon(monkeypatch):
+    import httpx
+
+    starts = []
+    monkeypatch.setattr("td_cli.client.ensure_running", lambda **kw: starts.append(True))
+    monkeypatch.setattr(
+        httpx,
+        "request",
+        lambda *a, **k: httpx.Response(
+            200, json={"release_version": "test", "protocol_versions": [3]}
+        ),
+    )
+    result = CliRunner().invoke(cli.app, ["version", "--json"])
+    assert result.exit_code == 0, result.output
+    assert starts == []
+
+
 INSTANCE = {
     "instance_id": "8cf81688-b9a4-4c39-9f92-31c77319c761",
     "selector": "8cf8",
@@ -822,3 +840,32 @@ def test_operator_state_cli_rejects_empty_incomplete_and_out_of_bounds_patches(
     result = CliRunner().invoke(cli.app, argv)
     assert result.exit_code == 2
     assert json.loads(result.stdout)["error"]["code"] == "invalid_arguments"
+
+
+def test_project_open_observes_global_timeout(tmp_path, monkeypatch):
+    executable = tmp_path / "TouchDesigner.exe"
+    executable.touch()
+    project = tmp_path / "sample.toe"
+    project.touch()
+    observed = []
+
+    def launch(command, **options):
+        observed.append(options["timeout"])
+        return 42
+
+    monkeypatch.setattr(cli, "launch_detached", launch)
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "--json",
+            "--timeout",
+            "45",
+            "project",
+            "open",
+            str(project),
+            "--executable",
+            str(executable),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert observed == [45]

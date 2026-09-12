@@ -1,0 +1,46 @@
+{
+  "calls": [
+    {
+      "cmd": [
+        "td-daemon",
+        "stop"
+      ],
+      "exit": 0,
+      "stdout": "Daemon is stopped\n",
+      "stderr": ""
+    },
+    {
+      "cmd": [
+        "E:/td-cli/.venv/Scripts/python.exe",
+        "-m",
+        "td_cli.cli",
+        "--json",
+        "--timeout",
+        "15",
+        "instances",
+        "list"
+      ],
+      "exit": 0,
+      "stdout": "{\"protocol_version\":3,\"data\":[{\"instance_id\":\"f90510e0-9e72-4d38-bdca-df48afb43222\",\"connection_id\":\"a7ab9990-fdbd-4f7b-aea8-0965ff16d1af\",\"selector\":\"f905\",\"status\":\"online\",\"agent_version\":\"0.5.0\",\"protocol_version\":3,\"capabilities\":[\"batch.execute\",\"binary.export\",\"dat.table.get\",\"dat.table.patch\",\"dat.table.replace\",\"dat.text.get\",\"dat.text.set\",\"events.read\",\"ops.children\",\"ops.connect\",\"ops.connections\",\"ops.copy\",\"ops.create\",\"ops.destroy\",\"ops.disconnect\",\"ops.get\",\"ops.hierarchy.connect\",\"ops.hierarchy.connections\",\"ops.hierarchy.disconnect\",\"ops.inspect\",\"ops.move\",\"ops.rename\",\"ops.state.get\",\"ops.state.set\",\"ops.tox.import\",\"parameters.get\",\"parameters.list\",\"parameters.pulse\",\"parameters.sequence.get\",\"parameters.sequence.replace\",\"parameters.set\",\"project.metadata\",\"project.save\",\"project.snapshot\"],\"last_heartbeat_at\":\"2026-09-12T13:00:43.668Z\",\"offline_expires_at\":null}]}\n",
+      "stderr": ""
+    },
+    {
+      "cmd": [
+        "E:/td-cli/.venv/Scripts/python.exe",
+        "-m",
+        "td_cli.daemon.cli",
+        "status",
+        "--json"
+      ],
+      "exit": 0,
+      "stdout": "{\"status\":\"running\",\"pid\":6368,\"endpoint\":\"127.0.0.1:9982\",\"release_version\":\"0.5.0\",\"protocol_versions\":[3],\"started_at\":\"2026-09-12T13:00:43.332Z\"}\n",
+      "stderr": ""
+    }
+  ],
+  "foreground_before": 3081612,
+  "foreground_values": [
+    3081612
+  ],
+  "new_visible_windows": [],
+  "samples": 150
+}

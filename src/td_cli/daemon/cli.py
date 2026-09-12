@@ -3,7 +3,6 @@ from __future__ import annotations
 import ctypes
 import json
 import os
-import subprocess
 import sys
 import threading
 import time
@@ -26,6 +25,7 @@ from td_cli.daemon.runtime_files import (
     secure_layout,
 )
 from td_cli.daemon.transport import create_transport_app
+from td_cli.processes import LaunchError, launch_detached
 from td_cli.protocol import PROTOCOL_VERSION
 
 app = typer.Typer(no_args_is_help=True)
@@ -72,7 +72,7 @@ class DaemonMutex:
             ctypes.windll.kernel32.CloseHandle(self.handle)
 
 
-def _probe(root: Path) -> dict[str, object] | None:
+def _probe(root: Path, *, timeout: float = 0.5) -> dict[str, object] | None:
     try:
         token = load_token(root)
         if token is None:
@@ -80,14 +80,10 @@ def _probe(root: Path) -> dict[str, object] | None:
         response = httpx.get(
             f"{ENDPOINT}/v3/health",
             headers={"Authorization": f"Bearer {token}"},
-            timeout=0.5,
+            timeout=timeout,
         )
         payload = response.json() if response.status_code == 200 else None
-        return (
-            payload
-            if payload and PROTOCOL_VERSION in payload.get("protocol_versions", [])
-            else None
-        )
+        return payload
     except (OSError, RuntimeError, httpx.HTTPError):
         return None
 
@@ -100,7 +96,7 @@ def _status_payload(root: Path) -> dict[str, object]:
         "status": (
             "running"
             if health and health.get("ready") is True
-            else ("starting/unhealthy" if run or health else "stopped")
+            else ("starting/unhealthy" if health or _pid_alive(run.get("pid")) else "stopped")
         ),
         "pid": run.get("pid"),
         "endpoint": run.get("endpoint"),
@@ -110,6 +106,20 @@ def _status_payload(root: Path) -> dict[str, object]:
         else run.get("protocol_versions", []),
         "started_at": run.get("started_at"),
     }
+
+
+def _pid_alive(pid: object) -> bool:
+    if not isinstance(pid, int) or pid <= 0 or os.name != "nt":
+        return False
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.OpenProcess.argtypes = [ctypes.c_uint, ctypes.c_bool, ctypes.c_uint]
+    kernel.OpenProcess.restype = ctypes.c_void_p
+    kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+    handle = kernel.OpenProcess(0x1000, False, pid)
+    if handle:
+        kernel.CloseHandle(handle)
+        return True
+    return ctypes.get_last_error() == 5  # Access denied is not proof of process death.
 
 
 @app.command()
@@ -164,43 +174,56 @@ def serve() -> None:
             run_path.unlink(missing_ok=True)
 
 
-@app.command()
-def start() -> None:
+def ensure_running(*, timeout: float) -> None:
+    """Start once, wait boundedly, and never replace an authenticated unhealthy runtime."""
+    deadline = time.monotonic() + timeout
     root = data_root()
-    secure_layout(root)
-    health = _probe(root)
+
+    def probe_within_deadline() -> dict[str, object] | None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise LaunchError("Daemon startup deadline expired")
+        health = _probe(root, timeout=min(0.5, remaining))
+        if time.monotonic() >= deadline:
+            raise LaunchError("Daemon startup deadline expired")
+        return health
+
+    health = probe_within_deadline()
+    versions = health.get("protocol_versions", []) if health else []
+    if health and (not isinstance(versions, list) or PROTOCOL_VERSION not in versions):
+        raise LaunchError("Daemon protocol is incompatible; update explicitly")
     if health and health.get("ready") is True:
-        typer.echo("Daemon is running")
         return
     if health is not None:
-        typer.echo("Daemon is starting/unhealthy", err=True)
-        raise typer.Exit(3)
-    flags = 0
-    if os.name == "nt":
-        flags = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
+        raise LaunchError("Daemon is starting/unhealthy")
     frozen = bool(getattr(sys, "frozen", False))
     command = (
-        [sys.executable, "serve"]
+        [str(Path(sys.executable).with_name("td-daemon.exe")), "serve"]
         if frozen
         else [sys.executable, "-m", "td_cli.daemon.cli", "serve"]
     )
-    child_environment = dict(os.environ)
-    if frozen:
-        child_environment["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
-    subprocess.Popen(
-        command,
-        creationflags=flags,
-        close_fds=True,
-        env=child_environment,
-    )
-    deadline = time.monotonic() + 5
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise LaunchError("Daemon startup deadline expired")
+    launch_detached(command, cwd=Path.cwd(), hidden=True, timeout=remaining)
     while time.monotonic() < deadline:
-        health = _probe(root)
+        health = probe_within_deadline()
         if health and health.get("ready") is True:
-            typer.echo("Daemon is running")
             return
-        time.sleep(0.05)
-    raise typer.Exit(3)
+        time.sleep(min(0.05, max(0, deadline - time.monotonic())))
+    raise LaunchError(f"Daemon startup timed out; inspect {root / 'logs' / 'daemon.log'}")
+
+
+@app.command()
+def start(
+    timeout: Annotated[float, typer.Option("--timeout", min=0.1, max=3600)] = 30.0,
+) -> None:
+    """Start the per-user background Daemon without a console window."""
+    try:
+        ensure_running(timeout=timeout)
+    except (LaunchError, OSError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(3) from error
 
 
 @app.command()
