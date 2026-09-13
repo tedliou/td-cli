@@ -380,4 +380,4 @@ read-only Command 使用。
 終態 snapshot。請保存輸出；中斷或 outcome unknown 後先查詢已記錄的 Request，
 不要盲目重跑整份計畫。不接受巢狀 `batch.execute`。
 
-本版另已驗證 canonical Agent 0.6.0 → 0.7.0 離線升級，保留既有 Connectionstate 定義。
+0.7.1 離線升級除既有來源外，新增精確 canonical 0.7.0 Agent 白名單，保留 Connectionstate 定義；並修正 Constant CHOP Sequence 讀取與替換時的原生群組重複列舉。

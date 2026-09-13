@@ -1,0 +1,19 @@
+{
+  "pid": 7904,
+  "build": "2025.32050",
+  "artifact": {
+    "source_revision": "5b32ae29867ae49bc13ebb373c405f7f11a379d6533f745413cc161dbc104b3a",
+    "touchdesigner_version": "2025.32050",
+    "operators": [
+      "agent_extension",
+      "agent_manifest",
+      "auth_table",
+      "events_table",
+      "heartbeat_execute",
+      "operator_catalog",
+      "socket_callbacks",
+      "socketio1"
+    ],
+    "artifact_sha256": "ff193eef1215cf4e1ce0426fb7c0289e24ddefce3df2b1252b908e0a8ba8d164"
+  }
+}

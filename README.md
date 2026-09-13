@@ -466,4 +466,4 @@ IDs before submission, followed by complete terminal snapshots. Save this
 output and query the recorded Request after interruption or unknown outcome;
 do not blindly rerun the plan. Nested `batch.execute` is unsupported.
 
-The current release additionally supports verified canonical Agent 0.6.0 → 0.7.0 offline migration, preserving its existing Connectionstate definition.
+The 0.7.1 upgrade accepts the exact canonical 0.7.0 Agent in addition to the existing verified sources, preserving its Connectionstate definition. Constant CHOP sequence reads and replacements normalize repeated native parameter groups.
