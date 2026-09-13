@@ -34,8 +34,8 @@ class ArchiveVendor:
         packed(path.with_name(path.name + ".dir"), path)
 
 
-@pytest.fixture
-def migration(tmp_path, monkeypatch):
+@pytest.fixture(params=["0.3.1", "0.6.0"])
+def migration(tmp_path, monkeypatch, request):
     def component(root, version):
         root.mkdir(parents=True)
         info = {"agent_version": version, "locked_touchdesigner_version": upgrade.BUILD}
@@ -48,11 +48,16 @@ def migration(tmp_path, monkeypatch):
         return root
 
     source_root = tmp_path / "source"
-    source = component(source_root / "project1" / "my_agent", "0.3.1")
+    source = component(source_root / "project1" / "my_agent", request.param)
     (source_root / "media.parm").write_bytes(b"relative media path\x00unchanged")
     target_root = tmp_path / "target"
-    target_component = component(target_root / "td_agent", "0.6.0")
+    target_component = component(target_root / "td_agent", "0.7.0")
     target_component.with_suffix(".cparm").write_bytes(b"known connection-state definition")
+    if request.param == "0.6.0":
+        source.with_suffix(".cparm").write_bytes(b"known connection-state definition")
+        source.with_suffix(".parm").write_bytes(
+            b"?\nenableexternaltox 0 off\nConnectionstate 67109184 online\n?\n"
+        )
     target_component.with_suffix(".parm").write_bytes(
         b"?\nenableexternaltox 0 off\nConnectionstate 67109184 stopped\n?\n"
     )
@@ -67,7 +72,11 @@ def migration(tmp_path, monkeypatch):
             }
         )
     )
-    monkeypatch.setattr(upgrade, "LEGACY_HASHES", upgrade.script_hashes(source))
+    monkeypatch.setattr(
+        upgrade,
+        "LEGACY_HASHES" if request.param == "0.3.1" else "V060_HASHES",
+        upgrade.script_hashes(source),
+    )
     monkeypatch.setattr(upgrade, "VendorTools", ArchiveVendor)
     monkeypatch.setattr(upgrade, "assert_project_closed", lambda *args: None)
     return project, artifact, evidence, tmp_path
@@ -102,8 +111,9 @@ def test_public_upgrade_preserves_graph_path_and_backup_then_is_noop(migration):
     assert Path(report["backup"]).read_bytes() == original
     with zipfile.ZipFile(project) as archive:
         assert archive.read("media.parm") == b"relative media path\x00unchanged"
-        assert b'"0.6.0"' in archive.read("project1/my_agent/agent_manifest.text")
+        assert b'"0.7.0"' in archive.read("project1/my_agent/agent_manifest.text")
         assert archive.read("project1/my_agent.cparm") == b"known connection-state definition"
+        assert archive.read("project1/my_agent.parm").count(b"Connectionstate ") == 1
     upgraded = project.read_bytes()
     second = invoke(migration)
     assert second.exit_code == 0, second.output
@@ -179,6 +189,18 @@ def test_unknown_agent_children_are_rejected(migration):
     result = invoke(migration)
     assert result.exit_code == 1
     assert "unknown or missing children" in result.output
+    assert project.read_bytes() == original
+
+
+def test_modified_connection_state_definition_is_rejected(migration):
+    project, _, _, temporary = migration
+    source = temporary / "source"
+    (source / "project1/my_agent.cparm").write_bytes(b"modified custom controls")
+    packed(source, project)
+    original = project.read_bytes()
+    result = invoke(migration)
+    assert result.exit_code == 1
+    assert "modified custom parameters" in result.output
     assert project.read_bytes() == original
 
 
