@@ -26,10 +26,16 @@ bounded; a timeout only ends the wait. Retain the Request ID and inspect it usin
 `td requests get <id>` before deciding another action. Do not repeat a mutation
 whose outcome is unknown.
 
-`batch execute` accepts read-only Commands only; submit mutations individually.
+`batch execute` accepts read-only Commands only. For many typed mutations, use
+`commands execute --input-file plan.json` with `{"commands":[{"name":"ops.create",
+"input":{...}}]}` (1-256 Commands, 1 MiB). It runs independent Requests in order,
+stops on the first non-success, and emits flushed JSONL with each zero-based
+index and Request ID. The global `--timeout` bounds the whole run. Earlier
+changes remain after failure; query the recorded Request before preparing a
+new plan. Do not rerun the original plan after an unknown outcome.
 
 Preserve the user's design and unsaved work. Verify the requested graph/value
 and save result, not merely a successful submission. Improve this skill from a
 reproduced usage failure: correct the smallest relevant reference rather than
-adding a new universal workflow. Its interface examples target td-cli 0.6.0;
+adding a new universal workflow. Its interface examples target td-cli 0.7.0;
 installed help is authoritative when versions differ.

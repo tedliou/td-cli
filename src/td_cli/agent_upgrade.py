@@ -51,6 +51,13 @@ V040_HASHES = dict(
         strict=True,
     )
 )
+V060_HASHES = {
+    "agent_extension": "a76811697816ea1e343c22f61fd5047ab375650d422ae4cec1ccd2bb149014e0",
+    "agent_manifest": "58e06f8204c30c2e01f9f096564f749857a803129c695b6039725a92683122fd",
+    "socket_callbacks": "c4ee52b72627f1c235fee682b08221871bcc2a8a63e125a31566efb2f5d1fa5d",
+    "heartbeat_execute": "370524ddc75776b9dc475925cfde47949946eff850837d2e06f32a01f1a2cc81",
+    "operator_catalog": "565725f8064aeac1320379325c3ab24e2e184068ea14b0e1f136f38736720fef",
+}
 
 
 class UpgradeError(ValueError):
@@ -147,7 +154,7 @@ def identify(root: Path, target: Path) -> tuple[Path, bool]:
     same = hashes == script_hashes(target)
     version = info.get("agent_version")
     approved = (
-        {"0.3.1": LEGACY_HASHES, "0.4.0": V040_HASHES}.get(version)
+        {"0.3.1": LEGACY_HASHES, "0.4.0": V040_HASHES, "0.6.0": V060_HASHES}.get(version)
         if isinstance(version, str)
         else None
     )
@@ -199,10 +206,13 @@ def identify(root: Path, target: Path) -> tuple[Path, bool]:
         raise UpgradeError("embedded Agent has modified root parameters or external linkage")
     custom = component.with_suffix(".cparm")
     target_custom = target.with_suffix(".cparm")
-    if same and target_custom.exists() and not custom.exists():
+    has_connection_state = same or version == "0.6.0"
+    if has_connection_state and target_custom.exists() and not custom.exists():
         raise UpgradeError("embedded Agent is missing custom parameters")
     if custom.exists() and (
-        not same or not target_custom.exists() or custom.read_bytes() != target_custom.read_bytes()
+        not has_connection_state
+        or not target_custom.exists()
+        or custom.read_bytes() != target_custom.read_bytes()
     ):
         raise UpgradeError("embedded Agent has modified custom parameters")
     if not component.with_suffix(".n").read_bytes().startswith(b"COMP:base\n"):
@@ -299,7 +309,7 @@ def upgrade_project(
             if not replacement.is_file():
                 raise UpgradeError("nested target Agent content is unsupported")
             shutil.copyfile(replacement, component / replacement.name)
-        if target.with_suffix(".cparm").exists():
+        if target.with_suffix(".cparm").exists() and not component.with_suffix(".cparm").exists():
             custom = component.with_suffix(".cparm")
             shutil.copyfile(target.with_suffix(".cparm"), custom)
             root_parm = component.with_suffix(".parm")

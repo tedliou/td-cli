@@ -34,6 +34,7 @@ project_app = typer.Typer()
 binary_app = typer.Typer()
 batch_app = typer.Typer()
 events_app = typer.Typer()
+commands_app = typer.Typer()
 app.add_typer(instances_app, name="instances")
 app.add_typer(requests_app, name="requests")
 app.add_typer(ops_app, name="ops")
@@ -48,6 +49,7 @@ app.add_typer(project_app, name="project")
 app.add_typer(binary_app, name="binary")
 app.add_typer(batch_app, name="batch")
 app.add_typer(events_app, name="events")
+app.add_typer(commands_app, name="commands")
 
 
 def _print_td_version(value: bool) -> None:
@@ -285,6 +287,33 @@ def _command(
     _run(
         ctx, lambda: _submit(ctx, name, _input(dedicated, inline, input_file), no_wait, request_id)
     )
+
+
+@commands_app.command("execute")
+def commands_execute(
+    ctx: typer.Context,
+    input_file: Annotated[Path, typer.Option("--input-file")],
+) -> None:
+    """Run 1–256 typed Commands in order; JSONL progress, stop on first failure."""
+    from td_cli.command_run import read_plan, run_plan
+
+    def operation() -> None:
+        commands = read_plan(input_file)
+
+        def emit(event: dict[str, Any]) -> None:
+            typer.echo(json.dumps(event, separators=(",", ":"), ensure_ascii=True))
+            sys.stdout.flush()
+
+        run_plan(
+            commands,
+            client=_client(ctx),
+            selector=ctx.obj["instance"],
+            timeout=float(ctx.obj["timeout"]),
+            new_request_id=_uuid7,
+            emit=emit,
+        )
+
+    _run(ctx, operation)
 
 
 def _structural_destination_input(

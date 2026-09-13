@@ -450,3 +450,18 @@ automatic naming. Connect rejects occupied inputs unless `--replace` is
 explicit; disconnect always names the exact source/output and target/input.
 Network mutations are not allowed inside `batch.execute`, while read-only
 `parameters.list` is batchable.
+
+## Ordered command runs
+
+`td --json --instance <selector> --timeout 120 commands execute --input-file plan.json`
+accepts `{"commands":[{"name":"ops.get","input":{"operator_path":"/project1"}}]}`.
+Use existing typed Command payloads for up to 256 reads or mutations (1 MiB
+input maximum). The entire plan is validated before contacting the Daemon.
+One CLI process submits independent Requests in order, stopping at the first
+non-success. This is not atomic; completed changes remain. The timeout bounds
+the entire run. JSONL progress always includes zero-based indexes and Request
+IDs before submission, followed by complete terminal snapshots. Save this
+output and query the recorded Request after interruption or unknown outcome;
+do not blindly rerun the plan. Nested `batch.execute` is unsupported.
+
+The current release additionally supports verified canonical Agent 0.6.0 → 0.7.0 offline migration, preserving its existing Connectionstate definition.
