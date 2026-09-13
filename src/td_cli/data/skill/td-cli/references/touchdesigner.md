@@ -24,3 +24,19 @@ recomputing the user's public signals while wiring consumers.
 Prefer the existing supported typed commands. When a necessary operation is
 missing, report its narrow expected behavior and a reproducible limitation;
 do not embed arbitrary Python into another command to bypass the interface.
+
+## Keep the graph editable
+
+Read `ops state get` for actual node positions and dimensions before arranging
+a network. Use `ops state set` node-x/node-y/node-width/node-height to place
+related Operators together, leave room between their bounding rectangles, and
+keep regular wires readable. Use a parent COMP for each independently editable
+effect and keep its inputs, processing, and output in a consistent direction.
+Check siblings within each parent; different parents have separate coordinates.
+
+For many layout edits, use `commands execute --input-file plan.json` with typed
+`ops.state.set` Commands, an explicit Instance and a total timeout. Every item
+has its own Request and the runner stops on the first non-success. Keep the
+JSONL journal; query an uncertain Request before preparing remaining work.
+Read back state and connections after each bounded group, check rectangle
+overlap and wire routing, then verify the rendered result before saving.
