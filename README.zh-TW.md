@@ -366,3 +366,14 @@ built-in。Custom、第三方及其他 build 不在此 inventory，會被拒絕�
 每個新 TouchDesigner build 都必須重新 probe，並依 supported／conditional／unsupported／unknown
 流程審查。建立與 rename 拒絕 collision；mutation 不得進入 `batch.execute`，batch 僅供有界、
 read-only Command 使用。
+
+## 順序執行多個 Command
+
+`td --json --instance <selector> --timeout 120 commands execute --input-file plan.json`
+接受 `{"commands":[{"name":"ops.get","input":{"operator_path":"/project1"}}]}`。
+沿用現行 typed Command payload，最多 256 項查詢或 mutation、1 MiB 輸入；
+整份計畫驗證通過後才連線。單一 CLI 程序依序提交各自獨立的 Request，首個
+非成功結果即停止；不具原子性，已完成的修改會保留。timeout 限制整輪執行。
+固定輸出 JSONL：提交前先記錄從零起算的 index 與 Request ID，再記錄完整
+終態 snapshot。請保存輸出；中斷或 outcome unknown 後先查詢已記錄的 Request，
+不要盲目重跑整份計畫。不接受巢狀 `batch.execute`。

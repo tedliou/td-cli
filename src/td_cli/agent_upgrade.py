@@ -51,6 +51,13 @@ V040_HASHES = dict(
         strict=True,
     )
 )
+V060_HASHES = {
+    "agent_extension": "a76811697816ea1e343c22f61fd5047ab375650d422ae4cec1ccd2bb149014e0",
+    "agent_manifest": "58e06f8204c30c2e01f9f096564f749857a803129c695b6039725a92683122fd",
+    "socket_callbacks": "c4ee52b72627f1c235fee682b08221871bcc2a8a63e125a31566efb2f5d1fa5d",
+    "heartbeat_execute": "370524ddc75776b9dc475925cfde47949946eff850837d2e06f32a01f1a2cc81",
+    "operator_catalog": "565725f8064aeac1320379325c3ab24e2e184068ea14b0e1f136f38736720fef",
+}
 
 
 class UpgradeError(ValueError):
@@ -147,7 +154,7 @@ def identify(root: Path, target: Path) -> tuple[Path, bool]:
     same = hashes == script_hashes(target)
     version = info.get("agent_version")
     approved = (
-        {"0.3.1": LEGACY_HASHES, "0.4.0": V040_HASHES}.get(version)
+        {"0.3.1": LEGACY_HASHES, "0.4.0": V040_HASHES, "0.6.0": V060_HASHES}.get(version)
         if isinstance(version, str)
         else None
     )
