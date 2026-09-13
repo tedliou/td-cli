@@ -1,0 +1,84 @@
+{
+  "pid": 4576,
+  "build": "2025.32050",
+  "source_sha256": "ccbf03b2e6db67919c9cb930dd54ab54273c7d997018a022d31a15ca8568aaeb",
+  "validated": true,
+  "initial": {
+    "operator_path": "/project1/constant_sequence_probe",
+    "sequence": "const",
+    "block_size": 1,
+    "max_blocks": null,
+    "blocks": [
+      {
+        "name": null,
+        "parameters": [
+          {
+            "parameter": "name",
+            "mode": "constant",
+            "value": "chan1"
+          },
+          {
+            "parameter": "value",
+            "mode": "constant",
+            "value": 0.0
+          }
+        ]
+      }
+    ]
+  },
+  "replaced": {
+    "operator_path": "/project1/constant_sequence_probe",
+    "sequence": "const",
+    "block_size": 1,
+    "max_blocks": null,
+    "blocks": [
+      {
+        "name": null,
+        "parameters": [
+          {
+            "parameter": "name",
+            "mode": "constant",
+            "value": "channel0"
+          },
+          {
+            "parameter": "value",
+            "mode": "constant",
+            "value": 0.0
+          }
+        ]
+      },
+      {
+        "name": null,
+        "parameters": [
+          {
+            "parameter": "name",
+            "mode": "constant",
+            "value": "channel1"
+          },
+          {
+            "parameter": "value",
+            "mode": "expression",
+            "value": "1 + 2"
+          }
+        ]
+      },
+      {
+        "name": null,
+        "parameters": [
+          {
+            "parameter": "name",
+            "mode": "constant",
+            "value": "channel2"
+          },
+          {
+            "parameter": "value",
+            "mode": "constant",
+            "value": 2.0
+          }
+        ]
+      }
+    ]
+  },
+  "malformed_preserved": true,
+  "evaluated_expression": 3.0
+}

@@ -1670,8 +1670,14 @@ class OperatorControl:
         blocks = []
         for block in list(sequence.blocks):
             parameters = []
+            seen_names = set()
             for group in list(block):
                 for parameter in list(group):
+                    # Built-in compound groups (Constant CHOP) can be yielded twice.
+                    # Parameter names identify the same Par within this Operator.
+                    if str(parameter.name) in seen_names:
+                        continue
+                    seen_names.add(str(parameter.name))
                     if bool(getattr(parameter, "isSequence", False)):
                         continue
                     if getattr(block, "namePar", None) is not None and parameter.isSamePar(

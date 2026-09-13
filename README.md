@@ -257,6 +257,8 @@ bounded to 128 blocks and 256 Parameters per block, reads back the complete
 ordered state, and restores the prior block count, order, names, modes, values,
 and sources if any mutation is rejected.
 
+Sequence reads list each actual Parameter once, including built-in compound groups such as Constant CHOP name/value. Use that ordered shape for replacement.
+
 Create a new native custom parameter page on a COMP with `parameters page-create`. Definitions support 1–32 scalar `float`, `toggle`, or `menu` controls. Names start with an uppercase ASCII letter followed by lowercase letters/digits (maximum 32 characters). Floats use finite minimum/maximum/default values and hard clamps; menus have 1–32 unique names and matching labels. Existing pages or parameter names are rejected without replacement. The result includes verified descriptors and values; inspect/edit later with `parameters list/get/set`. Failed creation removes only the new page; a failed rollback or unknown outcome requires inspection before further mutation.
 
 The ASCII-escaped input JSON plus one serialized target path per parameter is limited to 16,384 bytes to reserve space for result metadata.
@@ -464,4 +466,4 @@ IDs before submission, followed by complete terminal snapshots. Save this
 output and query the recorded Request after interruption or unknown outcome;
 do not blindly rerun the plan. Nested `batch.execute` is unsupported.
 
-The current release additionally supports verified canonical Agent 0.6.0 → 0.7.0 offline migration, preserving its existing Connectionstate definition.
+The 0.7.1 upgrade accepts the exact canonical 0.7.0 Agent in addition to the existing verified sources, preserving its Connectionstate definition. Constant CHOP sequence reads and replacements normalize repeated native parameter groups.

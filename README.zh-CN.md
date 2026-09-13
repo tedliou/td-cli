@@ -219,6 +219,8 @@ Bind source 只由类型化 Operator／Parameter identity 产生。Export 只接
 Operator／channel identity。Sequence replacement 最多 128 blocks、每 block 256 Parameters；失败时会
 恢复并验证完整的 block 数量、顺序、名称、mode、value 与 source。
 
+Sequence 读取会将每个实际 Parameter 列出一次，包括 Constant CHOP 的 name/value 复合组；替换时沿用此有序形状。
+
 使用 `parameters page-create` 在 COMP 创建新的原生自定义参数页。每页支持 1–32 个标量 `float`、`toggle` 或 `menu` 控件。名称以大写 ASCII 字母开头，后接小写字母或数字（最多 32 字符）。浮点控件需有限的最小值、最大值与默认值，并启用硬性范围限制；菜单需 1–32 个唯一名称与对应标签。已存在的页面或参数名称会被拒绝，不覆盖。结果返回已验证的描述与值，后续以 `parameters list/get/set` 检查与修改。创建失败只移除本次新页面；回滚失败或结果未知时，须先查询再执行下一次修改。
 
 ASCII 转义后的输入 JSON，加上每个参数一份序列化目标路径，合计限 16,384 bytes，以保留结果描述所需空间。
@@ -378,4 +380,4 @@ read-only Command 使用。
 终态 snapshot。请保存输出；中断或 outcome unknown 后先查询已记录的 Request，
 不要盲目重跑整份计划。不接受嵌套 `batch.execute`。
 
-本版另已验证 canonical Agent 0.6.0 → 0.7.0 离线升级，保留现有 Connectionstate 定义。
+0.7.1 离线升级除现有来源外，新增精确 canonical 0.7.0 Agent 白名单，保留 Connectionstate 定义；并修正 Constant CHOP Sequence 读取与替换时的原生组重复列举。

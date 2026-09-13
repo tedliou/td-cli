@@ -1,0 +1,32 @@
+{
+  "pid": 5280,
+  "build": "2025.32050",
+  "socket_active": true,
+  "version": "0.7.1",
+  "sentinel": 42.0,
+  "sequence": {
+    "operator_path": "/project1/sentinel",
+    "sequence": "const",
+    "block_size": 1,
+    "max_blocks": null,
+    "blocks": [
+      {
+        "name": null,
+        "parameters": [
+          {
+            "parameter": "name",
+            "mode": "constant",
+            "value": "chan1"
+          },
+          {
+            "parameter": "value",
+            "mode": "constant",
+            "value": 42.0
+          }
+        ]
+      }
+    ]
+  },
+  "artifact_sha256": "ff193eef1215cf4e1ce0426fb7c0289e24ddefce3df2b1252b908e0a8ba8d164",
+  "validated": true
+}

@@ -3357,6 +3357,74 @@ def test_parameter_sequence_replace_reads_back_complete_ordered_blocks() -> None
     assert [(block.name, block.value_par.val) for block in sequence.blocks] == before
 
 
+def test_native_sequence_duplicate_groups_preserve_unique_parameter_order() -> None:
+    root = FakeOperator("/project1")
+    name = FakeParameter("chan1")
+    name.name = "const0name"
+    value = FakeParameter(1.0)
+    value.name = "const0value"
+    root.par.const0name = name
+    root.par.const0value = value
+
+    class Block:
+        index = 0
+        namePar = None
+
+        def __init__(self):
+            self.par = {"name": name, "value": value}
+
+        def __iter__(self):
+            # Locked Constant CHOP returns its compound group twice.
+            return iter(((name, value), (name, value)))
+
+    class Sequence:
+        blockSize = 1
+        maxBlocks = None
+        owner = root
+        numBlocks = 1
+
+        def __init__(self):
+            self.blocks = [Block()]
+
+    sequence = Sequence()
+    sequence.name = "const"
+    root.seq = {"const": sequence}
+    control = make_control({root.path: root}.get)
+    expected = [
+        {
+            "name": None,
+            "parameters": [
+                {"parameter": "name", "mode": "constant", "value": "chan1"},
+                {"parameter": "value", "mode": "constant", "value": 1.0},
+            ],
+        }
+    ]
+    result = control.execute(
+        {
+            "name": "parameters.sequence.get",
+            "input": {
+                "operator_path": root.path,
+                "sequence": "const",
+                "max_parameters": 2,
+            },
+        }
+    )
+    assert result["blocks"] == expected
+    expected[0]["parameters"][1]["value"] = 3.0
+    result = control.execute(
+        {
+            "name": "parameters.sequence.replace",
+            "input": {
+                "operator_path": root.path,
+                "sequence": "const",
+                "blocks": expected,
+            },
+        }
+    )
+    assert result["blocks"] == expected
+    assert value.val == 3.0
+
+
 def test_parameter_reads_enforce_sequence_and_multi_operator_bounds() -> None:
     root = FakeOperator("/project1")
     targets = FakeParameter(None)

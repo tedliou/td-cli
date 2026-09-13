@@ -1,0 +1,9 @@
+{
+  "agent_path": "/project1/td_agent",
+  "agent_version": "0.7.1",
+  "backup": "C:\\Users\\Ted\\AppData\\Local\\Temp\\td071-release\\migration.toe.agent-backup-3d66bd3ed56b4cf88f9ab86df00a2635",
+  "path": "C:\\Users\\Ted\\AppData\\Local\\Temp\\td071-release\\migration.toe",
+  "previous_sha256": "2662b34d9e9ab417c5420e60df140ddcdd83bd7ef5ebb8213196d33ccbfd539f",
+  "sha256": "263e7e8b9fa620f8792fe9d180f1db8f92564b6668b45446469f899309cc5ca8",
+  "status": "upgraded"
+}
