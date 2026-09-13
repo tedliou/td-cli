@@ -5,6 +5,9 @@ Locked platform: Windows 11, TouchDesigner 2025.32050.
 
 ## Evidence
 
+- Complete local gate passed: 506 tests, Ruff lint/format, mypy (20 source
+  files), locked dependency check, Agent source/artifact inspection, and diff
+  whitespace check. The existing Starlette/httpx deprecation warning remains.
 - Installed v0.6.0 `td.exe --version`, three bounded subprocesses: 1.518,
   1.592, 1.582 seconds. Warm source CLI startup: 1.015 seconds.
 - Artwork public CLI three-mutation smoke: 1.496 seconds, independent Requests
