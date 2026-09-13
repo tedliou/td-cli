@@ -1,0 +1,40 @@
+{
+  "pid": 24084,
+  "build": "2025.32050",
+  "blockSize": 1,
+  "blocks": [
+    {
+      "index": 0,
+      "groups": [
+        {
+          "type": "ParGroup",
+          "name": "const0name",
+          "pars": [
+            {
+              "name": "const0name",
+              "type": "Par"
+            },
+            {
+              "name": "const0value",
+              "type": "Par"
+            }
+          ]
+        },
+        {
+          "type": "ParGroup",
+          "name": "const0name",
+          "pars": [
+            {
+              "name": "const0name",
+              "type": "Par"
+            },
+            {
+              "name": "const0value",
+              "type": "Par"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
