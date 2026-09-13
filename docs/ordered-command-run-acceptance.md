@@ -50,9 +50,26 @@ authored probe graph, saved SHA-256
 then closed normally. Offline upgrade correctly refused while the independent
 artwork TD process remained open. No gate was bypassed.
 
-Actual offline upgrade, backup comparison, cold reopening, same-version no-op,
-and final release/install verification are pending the coordinated all-TD-closed
-window. This checkpoint does not claim release completion.
+During the coordinated all-TD-closed window, the vendor gate caught duplicate
+`.cparm` TOC insertion from the old add-only migration path. The original was
+unchanged. The narrow fix preserves the already verified existing definition,
+TOC and Connectionstate; older sources without it still receive the definition.
+Independent review approved the fix; tests assert one Connectionstate entry.
+
+Formal `td-agent upgrade-project` subsequently passed on the disposable project:
+upgraded SHA `324754b80f32fbda327355936eab5f065fef1c073a921eff164600160cc08bf6`,
+verified original backup, then unchanged same-version no-op. The actual artwork
+was copied, upgraded, and passed same-version no-op before touching the original.
+Copy and original upgraded to exactly the same SHA:
+`c1123252de93a234ace77b71b0112e6b019698d5e5ee8fb50d227cd4a0f62056`.
+The original SHA was
+`7b434bdf27e1e210948c4f7ecddde8026f7f22a73a13fa894c6e82c738017656`;
+the formal backup was verified against it. Embedded Agent path remains
+`/project1/agent_host/runtime`, now v0.7.0. The owner cold-reopened the original:
+PID 15932, selector `bc3c`, Agent 0.7.0 / protocol 3; 30 native-scene snapshots
+exactly match before saving, controller/JSON DATs match disk, diagnostics are
+empty, and the 720p rendered image is correct. The file SHA remains unchanged.
+Final publication and installed-runtime verification remain pending.
 
 ## Simplification review
 

@@ -463,3 +463,5 @@ the entire run. JSONL progress always includes zero-based indexes and Request
 IDs before submission, followed by complete terminal snapshots. Save this
 output and query the recorded Request after interruption or unknown outcome;
 do not blindly rerun the plan. Nested `batch.execute` is unsupported.
+
+The current release additionally supports verified canonical Agent 0.6.0 → 0.7.0 offline migration, preserving its existing Connectionstate definition.

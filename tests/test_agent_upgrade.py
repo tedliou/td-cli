@@ -55,6 +55,9 @@ def migration(tmp_path, monkeypatch, request):
     target_component.with_suffix(".cparm").write_bytes(b"known connection-state definition")
     if request.param == "0.6.0":
         source.with_suffix(".cparm").write_bytes(b"known connection-state definition")
+        source.with_suffix(".parm").write_bytes(
+            b"?\nenableexternaltox 0 off\nConnectionstate 67109184 online\n?\n"
+        )
     target_component.with_suffix(".parm").write_bytes(
         b"?\nenableexternaltox 0 off\nConnectionstate 67109184 stopped\n?\n"
     )
@@ -110,6 +113,7 @@ def test_public_upgrade_preserves_graph_path_and_backup_then_is_noop(migration):
         assert archive.read("media.parm") == b"relative media path\x00unchanged"
         assert b'"0.7.0"' in archive.read("project1/my_agent/agent_manifest.text")
         assert archive.read("project1/my_agent.cparm") == b"known connection-state definition"
+        assert archive.read("project1/my_agent.parm").count(b"Connectionstate ") == 1
     upgraded = project.read_bytes()
     second = invoke(migration)
     assert second.exit_code == 0, second.output

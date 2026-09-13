@@ -309,7 +309,7 @@ def upgrade_project(
             if not replacement.is_file():
                 raise UpgradeError("nested target Agent content is unsupported")
             shutil.copyfile(replacement, component / replacement.name)
-        if target.with_suffix(".cparm").exists():
+        if target.with_suffix(".cparm").exists() and not component.with_suffix(".cparm").exists():
             custom = component.with_suffix(".cparm")
             shutil.copyfile(target.with_suffix(".cparm"), custom)
             root_parm = component.with_suffix(".parm")
