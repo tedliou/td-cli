@@ -206,10 +206,13 @@ def identify(root: Path, target: Path) -> tuple[Path, bool]:
         raise UpgradeError("embedded Agent has modified root parameters or external linkage")
     custom = component.with_suffix(".cparm")
     target_custom = target.with_suffix(".cparm")
-    if same and target_custom.exists() and not custom.exists():
+    has_connection_state = same or version == "0.6.0"
+    if has_connection_state and target_custom.exists() and not custom.exists():
         raise UpgradeError("embedded Agent is missing custom parameters")
     if custom.exists() and (
-        not same or not target_custom.exists() or custom.read_bytes() != target_custom.read_bytes()
+        not has_connection_state
+        or not target_custom.exists()
+        or custom.read_bytes() != target_custom.read_bytes()
     ):
         raise UpgradeError("embedded Agent has modified custom parameters")
     if not component.with_suffix(".n").read_bytes().startswith(b"COMP:base\n"):

@@ -5,7 +5,7 @@ Locked platform: Windows 11, TouchDesigner 2025.32050.
 
 ## Evidence
 
-- Complete local gate passed: 506 tests, Ruff lint/format, mypy (20 source
+- Complete local gate passed: 508 tests, Ruff lint/format, mypy (20 source
   files), locked dependency check, Agent source/artifact inspection, and diff
   whitespace check. The existing Starlette/httpx deprecation warning remains.
 - Installed v0.6.0 `td.exe --version`, three bounded subprocesses: 1.518,
@@ -39,6 +39,11 @@ Canonical source revision:
 
 The v0.6.0 canonical offline source whitelist was computed from the previously
 published TOX `2c36a3b4bca3db058d3481c6d84b00882b0d9700e5c88465177a1944cda53cc1`.
+The existing Connectionstate custom parameter definition is accepted only after
+the canonical source hashes match and the definition exactly matches the target;
+missing or modified definitions remain rejected. A public fixture reproduced
+the previous cross-version rejection before this narrow correction. Independent
+review confirmed the fix, and the rejection test preserves the original file.
 The disposable project imported it through `ops.tox.import`, preserved the
 authored probe graph, saved SHA-256
 `d4109aff907cb10e1a35ea9840ad250b0ccb2ce82cb966f9743b441ac5311b0b`,

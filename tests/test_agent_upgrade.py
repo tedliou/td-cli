@@ -53,6 +53,8 @@ def migration(tmp_path, monkeypatch, request):
     target_root = tmp_path / "target"
     target_component = component(target_root / "td_agent", "0.7.0")
     target_component.with_suffix(".cparm").write_bytes(b"known connection-state definition")
+    if request.param == "0.6.0":
+        source.with_suffix(".cparm").write_bytes(b"known connection-state definition")
     target_component.with_suffix(".parm").write_bytes(
         b"?\nenableexternaltox 0 off\nConnectionstate 67109184 stopped\n?\n"
     )
@@ -183,6 +185,18 @@ def test_unknown_agent_children_are_rejected(migration):
     result = invoke(migration)
     assert result.exit_code == 1
     assert "unknown or missing children" in result.output
+    assert project.read_bytes() == original
+
+
+def test_modified_connection_state_definition_is_rejected(migration):
+    project, _, _, temporary = migration
+    source = temporary / "source"
+    (source / "project1/my_agent.cparm").write_bytes(b"modified custom controls")
+    packed(source, project)
+    original = project.read_bytes()
+    result = invoke(migration)
+    assert result.exit_code == 1
+    assert "modified custom parameters" in result.output
     assert project.read_bytes() == original
 
 
