@@ -31,6 +31,10 @@ CI 實際建置 wheel／sdist，逐一比較 metadata、文件集合及內容；
 `scripts/build_release.py` 會核對實際 Python／原生函式庫版本與 Python LICENSE，
 若環境與快照不同則拒絕打包，須先重新審查授權快照。
 
+CI 查核發現 GitHub runner 使用官方 Python 3.11.9，本機使用 uv Python 3.11.15。
+保留既有工具鏈，分別收錄兩者的官方 LICENSE 與原生版本，透過 `runtime_variants`
+明確核對；未知版本仍拒絕打包。此清單不是任意 Python 3.11 環境的相容性承諾。
+
 ## 依據
 
 - [MIT 標準全文](https://opensource.org/license/mit)

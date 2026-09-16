@@ -19,7 +19,9 @@ td-cli 自有程式碼採 [MIT](LICENSE)。下列元件維持各自授權，並�
 
 PyInstaller 使用其 bootloader／產物散布例外；原始 COPYING 仍保留。
 CPython 的歷史授權及原生元件聲明另列於 runtime 項目；Microsoft runtime
-的條件見 CPython LICENSE。Python 原生版本快照記錄於 inventory，打包前須核對。
+的條件見 CPython LICENSE。Python 原生版本快照記錄於 inventory 的 `runtime_variants`，打包前須核對。
+已核對的環境為官方 Windows Python 3.11.9（既有 CI）與 uv Python 3.11.15（本機）；
+兩者的 Python LICENSE 與原生版本均明確比對，其他環境須先重新審查。
 TouchDesigner 本體與 Derivative 內建元件不隨本專案散布，仍受
 [Derivative 授權](https://derivative.ca/UserGuide/Licensing) 規範。
 
@@ -201,6 +203,12 @@ TouchDesigner 本體與 Derivative 內建元件不隨本專案散布，仍受
 | wheel | 0.46.3 | MIT | setuptools vendored snapshot | [來源](https://pypi.org/project/wheel/0.46.3/) | [LICENSE.txt](LICENSES/python__setuptools__setuptools___vendor__wheel-0.46.3.dist-info__licenses__LICENSE.txt) |
 | zipp | 3.23.0 | MIT | setuptools vendored snapshot | [來源](https://pypi.org/project/zipp/3.23.0/) | [LICENSE](LICENSES/python__setuptools__setuptools___vendor__zipp-3.23.0.dist-info__licenses__LICENSE) |
 | Rust standard library | upstream native wheel toolchain | MIT (selected upstream option) | pydantic-core native runtime | [來源](https://github.com/rust-lang/rust/blob/1.87.0/LICENSE-MIT) | [LICENSE-MIT](LICENSES/runtime__Rust__LICENSE-MIT) |
+
+| CPython | 3.11.9 | PSF-2.0 and historical/component notices | CI Python 3.11.9 native runtime | [來源](https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip) | [原文](LICENSES/runtime__CPython-3.11.9__LICENSE.txt) |
+| CPython documentation | 3.11.9 | Python and component notices | CI Python 3.11.9 native runtime | [來源](https://raw.githubusercontent.com/python/cpython/v3.11.9/Doc/license.rst) | [原文](LICENSES/runtime__CPython-3.11.9__Doc-license.rst) |
+| OpenSSL | 3.0.13 | Apache-2.0 | CI Python 3.11.9 native runtime | [來源](https://raw.githubusercontent.com/openssl/openssl/openssl-3.0.13/LICENSE.txt) | [原文](LICENSES/runtime__OpenSSL-3.0.13__LICENSE.txt) |
+| Expat | 2.6.0 | MIT | CI Python 3.11.9 native runtime | [來源](https://raw.githubusercontent.com/libexpat/libexpat/R_2_6_0/expat/COPYING) | [原文](LICENSES/runtime__Expat-2.6.0__COPYING) |
+| SQLite | 3.45.1 | Public domain | CI Python 3.11.9 native runtime | [原始碼](https://github.com/sqlite/sqlite/tree/version-3.45.1) | [公共領域聲明](LICENSES/runtime__SQLite__LICENSE) |
 
 ## 更新與驗證
 

@@ -53,12 +53,12 @@ def license_files(root: Path, *, check_runtime: bool = False) -> dict[str, Path]
             "zlib": zlib.ZLIB_VERSION,
             "expat": expat.EXPAT_VERSION,
         }
-        if runtime != inventory["runtime"]:
-            raise ValueError("Python runtime changed: review native third-party license snapshot")
+        snapshot = inventory["runtime_variants"].get(runtime["python"])
+        if snapshot is None or runtime != snapshot["versions"]:
+            raise ValueError(
+                f"Python runtime changed: review native third-party license snapshot: {runtime}"
+            )
         runtime_license = Path(sys.base_prefix) / "LICENSE.txt"
-        if (
-            runtime_license.read_bytes()
-            != (root / "LICENSES/runtime__CPython__LICENSE.txt").read_bytes()
-        ):
+        if runtime_license.read_bytes() != (root / snapshot["license_file"]).read_bytes():
             raise ValueError("Python runtime license changed: refresh the reviewed snapshot")
     return files

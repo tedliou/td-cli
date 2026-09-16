@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import ssl
 import zipfile
 from pathlib import Path
 
@@ -10,6 +11,12 @@ import pytest
 
 from td_cli.licensing import license_files
 from td_cli.release import package_release, validate_agent_stage
+
+
+def test_release_build_refuses_unreviewed_native_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ssl, "OPENSSL_VERSION", "OpenSSL unreviewed")
+    with pytest.raises(ValueError, match="Python runtime changed"):
+        license_files(Path("."), check_runtime=True)
 
 
 def _write_executables(root: Path) -> None:
