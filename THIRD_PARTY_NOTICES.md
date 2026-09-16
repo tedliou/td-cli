@@ -203,7 +203,6 @@ TouchDesigner 本體與 Derivative 內建元件不隨本專案散布，仍受
 | wheel | 0.46.3 | MIT | setuptools vendored snapshot | [來源](https://pypi.org/project/wheel/0.46.3/) | [LICENSE.txt](LICENSES/python__setuptools__setuptools___vendor__wheel-0.46.3.dist-info__licenses__LICENSE.txt) |
 | zipp | 3.23.0 | MIT | setuptools vendored snapshot | [來源](https://pypi.org/project/zipp/3.23.0/) | [LICENSE](LICENSES/python__setuptools__setuptools___vendor__zipp-3.23.0.dist-info__licenses__LICENSE) |
 | Rust standard library | upstream native wheel toolchain | MIT (selected upstream option) | pydantic-core native runtime | [來源](https://github.com/rust-lang/rust/blob/1.87.0/LICENSE-MIT) | [LICENSE-MIT](LICENSES/runtime__Rust__LICENSE-MIT) |
-
 | CPython | 3.11.9 | PSF-2.0 and historical/component notices | CI Python 3.11.9 native runtime | [來源](https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip) | [原文](LICENSES/runtime__CPython-3.11.9__LICENSE.txt) |
 | CPython documentation | 3.11.9 | Python and component notices | CI Python 3.11.9 native runtime | [來源](https://raw.githubusercontent.com/python/cpython/v3.11.9/Doc/license.rst) | [原文](LICENSES/runtime__CPython-3.11.9__Doc-license.rst) |
 | OpenSSL | 3.0.13 | Apache-2.0 | CI Python 3.11.9 native runtime | [來源](https://raw.githubusercontent.com/openssl/openssl/openssl-3.0.13/LICENSE.txt) | [原文](LICENSES/runtime__OpenSSL-3.0.13__LICENSE.txt) |
