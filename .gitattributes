@@ -1,0 +1,2 @@
+# Preserve upstream license snapshots and their recorded SHA-256 on Windows.
+LICENSES/** -text -whitespace

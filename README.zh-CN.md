@@ -75,6 +75,15 @@ Skill 按任务链接 Derivative 理论与真实的 CLI help，避免猜类型�
 `project_file_changed`，不再误报 `protocol_incompatible`。保存超时保留 Request ID，
 先查 outcome 与磁盘状态再决定下一个 mutation。可执行文件升级仍不替换作品内嵌的 Agent。
 
+<!-- doc-section: license -->
+
+## 授权
+
+td-cli 自有代码采用 [MIT 许可](LICENSE)。
+[第三方许可清单](THIRD_PARTY_NOTICES.md) 保留依赖组件的许可、版权声明与源代码链接。
+四个 Release Artifact 与 Python 包均附带这些文件。TouchDesigner 仍受 Derivative 的许可约束。
+
+
 <!-- doc-section: development -->
 
 ## 开发

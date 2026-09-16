@@ -2,12 +2,21 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
+import ssl
 import zipfile
 from pathlib import Path
 
 import pytest
 
+from td_cli.licensing import license_files
 from td_cli.release import package_release, validate_agent_stage
+
+
+def test_release_build_refuses_unreviewed_native_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ssl, "OPENSSL_VERSION", "OpenSSL unreviewed")
+    with pytest.raises(ValueError, match="Python runtime changed"):
+        license_files(Path("."), check_runtime=True)
 
 
 def _write_executables(root: Path) -> None:
@@ -69,7 +78,10 @@ def test_release_packaging_creates_the_four_root_layouts_and_sorted_checksums(
     }
     for archive in artifacts:
         with zipfile.ZipFile(archive) as opened:
-            assert opened.namelist() == expected_entries[archive.name]
+            notices = license_files(Path("."))
+            assert opened.namelist() == sorted(expected_entries[archive.name] + list(notices))
+            for name, source in notices.items():
+                assert opened.read(name) == source.read_bytes()
             assert {item.date_time for item in opened.infolist()} == {(2023, 11, 14, 22, 13, 20)}
             assert {item.create_system for item in opened.infolist()} == {0}
 
@@ -79,6 +91,32 @@ def test_release_packaging_creates_the_four_root_layouts_and_sorted_checksums(
     assert "__VERSION__" not in (output / "install.ps1").read_text(encoding="utf-8")
     assert "0.7.1" in (output / "install.ps1").read_text(encoding="utf-8")
     assert (output / "uninstall.ps1").is_file()
+
+
+@pytest.mark.parametrize("damage", ["missing", "changed", "stale-lock"])
+def test_release_refuses_incomplete_or_stale_licenses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, damage: str
+) -> None:
+    for name in ("LICENSE", "THIRD_PARTY_NOTICES.md", "uv.lock"):
+        shutil.copyfile(name, tmp_path / name)
+    shutil.copytree("LICENSES", tmp_path / "LICENSES")
+    _write_executables(tmp_path)
+    _write_agent_stage(tmp_path)
+    damaged = tmp_path / "LICENSES/runtime__CPython__LICENSE.txt"
+    if damage == "missing":
+        damaged.unlink()
+    elif damage == "changed":
+        damaged.write_text("removed upstream notice", encoding="utf-8")
+    else:
+        lock = tmp_path / "uv.lock"
+        lock.write_text(
+            lock.read_text(encoding="utf-8").replace('name = "bidict"', 'name = "new-dependency"'),
+            encoding="utf-8",
+        )
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ValueError, match="license"):
+        package_release(tmp_path, tmp_path, tmp_path / "output", source_epoch=1_700_000_000)
+    assert not (tmp_path / "output").exists()
 
 
 def test_agent_stage_rejects_wrong_commit_or_touchdesigner_build(tmp_path: Path) -> None:

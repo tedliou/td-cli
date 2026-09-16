@@ -56,8 +56,9 @@ function Test-InstalledFiles([string]$Root, [string[]]$Archives, [string]$Scratc
     $verify = Join-Path $Scratch 'verify'
     New-Item -ItemType Directory -Force -Path $verify | Out-Null
     foreach ($archive in $Archives) { Expand-Archive (Join-Path $Scratch $archive) $verify -Force }
-    foreach ($file in Get-ChildItem $verify -File) {
-        $installed = Join-Path $Root $file.Name
+    foreach ($file in Get-ChildItem $verify -File -Recurse) {
+        $relative = $file.FullName.Substring($verify.Length).TrimStart('\', '/')
+        $installed = Join-Path $Root $relative
         if (-not (Test-Path $installed) -or (Get-FileHash $installed).Hash -ne (Get-FileHash $file.FullName).Hash) { return $false }
     }
     return $true
