@@ -1,0 +1,2518 @@
+{
+  "locked_packages": {
+    "aiohappyeyeballs": "2.7.1",
+    "aiohttp": "3.14.3",
+    "aiosignal": "1.4.0",
+    "altgraph": "0.17.5",
+    "annotated-doc": "0.0.5",
+    "annotated-types": "0.8.0",
+    "anyio": "4.14.2",
+    "attrs": "26.1.0",
+    "bidict": "0.23.1",
+    "certifi": "2026.7.22",
+    "click": "8.4.2",
+    "colorama": "0.4.6",
+    "fastapi": "0.141.1",
+    "frozenlist": "1.8.0",
+    "h11": "0.16.0",
+    "httpcore": "1.0.9",
+    "httpx": "0.28.1",
+    "idna": "3.18",
+    "iniconfig": "2.3.0",
+    "macholib": "1.16.4",
+    "markdown-it-py": "4.2.0",
+    "mdurl": "0.1.2",
+    "multidict": "6.7.1",
+    "mypy": "1.17.1",
+    "mypy-extensions": "1.1.0",
+    "packaging": "26.3",
+    "pathspec": "1.1.1",
+    "pefile": "2023.2.7",
+    "pluggy": "1.6.0",
+    "propcache": "0.5.2",
+    "pydantic": "2.13.4",
+    "pydantic-core": "2.46.4",
+    "pygments": "2.20.0",
+    "pyinstaller": "6.15.0",
+    "pyinstaller-hooks-contrib": "2026.6",
+    "pytest": "8.4.2",
+    "pytest-asyncio": "1.4.0",
+    "python-engineio": "4.13.4",
+    "python-socketio": "5.16.4",
+    "pywin32-ctypes": "0.2.3",
+    "rich": "15.0.0",
+    "ruff": "0.16.2",
+    "setuptools": "84.0.0",
+    "shellingham": "1.5.4",
+    "simple-websocket": "1.1.0",
+    "starlette": "1.5.0",
+    "typer": "0.27.1",
+    "typing-extensions": "4.16.0",
+    "typing-inspection": "0.4.2",
+    "uvicorn": "0.52.1",
+    "wsproto": "1.3.2",
+    "yarl": "1.24.5"
+  },
+  "components": [
+    {
+      "name": "aiohappyeyeballs",
+      "version": "2.7.1",
+      "kind": "Python locked toolchain",
+      "license": "PSF-2.0",
+      "source": "https://files.pythonhosted.org/packages/ce/f4/eec0465c2f67b2664688d0240b3212d5196fd89e741df67ddb81f8d35658/aiohappyeyeballs-2.7.1.tar.gz",
+      "files": [
+        "LICENSES/python__aiohappyeyeballs__aiohappyeyeballs-2.7.1.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "aiohttp",
+      "version": "3.14.3",
+      "kind": "Python locked toolchain",
+      "license": "Apache-2.0 AND MIT",
+      "source": "https://files.pythonhosted.org/packages/58/d9/22ce5786ac0c1653ae8b6c23bded02c1686d11f0dbb45b31ce128e0df985/aiohttp-3.14.3.tar.gz",
+      "files": [
+        "LICENSES/python__aiohttp__aiohttp-3.14.3.dist-info__licenses__LICENSE.txt",
+        "LICENSES/python__aiohttp__aiohttp-3.14.3.dist-info__licenses__vendor__llhttp__LICENSE"
+      ]
+    },
+    {
+      "name": "aiosignal",
+      "version": "1.4.0",
+      "kind": "Python locked toolchain",
+      "license": "Apache 2.0",
+      "source": "https://files.pythonhosted.org/packages/61/62/06741b579156360248d1ec624842ad0edf697050bbaf7c3e46394e106ad1/aiosignal-1.4.0.tar.gz",
+      "files": [
+        "LICENSES/python__aiosignal__aiosignal-1.4.0.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "altgraph",
+      "version": "0.17.5",
+      "kind": "Python locked toolchain",
+      "license": "MIT",
+      "source": "https://files.pythonhosted.org/packages/7e/f8/97fdf103f38fed6792a1601dbc16cc8aac56e7459a9fff08c812d8ae177a/altgraph-0.17.5.tar.gz",
+      "files": [
+        "LICENSES/python__altgraph__altgraph-0.17.5.dist-info__LICENSE"
+      ]
+    },
+    {
+      "name": "annotated-doc",
+      "version": "0.0.5",
+      "kind": "Python locked toolchain",
+      "license": "MIT",
+      "source": "https://files.pythonhosted.org/packages/5a/8e/38aa427ed5402449e226975b649c5dc73ccadfefeb95e6aecb8f8ea4b6b6/annotated_doc-0.0.5.tar.gz",
+      "files": [
+        "LICENSES/python__annotated-doc__annotated_doc-0.0.5.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "annotated-types",
+      "version": "0.8.0",
+      "kind": "Python locked toolchain",
+      "license": "MIT",
+      "source": "https://files.pythonhosted.org/packages/5f/56/a8120250d128bed162cd73c76d45f6ef9991f3e068f62a8ee060afa3104a/annotated_types-0.8.0.tar.gz",
+      "files": [
+        "LICENSES/python__annotated-types__annotated_types-0.8.0.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "anyio",
+      "version": "4.14.2",
+      "kind": "Python locked toolchain",
+      "license": "MIT",
+      "source": "https://files.pythonhosted.org/packages/61/cc/a381afa6efea9f496eff839d4a6a1aed3bfafc7b3ab4b0d1b243a12573dd/anyio-4.14.2.tar.gz",
+      "files": [
+        "LICENSES/python__anyio__anyio-4.14.2.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "attrs",
+      "version": "26.1.0",
+      "kind": "Python locked toolchain",
+      "license": "MIT",
+      "source": "https://files.pythonhosted.org/packages/9a/8e/82a0fe20a541c03148528be8cac2408564a6c9a0cc7e9171802bc1d26985/attrs-26.1.0.tar.gz",
+      "files": [
+        "LICENSES/python__attrs__attrs-26.1.0.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "bidict",
+      "version": "0.23.1",
+      "kind": "Python locked toolchain",
+      "license": "MPL 2.0",
+      "source": "https://files.pythonhosted.org/packages/9a/6e/026678aa5a830e07cd9498a05d3e7e650a4f56a42f267a53d22bcda1bdc9/bidict-0.23.1.tar.gz",
+      "files": [
+        "LICENSES/python__bidict__bidict-0.23.1.dist-info__LICENSE"
+      ]
+    },
+    {
+      "name": "certifi",
+      "version": "2026.7.22",
+      "kind": "Python locked toolchain",
+      "license": "MPL-2.0",
+      "source": "https://files.pythonhosted.org/packages/a3/c2/24167ea9858356b47a87a50d39908bfdb72ceeefe0041586e704e5376b3a/certifi-2026.7.22.tar.gz",
+      "files": [
+        "LICENSES/python__certifi__certifi-2026.7.22.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "click",
+      "version": "8.4.2",
+      "kind": "Python locked toolchain",
+      "license": "BSD-3-Clause",
+      "source": "https://files.pythonhosted.org/packages/76/d4/81420972a676e8ffea40450d8c8c92943e7218a78fe9b64359836cc9876b/click-8.4.2.tar.gz",
+      "files": [
+        "LICENSES/python__click__click-8.4.2.dist-info__licenses__LICENSE.txt"
+      ]
+    },
+    {
+      "name": "colorama",
+      "version": "0.4.6",
+      "kind": "Python locked toolchain",
+      "license": "BSD License",
+      "source": "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz",
+      "files": [
+        "LICENSES/python__colorama__colorama-0.4.6.dist-info__licenses__LICENSE.txt"
+      ]
+    },
+    {
+      "name": "fastapi",
+      "version": "0.141.1",
+      "kind": "Python locked toolchain",
+      "license": "MIT",
+      "source": "https://files.pythonhosted.org/packages/8a/02/91e3416a8fdd715abb903a952a6bec7cdd8d14eed55d415fc8595524c319/fastapi-0.141.1.tar.gz",
+      "files": [
+        "LICENSES/python__fastapi__fastapi-0.141.1.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "frozenlist",
+      "version": "1.8.0",
+      "kind": "Python locked toolchain",
+      "license": "Apache-2.0",
+      "source": "https://files.pythonhosted.org/packages/2d/f5/c831fac6cc817d26fd54c7eaccd04ef7e0288806943f7cc5bbf69f3ac1f0/frozenlist-1.8.0.tar.gz",
+      "files": [
+        "LICENSES/python__frozenlist__frozenlist-1.8.0.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "h11",
+      "version": "0.16.0",
+      "kind": "Python locked toolchain",
+      "license": "MIT",
+      "source": "https://files.pythonhosted.org/packages/01/ee/02a2c011bdab74c6fb3c75474d40b3052059d95df7e73351460c8588d963/h11-0.16.0.tar.gz",
+      "files": [
+        "LICENSES/python__h11__h11-0.16.0.dist-info__licenses__LICENSE.txt"
+      ]
+    },
+    {
+      "name": "httpcore",
+      "version": "1.0.9",
+      "kind": "Python locked toolchain",
+      "license": "BSD-3-Clause",
+      "source": "https://files.pythonhosted.org/packages/06/94/82699a10bca87a5556c9c59b5963f2d039dbd239f25bc2a63907a05a14cb/httpcore-1.0.9.tar.gz",
+      "files": [
+        "LICENSES/python__httpcore__httpcore-1.0.9.dist-info__licenses__LICENSE.md"
+      ]
+    },
+    {
+      "name": "httpx",
+      "version": "0.28.1",
+      "kind": "Python locked toolchain",
+      "license": "BSD-3-Clause",
+      "source": "https://files.pythonhosted.org/packages/b1/df/48c586a5fe32a0f01324ee087459e112ebb7224f646c0b5023f5e79e9956/httpx-0.28.1.tar.gz",
+      "files": [
+        "LICENSES/python__httpx__httpx-0.28.1.dist-info__licenses__LICENSE.md"
+      ]
+    },
+    {
+      "name": "idna",
+      "version": "3.18",
+      "kind": "Python locked toolchain",
+      "license": "BSD-3-Clause",
+      "source": "https://files.pythonhosted.org/packages/cd/63/9496c57188a2ee585e0f1db071d75089a11e98aa86eb99d9d7618fc1edce/idna-3.18.tar.gz",
+      "files": [
+        "LICENSES/python__idna__idna-3.18.dist-info__licenses__LICENSE.md"
+      ]
+    },
+    {
+      "name": "iniconfig",
+      "version": "2.3.0",
+      "kind": "Python locked toolchain",
+      "license": "MIT",
+      "source": "https://files.pythonhosted.org/packages/72/34/14ca021ce8e5dfedc35312d08ba8bf51fdd999c576889fc2c24cb97f4f10/iniconfig-2.3.0.tar.gz",
+      "files": [
+        "LICENSES/python__iniconfig__iniconfig-2.3.0.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "macholib",
+      "version": "1.16.4",
+      "kind": "Python locked toolchain",
+      "license": "MIT",
+      "source": "https://files.pythonhosted.org/packages/10/2f/97589876ea967487978071c9042518d28b958d87b17dceb7cdc1d881f963/macholib-1.16.4.tar.gz",
+      "files": [
+        "LICENSES/python__macholib__macholib-1.16.4.dist-info__LICENSE"
+      ]
+    },
+    {
+      "name": "markdown-it-py",
+      "version": "4.2.0",
+      "kind": "Python locked toolchain",
+      "license": "MIT License",
+      "source": "https://files.pythonhosted.org/packages/06/ff/7841249c247aa650a76b9ee4bbaeae59370dc8bfd2f6c01f3630c35eb134/markdown_it_py-4.2.0.tar.gz",
+      "files": [
+        "LICENSES/python__markdown-it-py__markdown_it_py-4.2.0.dist-info__licenses__LICENSE",
+        "LICENSES/python__markdown-it-py__markdown_it_py-4.2.0.dist-info__licenses__LICENSE.markdown-it"
+      ]
+    },
+    {
+      "name": "mdurl",
+      "version": "0.1.2",
+      "kind": "Python locked toolchain",
+      "license": "MIT License",
+      "source": "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec958cb99bd3efefba235e65cdeb9c84d24a8293ba1d90/mdurl-0.1.2.tar.gz",
+      "files": [
+        "LICENSES/python__mdurl__mdurl-0.1.2.dist-info__LICENSE"
+      ]
+    },
+    {
+      "name": "multidict",
+      "version": "6.7.1",
+      "kind": "Python locked toolchain",
+      "license": "Apache License 2.0",
+      "source": "https://files.pythonhosted.org/packages/1a/c2/c2d94cbe6ac1753f3fc980da97b3d930efe1da3af3c9f5125354436c073d/multidict-6.7.1.tar.gz",
+      "files": [
+        "LICENSES/python__multidict__multidict-6.7.1.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "mypy",
+      "version": "1.17.1",
+      "kind": "Python locked toolchain",
+      "license": "MIT",
+      "source": "https://files.pythonhosted.org/packages/8e/22/ea637422dedf0bf36f3ef238eab4e455e2a0dcc3082b5cc067615347ab8e/mypy-1.17.1.tar.gz",
+      "files": [
+        "LICENSES/python__mypy__mypy-1.17.1.dist-info__licenses__LICENSE",
+        "LICENSES/python__mypy__mypy__typeshed__LICENSE"
+      ]
+    },
+    {
+      "name": "mypy-extensions",
+      "version": "1.1.0",
+      "kind": "Python locked toolchain",
+      "license": "MIT",
+      "source": "https://files.pythonhosted.org/packages/a2/6e/371856a3fb9d31ca8dac321cda606860fa4548858c0cc45d9d1d4ca2628b/mypy_extensions-1.1.0.tar.gz",
+      "files": [
+        "LICENSES/python__mypy-extensions__mypy_extensions-1.1.0.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "packaging",
+      "version": "26.3",
+      "kind": "Python locked toolchain",
+      "license": "Apache-2.0 OR BSD-2-Clause",
+      "source": "https://files.pythonhosted.org/packages/7d/fa/3944b40b07da9ce895c0e6303a5ab7d53da063554f534556b134a54d6093/packaging-26.3.tar.gz",
+      "files": [
+        "LICENSES/python__packaging__packaging-26.3.dist-info__licenses__LICENSE",
+        "LICENSES/python__packaging__packaging-26.3.dist-info__licenses__LICENSE.APACHE",
+        "LICENSES/python__packaging__packaging-26.3.dist-info__licenses__LICENSE.BSD"
+      ]
+    },
+    {
+      "name": "pathspec",
+      "version": "1.1.1",
+      "kind": "Python locked toolchain",
+      "license": "Mozilla Public License 2.0 (MPL 2.0)",
+      "source": "https://files.pythonhosted.org/packages/5a/82/42f767fc1c1143d6fd36efb827202a2d997a375e160a71eb2888a925aac1/pathspec-1.1.1.tar.gz",
+      "files": [
+        "LICENSES/python__pathspec__pathspec-1.1.1.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "pefile",
+      "version": "2023.2.7",
+      "kind": "Python locked toolchain",
+      "license": "MIT",
+      "source": "https://files.pythonhosted.org/packages/78/c5/3b3c62223f72e2360737fd2a57c30e5b2adecd85e70276879609a7403334/pefile-2023.2.7.tar.gz",
+      "files": [
+        "LICENSES/python__pefile__pefile-2023.2.7.dist-info__LICENSE"
+      ]
+    },
+    {
+      "name": "pluggy",
+      "version": "1.6.0",
+      "kind": "Python locked toolchain",
+      "license": "MIT",
+      "source": "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz",
+      "files": [
+        "LICENSES/python__pluggy__pluggy-1.6.0.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "propcache",
+      "version": "0.5.2",
+      "kind": "Python locked toolchain",
+      "license": "Apache-2.0",
+      "source": "https://files.pythonhosted.org/packages/ec/44/c87281c333769159c50594f22610f77398a47ccbfbbf23074e744e86f87c/propcache-0.5.2.tar.gz",
+      "files": [
+        "LICENSES/python__propcache__propcache-0.5.2.dist-info__licenses__LICENSE",
+        "LICENSES/python__propcache__propcache-0.5.2.dist-info__licenses__NOTICE"
+      ]
+    },
+    {
+      "name": "pydantic",
+      "version": "2.13.4",
+      "kind": "Python locked toolchain",
+      "license": "MIT",
+      "source": "https://files.pythonhosted.org/packages/18/a5/b60d21ac674192f8ab0ba4e9fd860690f9b4a6e51ca5df118733b487d8d6/pydantic-2.13.4.tar.gz",
+      "files": [
+        "LICENSES/python__pydantic__pydantic-2.13.4.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "pydantic-core",
+      "version": "2.46.4",
+      "kind": "Python locked toolchain",
+      "license": "MIT",
+      "source": "https://files.pythonhosted.org/packages/9d/56/921726b776ace8d8f5db44c4ef961006580d91dc52b803c489fafd1aa249/pydantic_core-2.46.4.tar.gz",
+      "files": [
+        "LICENSES/python__pydantic-core__pydantic_core-2.46.4.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "pygments",
+      "version": "2.20.0",
+      "kind": "Python locked toolchain",
+      "license": "BSD-2-Clause",
+      "source": "https://files.pythonhosted.org/packages/c3/b2/bc9c9196916376152d655522fdcebac55e66de6603a76a02bca1b6414f6c/pygments-2.20.0.tar.gz",
+      "files": [
+        "LICENSES/python__pygments__pygments-2.20.0.dist-info__licenses__AUTHORS",
+        "LICENSES/python__pygments__pygments-2.20.0.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "pyinstaller",
+      "version": "6.15.0",
+      "kind": "Python locked toolchain",
+      "license": "GPLv2-or-later with a special exception which allows to use PyInstaller to build and distribute non-free programs (including commercial ones)",
+      "source": "https://files.pythonhosted.org/packages/64/17/b2bb4de22650adbeef401fa82a1b43028976547a8728602e4d29735b455e/pyinstaller-6.15.0.tar.gz",
+      "files": [
+        "LICENSES/python__pyinstaller__pyinstaller-6.15.0.dist-info__COPYING.txt"
+      ]
+    },
+    {
+      "name": "pyinstaller-hooks-contrib",
+      "version": "2026.6",
+      "kind": "Python locked toolchain",
+      "license": "Apache Software License; GNU General Public License v2 (GPLv2)",
+      "source": "https://files.pythonhosted.org/packages/94/5b/c9fe0db5e83ee1c39b2258fa21d23b15e1a60786b6c5990ee5074ead8bb6/pyinstaller_hooks_contrib-2026.6.tar.gz",
+      "files": [
+        "LICENSES/python__pyinstaller-hooks-contrib__pyinstaller_hooks_contrib-2026.6.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "pytest",
+      "version": "8.4.2",
+      "kind": "Python locked toolchain",
+      "license": "MIT",
+      "source": "https://files.pythonhosted.org/packages/a3/5c/00a0e072241553e1a7496d638deababa67c5058571567b92a7eaa258397c/pytest-8.4.2.tar.gz",
+      "files": [
+        "LICENSES/python__pytest__pytest-8.4.2.dist-info__licenses__AUTHORS",
+        "LICENSES/python__pytest__pytest-8.4.2.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "pytest-asyncio",
+      "version": "1.4.0",
+      "kind": "Python locked toolchain",
+      "license": "Apache-2.0",
+      "source": "https://files.pythonhosted.org/packages/43/7c/d36d04db312ecf4298932ef77e6e4a9e8ad017906e24e34f0b0c361a2473/pytest_asyncio-1.4.0.tar.gz",
+      "files": [
+        "LICENSES/python__pytest-asyncio__pytest_asyncio-1.4.0.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "python-engineio",
+      "version": "4.13.4",
+      "kind": "Python locked toolchain",
+      "license": "MIT",
+      "source": "https://files.pythonhosted.org/packages/cf/56/10a529f5396df653181f747997f970dba31f8f2eac3b9a88c1f9d7bb25c3/python_engineio-4.13.4.tar.gz",
+      "files": [
+        "LICENSES/python__python-engineio__python_engineio-4.13.4.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "python-socketio",
+      "version": "5.16.4",
+      "kind": "Python locked toolchain",
+      "license": "MIT",
+      "source": "https://files.pythonhosted.org/packages/06/5e/87d6b547c87c6d64f4a05f5bfaf6f42e9b786561216434290fdaa83f8667/python_socketio-5.16.4.tar.gz",
+      "files": [
+        "LICENSES/python__python-socketio__python_socketio-5.16.4.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "pywin32-ctypes",
+      "version": "0.2.3",
+      "kind": "Python locked toolchain",
+      "license": "BSD-3-Clause",
+      "source": "https://files.pythonhosted.org/packages/85/9f/01a1a99704853cb63f253eea009390c88e7131c67e66a0a02099a8c917cb/pywin32-ctypes-0.2.3.tar.gz",
+      "files": [
+        "LICENSES/python__pywin32-ctypes__pywin32_ctypes-0.2.3.dist-info__LICENSE.txt"
+      ]
+    },
+    {
+      "name": "rich",
+      "version": "15.0.0",
+      "kind": "Python locked toolchain",
+      "license": "MIT",
+      "source": "https://files.pythonhosted.org/packages/c0/8f/0722ca900cc807c13a6a0c696dacf35430f72e0ec571c4275d2371fca3e9/rich-15.0.0.tar.gz",
+      "files": [
+        "LICENSES/python__rich__rich-15.0.0.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "ruff",
+      "version": "0.16.2",
+      "kind": "Python locked toolchain",
+      "license": "MIT",
+      "source": "https://files.pythonhosted.org/packages/73/e1/4508a569211b35599016e84ba65c1a992b7a4004b4b6c4bea02a851cba1b/ruff-0.16.2.tar.gz",
+      "files": [
+        "LICENSES/python__ruff__ruff-0.16.2.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "setuptools",
+      "version": "84.0.0",
+      "kind": "Python locked toolchain",
+      "license": "MIT; vendored components retain their own licenses",
+      "source": "https://files.pythonhosted.org/packages/6d/44/f5da03a8ef95d369145c5bb53050e7877c9f3d312e128605fd9504829143/setuptools-84.0.0.tar.gz",
+      "files": [
+        "LICENSES/python__setuptools__setuptools-84.0.0.dist-info__licenses__LICENSE",
+        "LICENSES/python__setuptools__setuptools___vendor__autocommand-2.2.2.dist-info__LICENSE",
+        "LICENSES/python__setuptools__setuptools___vendor__backports.tarfile-1.2.0.dist-info__LICENSE",
+        "LICENSES/python__setuptools__setuptools___vendor__importlib_metadata-8.7.1.dist-info__licenses__LICENSE",
+        "LICENSES/python__setuptools__setuptools___vendor__jaraco.text-4.0.0.dist-info__LICENSE",
+        "LICENSES/python__setuptools__setuptools___vendor__jaraco_context-6.1.0.dist-info__licenses__LICENSE",
+        "LICENSES/python__setuptools__setuptools___vendor__jaraco_functools-4.4.0.dist-info__licenses__LICENSE",
+        "LICENSES/python__setuptools__setuptools___vendor__more_itertools-10.8.0.dist-info__licenses__LICENSE",
+        "LICENSES/python__setuptools__setuptools___vendor__packaging-26.0.dist-info__licenses__LICENSE",
+        "LICENSES/python__setuptools__setuptools___vendor__packaging-26.0.dist-info__licenses__LICENSE.APACHE",
+        "LICENSES/python__setuptools__setuptools___vendor__packaging-26.0.dist-info__licenses__LICENSE.BSD",
+        "LICENSES/python__setuptools__setuptools___vendor__platformdirs-4.4.0.dist-info__licenses__LICENSE",
+        "LICENSES/python__setuptools__setuptools___vendor__tomli-2.4.0.dist-info__licenses__LICENSE",
+        "LICENSES/python__setuptools__setuptools___vendor__wheel-0.46.3.dist-info__licenses__LICENSE.txt",
+        "LICENSES/python__setuptools__setuptools___vendor__zipp-3.23.0.dist-info__licenses__LICENSE",
+        "LICENSES/python__setuptools__setuptools__config__NOTICE",
+        "LICENSES/python__setuptools__setuptools__config___validate_pyproject__NOTICE"
+      ]
+    },
+    {
+      "name": "shellingham",
+      "version": "1.5.4",
+      "kind": "Python locked toolchain",
+      "license": "ISC License",
+      "source": "https://files.pythonhosted.org/packages/58/15/8b3609fd3830ef7b27b655beb4b4e9c62313a4e8da8c676e142cc210d58e/shellingham-1.5.4.tar.gz",
+      "files": [
+        "LICENSES/python__shellingham__shellingham-1.5.4.dist-info__LICENSE"
+      ]
+    },
+    {
+      "name": "simple-websocket",
+      "version": "1.1.0",
+      "kind": "Python locked toolchain",
+      "license": "MIT License",
+      "source": "https://files.pythonhosted.org/packages/b0/d4/bfa032f961103eba93de583b161f0e6a5b63cebb8f2c7d0c6e6efe1e3d2e/simple_websocket-1.1.0.tar.gz",
+      "files": [
+        "LICENSES/python__simple-websocket__simple_websocket-1.1.0.dist-info__LICENSE"
+      ]
+    },
+    {
+      "name": "starlette",
+      "version": "1.5.0",
+      "kind": "Python locked toolchain",
+      "license": "BSD-3-Clause",
+      "source": "https://files.pythonhosted.org/packages/92/aa/bf8ead9ed9d965a9290d291c4ac2d30ac1ae1f9b05a1a0ffdf1a05ac8ac6/starlette-1.5.0.tar.gz",
+      "files": [
+        "LICENSES/python__starlette__starlette-1.5.0.dist-info__licenses__LICENSE.md"
+      ]
+    },
+    {
+      "name": "typer",
+      "version": "0.27.1",
+      "kind": "Python locked toolchain",
+      "license": "MIT",
+      "source": "https://files.pythonhosted.org/packages/ae/40/4a3db7990d1f62a53182aa96eaef57aeb2886a27f90a195bc66713565d31/typer-0.27.1.tar.gz",
+      "files": [
+        "LICENSES/python__typer__typer-0.27.1.dist-info__licenses__LICENSE",
+        "LICENSES/python__typer__typer___click__LICENSE.txt"
+      ]
+    },
+    {
+      "name": "typing-extensions",
+      "version": "4.16.0",
+      "kind": "Python locked toolchain",
+      "license": "PSF-2.0",
+      "source": "https://files.pythonhosted.org/packages/f6/cc/6253133b5bb138fc3306cebfbda2c520f545d36b5be2c7255cc528bb45d6/typing_extensions-4.16.0.tar.gz",
+      "files": [
+        "LICENSES/python__typing-extensions__typing_extensions-4.16.0.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "typing-inspection",
+      "version": "0.4.2",
+      "kind": "Python locked toolchain",
+      "license": "MIT",
+      "source": "https://files.pythonhosted.org/packages/55/e3/70399cb7dd41c10ac53367ae42139cf4b1ca5f36bb3dc6c9d33acdb43655/typing_inspection-0.4.2.tar.gz",
+      "files": [
+        "LICENSES/python__typing-inspection__typing_inspection-0.4.2.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "uvicorn",
+      "version": "0.52.1",
+      "kind": "Python locked toolchain",
+      "license": "BSD-3-Clause",
+      "source": "https://files.pythonhosted.org/packages/03/18/ccce41535dee1be77735592bd19965f3972c82e07ee703d324709496b716/uvicorn-0.52.1.tar.gz",
+      "files": [
+        "LICENSES/python__uvicorn__uvicorn-0.52.1.dist-info__licenses__LICENSE.md"
+      ]
+    },
+    {
+      "name": "wsproto",
+      "version": "1.3.2",
+      "kind": "Python locked toolchain",
+      "license": "MIT",
+      "source": "https://files.pythonhosted.org/packages/c7/79/12135bdf8b9c9367b8701c2c19a14c913c120b882d50b014ca0d38083c2c/wsproto-1.3.2.tar.gz",
+      "files": [
+        "LICENSES/python__wsproto__wsproto-1.3.2.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "yarl",
+      "version": "1.24.5",
+      "kind": "Python locked toolchain",
+      "license": "Apache-2.0",
+      "source": "https://files.pythonhosted.org/packages/31/33/ebe9e3d1f86c7a0b51094c0a146392045ca1631d2664889539dec8088a33/yarl-1.24.5.tar.gz",
+      "files": [
+        "LICENSES/python__yarl__yarl-1.24.5.dist-info__licenses__LICENSE",
+        "LICENSES/python__yarl__yarl-1.24.5.dist-info__licenses__NOTICE"
+      ]
+    },
+    {
+      "name": "ahash",
+      "version": "0.8.12",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/ahash/ahash-0.8.12.crate",
+      "files": [
+        "LICENSES/rust__ahash-0.8.12__LICENSE-APACHE",
+        "LICENSES/rust__ahash-0.8.12__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "aho-corasick",
+      "version": "1.1.3",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Unlicense OR MIT",
+      "source": "https://static.crates.io/crates/aho-corasick/aho-corasick-1.1.3.crate",
+      "files": [
+        "LICENSES/rust__aho-corasick-1.1.3__COPYING",
+        "LICENSES/rust__aho-corasick-1.1.3__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "allocator-api2",
+      "version": "0.2.21",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/allocator-api2/allocator-api2-0.2.21.crate",
+      "files": [
+        "LICENSES/rust__allocator-api2-0.2.21__LICENSE-APACHE",
+        "LICENSES/rust__allocator-api2-0.2.21__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "autocfg",
+      "version": "1.3.0",
+      "kind": "pydantic-core Rust SBOM (excluded)",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://static.crates.io/crates/autocfg/autocfg-1.3.0.crate",
+      "files": [
+        "LICENSES/rust__autocfg-1.3.0__LICENSE-APACHE",
+        "LICENSES/rust__autocfg-1.3.0__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "base64",
+      "version": "0.22.1",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/base64/base64-0.22.1.crate",
+      "files": [
+        "LICENSES/rust__base64-0.22.1__LICENSE-APACHE",
+        "LICENSES/rust__base64-0.22.1__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "bitflags",
+      "version": "2.9.1",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/bitflags/bitflags-2.9.1.crate",
+      "files": [
+        "LICENSES/rust__bitflags-2.9.1__LICENSE-APACHE",
+        "LICENSES/rust__bitflags-2.9.1__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "bitvec",
+      "version": "1.0.1",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT",
+      "source": "https://static.crates.io/crates/bitvec/bitvec-1.0.1.crate",
+      "files": [
+        "LICENSES/rust__bitvec-1.0.1__LICENSE.txt"
+      ]
+    },
+    {
+      "name": "bumpalo",
+      "version": "3.19.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/bumpalo/bumpalo-3.19.0.crate",
+      "files": [
+        "LICENSES/rust__bumpalo-3.19.0__LICENSE-APACHE",
+        "LICENSES/rust__bumpalo-3.19.0__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "cc",
+      "version": "1.0.101",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/cc/cc-1.0.101.crate",
+      "files": [
+        "LICENSES/rust__cc-1.0.101__LICENSE-APACHE",
+        "LICENSES/rust__cc-1.0.101__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "cfg-if",
+      "version": "1.0.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/cfg-if/cfg-if-1.0.0.crate",
+      "files": [
+        "LICENSES/rust__cfg-if-1.0.0__LICENSE-APACHE",
+        "LICENSES/rust__cfg-if-1.0.0__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "displaydoc",
+      "version": "0.2.5",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/displaydoc/displaydoc-0.2.5.crate",
+      "files": [
+        "LICENSES/rust__displaydoc-0.2.5__LICENSE-APACHE",
+        "LICENSES/rust__displaydoc-0.2.5__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "enum_dispatch",
+      "version": "0.3.13",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/enum_dispatch/enum_dispatch-0.3.13.crate",
+      "files": [
+        "LICENSES/rust__enum_dispatch-0.3.13__LICENSE"
+      ]
+    },
+    {
+      "name": "equivalent",
+      "version": "1.0.2",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://static.crates.io/crates/equivalent/equivalent-1.0.2.crate",
+      "files": [
+        "LICENSES/rust__equivalent-1.0.2__LICENSE-APACHE",
+        "LICENSES/rust__equivalent-1.0.2__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "foldhash",
+      "version": "0.2.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Zlib",
+      "source": "https://static.crates.io/crates/foldhash/foldhash-0.2.0.crate",
+      "files": [
+        "LICENSES/rust__foldhash-0.2.0__LICENSE"
+      ]
+    },
+    {
+      "name": "form_urlencoded",
+      "version": "1.2.2",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/form_urlencoded/form_urlencoded-1.2.2.crate",
+      "files": [
+        "LICENSES/rust__form_urlencoded-1.2.2__LICENSE-APACHE",
+        "LICENSES/rust__form_urlencoded-1.2.2__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "funty",
+      "version": "2.0.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT",
+      "source": "https://static.crates.io/crates/funty/funty-2.0.0.crate",
+      "files": [
+        "LICENSES/rust__funty-2.0.0__LICENSE.txt"
+      ]
+    },
+    {
+      "name": "getrandom",
+      "version": "0.3.3",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/getrandom/getrandom-0.3.3.crate",
+      "files": [
+        "LICENSES/rust__getrandom-0.3.3__LICENSE-APACHE",
+        "LICENSES/rust__getrandom-0.3.3__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "hashbrown",
+      "version": "0.16.1",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/hashbrown/hashbrown-0.16.1.crate",
+      "files": [
+        "LICENSES/rust__hashbrown-0.16.1__LICENSE-APACHE",
+        "LICENSES/rust__hashbrown-0.16.1__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "heck",
+      "version": "0.5.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/heck/heck-0.5.0.crate",
+      "files": [
+        "LICENSES/rust__heck-0.5.0__LICENSE-APACHE",
+        "LICENSES/rust__heck-0.5.0__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "hex",
+      "version": "0.4.3",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/hex/hex-0.4.3.crate",
+      "files": [
+        "LICENSES/rust__hex-0.4.3__LICENSE-APACHE",
+        "LICENSES/rust__hex-0.4.3__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "icu_collections",
+      "version": "1.5.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Unicode-3.0",
+      "source": "https://static.crates.io/crates/icu_collections/icu_collections-1.5.0.crate",
+      "files": [
+        "LICENSES/rust__icu_collections-1.5.0__LICENSE"
+      ]
+    },
+    {
+      "name": "icu_locid",
+      "version": "1.5.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Unicode-3.0",
+      "source": "https://static.crates.io/crates/icu_locid/icu_locid-1.5.0.crate",
+      "files": [
+        "LICENSES/rust__icu_locid-1.5.0__LICENSE"
+      ]
+    },
+    {
+      "name": "icu_locid_transform",
+      "version": "1.5.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Unicode-3.0",
+      "source": "https://static.crates.io/crates/icu_locid_transform/icu_locid_transform-1.5.0.crate",
+      "files": [
+        "LICENSES/rust__icu_locid_transform-1.5.0__LICENSE"
+      ]
+    },
+    {
+      "name": "icu_locid_transform_data",
+      "version": "1.5.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Unicode-3.0",
+      "source": "https://static.crates.io/crates/icu_locid_transform_data/icu_locid_transform_data-1.5.0.crate",
+      "files": [
+        "LICENSES/rust__icu_locid_transform_data-1.5.0__LICENSE"
+      ]
+    },
+    {
+      "name": "icu_normalizer",
+      "version": "1.5.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Unicode-3.0",
+      "source": "https://static.crates.io/crates/icu_normalizer/icu_normalizer-1.5.0.crate",
+      "files": [
+        "LICENSES/rust__icu_normalizer-1.5.0__LICENSE"
+      ]
+    },
+    {
+      "name": "icu_normalizer_data",
+      "version": "1.5.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Unicode-3.0",
+      "source": "https://static.crates.io/crates/icu_normalizer_data/icu_normalizer_data-1.5.0.crate",
+      "files": [
+        "LICENSES/rust__icu_normalizer_data-1.5.0__LICENSE"
+      ]
+    },
+    {
+      "name": "icu_properties",
+      "version": "1.5.1",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Unicode-3.0",
+      "source": "https://static.crates.io/crates/icu_properties/icu_properties-1.5.1.crate",
+      "files": [
+        "LICENSES/rust__icu_properties-1.5.1__LICENSE"
+      ]
+    },
+    {
+      "name": "icu_properties_data",
+      "version": "1.5.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Unicode-3.0",
+      "source": "https://static.crates.io/crates/icu_properties_data/icu_properties_data-1.5.0.crate",
+      "files": [
+        "LICENSES/rust__icu_properties_data-1.5.0__LICENSE"
+      ]
+    },
+    {
+      "name": "icu_provider",
+      "version": "1.5.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Unicode-3.0",
+      "source": "https://static.crates.io/crates/icu_provider/icu_provider-1.5.0.crate",
+      "files": [
+        "LICENSES/rust__icu_provider-1.5.0__LICENSE"
+      ]
+    },
+    {
+      "name": "icu_provider_macros",
+      "version": "1.5.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Unicode-3.0",
+      "source": "https://static.crates.io/crates/icu_provider_macros/icu_provider_macros-1.5.0.crate",
+      "files": [
+        "LICENSES/rust__icu_provider_macros-1.5.0__LICENSE"
+      ]
+    },
+    {
+      "name": "idna",
+      "version": "1.1.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/idna/idna-1.1.0.crate",
+      "files": [
+        "LICENSES/rust__idna-1.1.0__LICENSE-APACHE",
+        "LICENSES/rust__idna-1.1.0__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "idna_adapter",
+      "version": "1.2.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://static.crates.io/crates/idna_adapter/idna_adapter-1.2.0.crate",
+      "files": [
+        "LICENSES/rust__idna_adapter-1.2.0__LICENSE-APACHE",
+        "LICENSES/rust__idna_adapter-1.2.0__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "itoa",
+      "version": "1.0.11",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/itoa/itoa-1.0.11.crate",
+      "files": [
+        "LICENSES/rust__itoa-1.0.11__LICENSE-APACHE",
+        "LICENSES/rust__itoa-1.0.11__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "jiter",
+      "version": "0.14.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT",
+      "source": "https://static.crates.io/crates/jiter/jiter-0.14.0.crate",
+      "files": [
+        "LICENSES/rust__jiter-0.14.0__LICENSE"
+      ]
+    },
+    {
+      "name": "js-sys",
+      "version": "0.3.77",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/js-sys/js-sys-0.3.77.crate",
+      "files": [
+        "LICENSES/rust__js-sys-0.3.77__LICENSE-APACHE",
+        "LICENSES/rust__js-sys-0.3.77__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "lexical-parse-float",
+      "version": "1.0.5",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/lexical-parse-float/lexical-parse-float-1.0.5.crate",
+      "files": [
+        "LICENSES/rust__lexical-parse-float-1.0.5__LICENSE-APACHE",
+        "LICENSES/rust__lexical-parse-float-1.0.5__LICENSE-MIT",
+        "LICENSES/rust__lexical-parse-float-1.0.5__LICENSE.md"
+      ]
+    },
+    {
+      "name": "lexical-parse-integer",
+      "version": "1.0.5",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/lexical-parse-integer/lexical-parse-integer-1.0.5.crate",
+      "files": [
+        "LICENSES/rust__lexical-parse-integer-1.0.5__LICENSE-APACHE",
+        "LICENSES/rust__lexical-parse-integer-1.0.5__LICENSE-MIT",
+        "LICENSES/rust__lexical-parse-integer-1.0.5__LICENSE.md"
+      ]
+    },
+    {
+      "name": "lexical-util",
+      "version": "1.0.6",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/lexical-util/lexical-util-1.0.6.crate",
+      "files": [
+        "LICENSES/rust__lexical-util-1.0.6__LICENSE-APACHE",
+        "LICENSES/rust__lexical-util-1.0.6__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "libc",
+      "version": "0.2.185",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/libc/libc-0.2.185.crate",
+      "files": [
+        "LICENSES/rust__libc-0.2.185__LICENSE-APACHE",
+        "LICENSES/rust__libc-0.2.185__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "litemap",
+      "version": "0.7.3",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Unicode-3.0",
+      "source": "https://static.crates.io/crates/litemap/litemap-0.7.3.crate",
+      "files": [
+        "LICENSES/rust__litemap-0.7.3__LICENSE"
+      ]
+    },
+    {
+      "name": "log",
+      "version": "0.4.27",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/log/log-0.4.27.crate",
+      "files": [
+        "LICENSES/rust__log-0.4.27__LICENSE-APACHE",
+        "LICENSES/rust__log-0.4.27__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "lru",
+      "version": "0.16.3",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT",
+      "source": "https://static.crates.io/crates/lru/lru-0.16.3.crate",
+      "files": [
+        "LICENSES/rust__lru-0.16.3__LICENSE"
+      ]
+    },
+    {
+      "name": "memchr",
+      "version": "2.7.4",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Unlicense OR MIT",
+      "source": "https://static.crates.io/crates/memchr/memchr-2.7.4.crate",
+      "files": [
+        "LICENSES/rust__memchr-2.7.4__COPYING",
+        "LICENSES/rust__memchr-2.7.4__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "num-bigint",
+      "version": "0.4.6",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/num-bigint/num-bigint-0.4.6.crate",
+      "files": [
+        "LICENSES/rust__num-bigint-0.4.6__LICENSE-APACHE",
+        "LICENSES/rust__num-bigint-0.4.6__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "num-integer",
+      "version": "0.1.46",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/num-integer/num-integer-0.1.46.crate",
+      "files": [
+        "LICENSES/rust__num-integer-0.1.46__LICENSE-APACHE",
+        "LICENSES/rust__num-integer-0.1.46__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "num-traits",
+      "version": "0.2.19",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/num-traits/num-traits-0.2.19.crate",
+      "files": [
+        "LICENSES/rust__num-traits-0.2.19__LICENSE-APACHE",
+        "LICENSES/rust__num-traits-0.2.19__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "once_cell",
+      "version": "1.21.3",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/once_cell/once_cell-1.21.3.crate",
+      "files": [
+        "LICENSES/rust__once_cell-1.21.3__LICENSE-APACHE",
+        "LICENSES/rust__once_cell-1.21.3__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "percent-encoding",
+      "version": "2.3.2",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/percent-encoding/percent-encoding-2.3.2.crate",
+      "files": [
+        "LICENSES/rust__percent-encoding-2.3.2__LICENSE-APACHE",
+        "LICENSES/rust__percent-encoding-2.3.2__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "portable-atomic",
+      "version": "1.6.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://static.crates.io/crates/portable-atomic/portable-atomic-1.6.0.crate",
+      "files": [
+        "LICENSES/rust__portable-atomic-1.6.0__LICENSE-APACHE",
+        "LICENSES/rust__portable-atomic-1.6.0__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "proc-macro2",
+      "version": "1.0.86",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/proc-macro2/proc-macro2-1.0.86.crate",
+      "files": [
+        "LICENSES/rust__proc-macro2-1.0.86__LICENSE-APACHE",
+        "LICENSES/rust__proc-macro2-1.0.86__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "pyo3-build-config",
+      "version": "0.28.3",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/pyo3-build-config/pyo3-build-config-0.28.3.crate",
+      "files": [
+        "LICENSES/rust__pyo3-build-config-0.28.3__LICENSE-APACHE",
+        "LICENSES/rust__pyo3-build-config-0.28.3__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "pyo3-ffi",
+      "version": "0.28.3",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/pyo3-ffi/pyo3-ffi-0.28.3.crate",
+      "files": [
+        "LICENSES/rust__pyo3-ffi-0.28.3__LICENSE-APACHE",
+        "LICENSES/rust__pyo3-ffi-0.28.3__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "pyo3-macros-backend",
+      "version": "0.28.3",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/pyo3-macros-backend/pyo3-macros-backend-0.28.3.crate",
+      "files": [
+        "LICENSES/rust__pyo3-macros-backend-0.28.3__LICENSE-APACHE",
+        "LICENSES/rust__pyo3-macros-backend-0.28.3__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "pyo3-macros",
+      "version": "0.28.3",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/pyo3-macros/pyo3-macros-0.28.3.crate",
+      "files": [
+        "LICENSES/rust__pyo3-macros-0.28.3__LICENSE-APACHE",
+        "LICENSES/rust__pyo3-macros-0.28.3__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "pyo3",
+      "version": "0.28.3",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/pyo3/pyo3-0.28.3.crate",
+      "files": [
+        "LICENSES/rust__pyo3-0.28.3__LICENSE-APACHE",
+        "LICENSES/rust__pyo3-0.28.3__LICENSE-MIT",
+        "LICENSES/rust__pyo3-0.28.3__pyo3-runtime__LICENSE-APACHE",
+        "LICENSES/rust__pyo3-0.28.3__pyo3-runtime__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "python3-dll-a",
+      "version": "0.2.14",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT",
+      "source": "https://static.crates.io/crates/python3-dll-a/python3-dll-a-0.2.14.crate",
+      "files": [
+        "LICENSES/rust__python3-dll-a-0.2.14__LICENSE"
+      ]
+    },
+    {
+      "name": "quote",
+      "version": "1.0.44",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/quote/quote-1.0.44.crate",
+      "files": [
+        "LICENSES/rust__quote-1.0.44__LICENSE-APACHE",
+        "LICENSES/rust__quote-1.0.44__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "r-efi",
+      "version": "5.2.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0 OR LGPL-2.1-or-later",
+      "source": "https://static.crates.io/crates/r-efi/r-efi-5.2.0.crate",
+      "files": [
+        "LICENSES/rust__r-efi-5.2.0__AUTHORS"
+      ]
+    },
+    {
+      "name": "radium",
+      "version": "0.7.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT",
+      "source": "https://static.crates.io/crates/radium/radium-0.7.0.crate",
+      "files": [
+        "LICENSES/rust__radium-0.7.0__LICENSE.txt"
+      ]
+    },
+    {
+      "name": "regex-automata",
+      "version": "0.4.13",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/regex-automata/regex-automata-0.4.13.crate",
+      "files": [
+        "LICENSES/rust__regex-automata-0.4.13__LICENSE-APACHE",
+        "LICENSES/rust__regex-automata-0.4.13__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "regex-syntax",
+      "version": "0.8.5",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/regex-syntax/regex-syntax-0.8.5.crate",
+      "files": [
+        "LICENSES/rust__regex-syntax-0.8.5__LICENSE-APACHE",
+        "LICENSES/rust__regex-syntax-0.8.5__LICENSE-MIT",
+        "LICENSES/rust__regex-syntax-0.8.5__src__unicode_tables__LICENSE-UNICODE"
+      ]
+    },
+    {
+      "name": "regex",
+      "version": "1.12.3",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/regex/regex-1.12.3.crate",
+      "files": [
+        "LICENSES/rust__regex-1.12.3__LICENSE-APACHE",
+        "LICENSES/rust__regex-1.12.3__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "rustversion",
+      "version": "1.0.17",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/rustversion/rustversion-1.0.17.crate",
+      "files": [
+        "LICENSES/rust__rustversion-1.0.17__LICENSE-APACHE",
+        "LICENSES/rust__rustversion-1.0.17__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "serde",
+      "version": "1.0.228",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/serde/serde-1.0.228.crate",
+      "files": [
+        "LICENSES/rust__serde-1.0.228__LICENSE-APACHE",
+        "LICENSES/rust__serde-1.0.228__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "serde_core",
+      "version": "1.0.228",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/serde_core/serde_core-1.0.228.crate",
+      "files": [
+        "LICENSES/rust__serde_core-1.0.228__LICENSE-APACHE",
+        "LICENSES/rust__serde_core-1.0.228__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "serde_derive",
+      "version": "1.0.228",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/serde_derive/serde_derive-1.0.228.crate",
+      "files": [
+        "LICENSES/rust__serde_derive-1.0.228__LICENSE-APACHE",
+        "LICENSES/rust__serde_derive-1.0.228__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "serde_json",
+      "version": "1.0.149",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/serde_json/serde_json-1.0.149.crate",
+      "files": [
+        "LICENSES/rust__serde_json-1.0.149__LICENSE-APACHE",
+        "LICENSES/rust__serde_json-1.0.149__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "smallvec",
+      "version": "1.15.1",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/smallvec/smallvec-1.15.1.crate",
+      "files": [
+        "LICENSES/rust__smallvec-1.15.1__LICENSE-APACHE",
+        "LICENSES/rust__smallvec-1.15.1__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "speedate",
+      "version": "0.17.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT",
+      "source": "https://static.crates.io/crates/speedate/speedate-0.17.0.crate",
+      "files": [
+        "LICENSES/rust__speedate-0.17.0__LICENSE"
+      ]
+    },
+    {
+      "name": "stable_deref_trait",
+      "version": "1.2.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/stable_deref_trait/stable_deref_trait-1.2.0.crate",
+      "files": [
+        "LICENSES/rust__stable_deref_trait-1.2.0__LICENSE-APACHE",
+        "LICENSES/rust__stable_deref_trait-1.2.0__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "static_assertions",
+      "version": "1.1.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/static_assertions/static_assertions-1.1.0.crate",
+      "files": [
+        "LICENSES/rust__static_assertions-1.1.0__LICENSE-APACHE",
+        "LICENSES/rust__static_assertions-1.1.0__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "strum",
+      "version": "0.27.2",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT",
+      "source": "https://static.crates.io/crates/strum/strum-0.27.2.crate",
+      "files": [
+        "LICENSES/rust__strum-0.27.2__LICENSE"
+      ]
+    },
+    {
+      "name": "strum_macros",
+      "version": "0.27.2",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT",
+      "source": "https://static.crates.io/crates/strum_macros/strum_macros-0.27.2.crate",
+      "files": [
+        "LICENSES/rust__strum_macros-0.27.2__LICENSE"
+      ]
+    },
+    {
+      "name": "syn",
+      "version": "2.0.82",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/syn/syn-2.0.82.crate",
+      "files": [
+        "LICENSES/rust__syn-2.0.82__LICENSE-APACHE",
+        "LICENSES/rust__syn-2.0.82__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "synstructure",
+      "version": "0.13.1",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT",
+      "source": "https://static.crates.io/crates/synstructure/synstructure-0.13.1.crate",
+      "files": [
+        "LICENSES/rust__synstructure-0.13.1__LICENSE"
+      ]
+    },
+    {
+      "name": "tap",
+      "version": "1.0.1",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT",
+      "source": "https://static.crates.io/crates/tap/tap-1.0.1.crate",
+      "files": [
+        "LICENSES/rust__tap-1.0.1__LICENSE.txt"
+      ]
+    },
+    {
+      "name": "target-lexicon",
+      "version": "0.13.4",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Apache-2.0 WITH LLVM-exception",
+      "source": "https://static.crates.io/crates/target-lexicon/target-lexicon-0.13.4.crate",
+      "files": [
+        "LICENSES/rust__target-lexicon-0.13.4__LICENSE"
+      ]
+    },
+    {
+      "name": "tinystr",
+      "version": "0.7.6",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Unicode-3.0",
+      "source": "https://static.crates.io/crates/tinystr/tinystr-0.7.6.crate",
+      "files": [
+        "LICENSES/rust__tinystr-0.7.6__LICENSE"
+      ]
+    },
+    {
+      "name": "unicode-ident",
+      "version": "1.0.12",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "(MIT OR Apache-2.0) AND Unicode-DFS-2016",
+      "source": "https://static.crates.io/crates/unicode-ident/unicode-ident-1.0.12.crate",
+      "files": [
+        "LICENSES/rust__unicode-ident-1.0.12__LICENSE-APACHE",
+        "LICENSES/rust__unicode-ident-1.0.12__LICENSE-MIT",
+        "LICENSES/rust__unicode-ident-1.0.12__LICENSE-UNICODE"
+      ]
+    },
+    {
+      "name": "url",
+      "version": "2.5.8",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/url/url-2.5.8.crate",
+      "files": [
+        "LICENSES/rust__url-2.5.8__LICENSE-APACHE",
+        "LICENSES/rust__url-2.5.8__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "utf16_iter",
+      "version": "1.0.5",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://static.crates.io/crates/utf16_iter/utf16_iter-1.0.5.crate",
+      "files": [
+        "LICENSES/rust__utf16_iter-1.0.5__LICENSE-APACHE",
+        "LICENSES/rust__utf16_iter-1.0.5__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "utf8_iter",
+      "version": "1.0.4",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://static.crates.io/crates/utf8_iter/utf8_iter-1.0.4.crate",
+      "files": [
+        "LICENSES/rust__utf8_iter-1.0.4__LICENSE-APACHE",
+        "LICENSES/rust__utf8_iter-1.0.4__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "uuid",
+      "version": "1.23.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://static.crates.io/crates/uuid/uuid-1.23.0.crate",
+      "files": [
+        "LICENSES/rust__uuid-1.23.0__LICENSE-APACHE",
+        "LICENSES/rust__uuid-1.23.0__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "version_check",
+      "version": "0.9.5",
+      "kind": "pydantic-core Rust SBOM (excluded)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/version_check/version_check-0.9.5.crate",
+      "files": [
+        "LICENSES/rust__version_check-0.9.5__LICENSE-APACHE",
+        "LICENSES/rust__version_check-0.9.5__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "wasi",
+      "version": "0.14.2+wasi-0.2.4",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "source": "https://static.crates.io/crates/wasi/wasi-0.14.2+wasi-0.2.4.crate",
+      "files": [
+        "LICENSES/rust__wasi-0.14.2+wasi-0.2.4__LICENSE-APACHE",
+        "LICENSES/rust__wasi-0.14.2+wasi-0.2.4__LICENSE-Apache-2.0_WITH_LLVM-exception",
+        "LICENSES/rust__wasi-0.14.2+wasi-0.2.4__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "wasm-bindgen-backend",
+      "version": "0.2.100",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/wasm-bindgen-backend/wasm-bindgen-backend-0.2.100.crate",
+      "files": [
+        "LICENSES/rust__wasm-bindgen-backend-0.2.100__LICENSE-APACHE",
+        "LICENSES/rust__wasm-bindgen-backend-0.2.100__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "wasm-bindgen-macro-support",
+      "version": "0.2.100",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/wasm-bindgen-macro-support/wasm-bindgen-macro-support-0.2.100.crate",
+      "files": [
+        "LICENSES/rust__wasm-bindgen-macro-support-0.2.100__LICENSE-APACHE",
+        "LICENSES/rust__wasm-bindgen-macro-support-0.2.100__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "wasm-bindgen-macro",
+      "version": "0.2.100",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/wasm-bindgen-macro/wasm-bindgen-macro-0.2.100.crate",
+      "files": [
+        "LICENSES/rust__wasm-bindgen-macro-0.2.100__LICENSE-APACHE",
+        "LICENSES/rust__wasm-bindgen-macro-0.2.100__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "wasm-bindgen-shared",
+      "version": "0.2.100",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/wasm-bindgen-shared/wasm-bindgen-shared-0.2.100.crate",
+      "files": [
+        "LICENSES/rust__wasm-bindgen-shared-0.2.100__LICENSE-APACHE",
+        "LICENSES/rust__wasm-bindgen-shared-0.2.100__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "wasm-bindgen",
+      "version": "0.2.100",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/wasm-bindgen/wasm-bindgen-0.2.100.crate",
+      "files": [
+        "LICENSES/rust__wasm-bindgen-0.2.100__LICENSE-APACHE",
+        "LICENSES/rust__wasm-bindgen-0.2.100__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "wit-bindgen-rt",
+      "version": "0.39.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Apache-2.0 (selected upstream option)",
+      "source": "https://static.crates.io/crates/wit-bindgen-rt/wit-bindgen-rt-0.39.0.crate",
+      "files": [
+        "LICENSES/rust__wit-bindgen-rt-0.39.0__LICENSE-APACHE"
+      ],
+      "notice_source": "https://github.com/bytecodealliance/wit-bindgen/blob/v0.39.0/LICENSE-APACHE"
+    },
+    {
+      "name": "write16",
+      "version": "1.0.0",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://static.crates.io/crates/write16/write16-1.0.0.crate",
+      "files": [
+        "LICENSES/rust__write16-1.0.0__LICENSE-APACHE",
+        "LICENSES/rust__write16-1.0.0__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "writeable",
+      "version": "0.5.5",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Unicode-3.0",
+      "source": "https://static.crates.io/crates/writeable/writeable-0.5.5.crate",
+      "files": [
+        "LICENSES/rust__writeable-0.5.5__LICENSE"
+      ]
+    },
+    {
+      "name": "wyz",
+      "version": "0.5.1",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT",
+      "source": "https://static.crates.io/crates/wyz/wyz-0.5.1.crate",
+      "files": [
+        "LICENSES/rust__wyz-0.5.1__LICENSE.txt"
+      ]
+    },
+    {
+      "name": "yoke-derive",
+      "version": "0.7.4",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Unicode-3.0",
+      "source": "https://static.crates.io/crates/yoke-derive/yoke-derive-0.7.4.crate",
+      "files": [
+        "LICENSES/rust__yoke-derive-0.7.4__LICENSE"
+      ]
+    },
+    {
+      "name": "yoke",
+      "version": "0.7.4",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Unicode-3.0",
+      "source": "https://static.crates.io/crates/yoke/yoke-0.7.4.crate",
+      "files": [
+        "LICENSES/rust__yoke-0.7.4__LICENSE"
+      ]
+    },
+    {
+      "name": "zerocopy-derive",
+      "version": "0.8.25",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "BSD-2-Clause OR Apache-2.0 OR MIT",
+      "source": "https://static.crates.io/crates/zerocopy-derive/zerocopy-derive-0.8.25.crate",
+      "files": [
+        "LICENSES/rust__zerocopy-derive-0.8.25__LICENSE-APACHE",
+        "LICENSES/rust__zerocopy-derive-0.8.25__LICENSE-BSD",
+        "LICENSES/rust__zerocopy-derive-0.8.25__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "zerocopy",
+      "version": "0.8.25",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "BSD-2-Clause OR Apache-2.0 OR MIT",
+      "source": "https://static.crates.io/crates/zerocopy/zerocopy-0.8.25.crate",
+      "files": [
+        "LICENSES/rust__zerocopy-0.8.25__LICENSE-APACHE",
+        "LICENSES/rust__zerocopy-0.8.25__LICENSE-BSD",
+        "LICENSES/rust__zerocopy-0.8.25__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "zerofrom-derive",
+      "version": "0.1.4",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Unicode-3.0",
+      "source": "https://static.crates.io/crates/zerofrom-derive/zerofrom-derive-0.1.4.crate",
+      "files": [
+        "LICENSES/rust__zerofrom-derive-0.1.4__LICENSE"
+      ]
+    },
+    {
+      "name": "zerofrom",
+      "version": "0.1.4",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Unicode-3.0",
+      "source": "https://static.crates.io/crates/zerofrom/zerofrom-0.1.4.crate",
+      "files": [
+        "LICENSES/rust__zerofrom-0.1.4__LICENSE"
+      ]
+    },
+    {
+      "name": "zerovec-derive",
+      "version": "0.10.3",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Unicode-3.0",
+      "source": "https://static.crates.io/crates/zerovec-derive/zerovec-derive-0.10.3.crate",
+      "files": [
+        "LICENSES/rust__zerovec-derive-0.10.3__LICENSE"
+      ]
+    },
+    {
+      "name": "zerovec",
+      "version": "0.10.4",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "Unicode-3.0",
+      "source": "https://static.crates.io/crates/zerovec/zerovec-0.10.4.crate",
+      "files": [
+        "LICENSES/rust__zerovec-0.10.4__LICENSE"
+      ]
+    },
+    {
+      "name": "zmij",
+      "version": "1.0.6",
+      "kind": "pydantic-core Rust SBOM (required)",
+      "license": "MIT",
+      "source": "https://static.crates.io/crates/zmij/zmij-1.0.6.crate",
+      "files": [
+        "LICENSES/rust__zmij-1.0.6__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "CPython",
+      "version": "3.11.15",
+      "kind": "Python native runtime",
+      "license": "PSF-2.0 and historical/component notices",
+      "source": "https://github.com/python/cpython/tree/v3.11.15",
+      "files": [
+        "LICENSES/runtime__CPython__LICENSE.txt",
+        "LICENSES/runtime__CPython__Doc-license.rst"
+      ]
+    },
+    {
+      "name": "OpenSSL",
+      "version": "3.5.6",
+      "kind": "Python native runtime",
+      "license": "Apache-2.0",
+      "source": "https://github.com/openssl/openssl/tree/openssl-3.5.6",
+      "files": [
+        "LICENSES/runtime__OpenSSL__LICENSE.txt"
+      ]
+    },
+    {
+      "name": "libffi",
+      "version": "Python runtime bundled",
+      "kind": "Python native runtime",
+      "license": "MIT",
+      "source": "https://github.com/libffi/libffi/blob/v3.4.4/LICENSE",
+      "files": [
+        "LICENSES/runtime__libffi__LICENSE"
+      ]
+    },
+    {
+      "name": "Expat",
+      "version": "expat_2.7.4",
+      "kind": "Python native runtime",
+      "license": "MIT",
+      "source": "https://github.com/libexpat/libexpat/tree/R_2_7_4",
+      "files": [
+        "LICENSES/runtime__Expat__COPYING"
+      ]
+    },
+    {
+      "name": "zlib",
+      "version": "1.3.1",
+      "kind": "Python native runtime",
+      "license": "Zlib",
+      "source": "https://github.com/madler/zlib/blob/v1.3.1/LICENSE",
+      "files": [
+        "LICENSES/runtime__zlib__LICENSE"
+      ]
+    },
+    {
+      "name": "SQLite",
+      "version": "3.53.1",
+      "kind": "Python native runtime",
+      "license": "Public domain (see scope in original)",
+      "source": "https://github.com/sqlite/sqlite/blob/version-3.53.1/LICENSE.md",
+      "files": [
+        "LICENSES/runtime__SQLite__LICENSE"
+      ]
+    },
+    {
+      "name": "autocommand",
+      "version": "2.2.2",
+      "kind": "setuptools vendored snapshot",
+      "license": "LGPLv3",
+      "source": "https://pypi.org/project/autocommand/2.2.2/",
+      "files": [
+        "LICENSES/python__setuptools__setuptools___vendor__autocommand-2.2.2.dist-info__LICENSE"
+      ]
+    },
+    {
+      "name": "backports.tarfile",
+      "version": "1.2.0",
+      "kind": "setuptools vendored snapshot",
+      "license": "See original notices",
+      "source": "https://pypi.org/project/backports.tarfile/1.2.0/",
+      "files": [
+        "LICENSES/python__setuptools__setuptools___vendor__backports.tarfile-1.2.0.dist-info__LICENSE"
+      ]
+    },
+    {
+      "name": "importlib_metadata",
+      "version": "8.7.1",
+      "kind": "setuptools vendored snapshot",
+      "license": "Apache-2.0",
+      "source": "https://pypi.org/project/importlib_metadata/8.7.1/",
+      "files": [
+        "LICENSES/python__setuptools__setuptools___vendor__importlib_metadata-8.7.1.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "jaraco.text",
+      "version": "4.0.0",
+      "kind": "setuptools vendored snapshot",
+      "license": "See original notices",
+      "source": "https://pypi.org/project/jaraco.text/4.0.0/",
+      "files": [
+        "LICENSES/python__setuptools__setuptools___vendor__jaraco.text-4.0.0.dist-info__LICENSE"
+      ]
+    },
+    {
+      "name": "jaraco.context",
+      "version": "6.1.0",
+      "kind": "setuptools vendored snapshot",
+      "license": "MIT",
+      "source": "https://pypi.org/project/jaraco.context/6.1.0/",
+      "files": [
+        "LICENSES/python__setuptools__setuptools___vendor__jaraco_context-6.1.0.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "jaraco.functools",
+      "version": "4.4.0",
+      "kind": "setuptools vendored snapshot",
+      "license": "MIT",
+      "source": "https://pypi.org/project/jaraco.functools/4.4.0/",
+      "files": [
+        "LICENSES/python__setuptools__setuptools___vendor__jaraco_functools-4.4.0.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "more-itertools",
+      "version": "10.8.0",
+      "kind": "setuptools vendored snapshot",
+      "license": "MIT",
+      "source": "https://pypi.org/project/more-itertools/10.8.0/",
+      "files": [
+        "LICENSES/python__setuptools__setuptools___vendor__more_itertools-10.8.0.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "packaging",
+      "version": "26.0",
+      "kind": "setuptools vendored snapshot",
+      "license": "Apache-2.0 OR BSD-2-Clause",
+      "source": "https://pypi.org/project/packaging/26.0/",
+      "files": [
+        "LICENSES/python__setuptools__setuptools___vendor__packaging-26.0.dist-info__licenses__LICENSE",
+        "LICENSES/python__setuptools__setuptools___vendor__packaging-26.0.dist-info__licenses__LICENSE.APACHE",
+        "LICENSES/python__setuptools__setuptools___vendor__packaging-26.0.dist-info__licenses__LICENSE.BSD"
+      ]
+    },
+    {
+      "name": "platformdirs",
+      "version": "4.4.0",
+      "kind": "setuptools vendored snapshot",
+      "license": "MIT",
+      "source": "https://pypi.org/project/platformdirs/4.4.0/",
+      "files": [
+        "LICENSES/python__setuptools__setuptools___vendor__platformdirs-4.4.0.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "tomli",
+      "version": "2.4.0",
+      "kind": "setuptools vendored snapshot",
+      "license": "MIT",
+      "source": "https://pypi.org/project/tomli/2.4.0/",
+      "files": [
+        "LICENSES/python__setuptools__setuptools___vendor__tomli-2.4.0.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "wheel",
+      "version": "0.46.3",
+      "kind": "setuptools vendored snapshot",
+      "license": "MIT",
+      "source": "https://pypi.org/project/wheel/0.46.3/",
+      "files": [
+        "LICENSES/python__setuptools__setuptools___vendor__wheel-0.46.3.dist-info__licenses__LICENSE.txt"
+      ]
+    },
+    {
+      "name": "zipp",
+      "version": "3.23.0",
+      "kind": "setuptools vendored snapshot",
+      "license": "MIT",
+      "source": "https://pypi.org/project/zipp/3.23.0/",
+      "files": [
+        "LICENSES/python__setuptools__setuptools___vendor__zipp-3.23.0.dist-info__licenses__LICENSE"
+      ]
+    },
+    {
+      "name": "Rust standard library",
+      "version": "upstream native wheel toolchain",
+      "kind": "pydantic-core native runtime",
+      "license": "MIT (selected upstream option)",
+      "source": "https://github.com/rust-lang/rust/blob/1.87.0/LICENSE-MIT",
+      "files": [
+        "LICENSES/runtime__Rust__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "CPython",
+      "version": "3.11.9",
+      "kind": "CI Python 3.11.9 native runtime",
+      "license": "PSF-2.0 and historical/component notices",
+      "source": "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip",
+      "files": [
+        "LICENSES/runtime__CPython-3.11.9__LICENSE.txt"
+      ]
+    },
+    {
+      "name": "CPython documentation",
+      "version": "3.11.9",
+      "kind": "CI Python 3.11.9 native runtime",
+      "license": "Python and component notices",
+      "source": "https://raw.githubusercontent.com/python/cpython/v3.11.9/Doc/license.rst",
+      "files": [
+        "LICENSES/runtime__CPython-3.11.9__Doc-license.rst"
+      ]
+    },
+    {
+      "name": "OpenSSL",
+      "version": "3.0.13",
+      "kind": "CI Python 3.11.9 native runtime",
+      "license": "Apache-2.0",
+      "source": "https://raw.githubusercontent.com/openssl/openssl/openssl-3.0.13/LICENSE.txt",
+      "files": [
+        "LICENSES/runtime__OpenSSL-3.0.13__LICENSE.txt"
+      ]
+    },
+    {
+      "name": "Expat",
+      "version": "2.6.0",
+      "kind": "CI Python 3.11.9 native runtime",
+      "license": "MIT",
+      "source": "https://raw.githubusercontent.com/libexpat/libexpat/R_2_6_0/expat/COPYING",
+      "files": [
+        "LICENSES/runtime__Expat-2.6.0__COPYING"
+      ]
+    },
+    {
+      "name": "SQLite",
+      "version": "3.45.1",
+      "kind": "CI Python 3.11.9 native runtime",
+      "license": "Public domain",
+      "source": "https://github.com/sqlite/sqlite/tree/version-3.45.1",
+      "files": [
+        "LICENSES/runtime__SQLite__LICENSE"
+      ]
+    }
+  ],
+  "files": {
+    "LICENSES/pydantic-core__sbom.json": "64873c0cff2ce67869ec71837cbaff3917eaa1d0b45d149dbc775229f21b3509",
+    "LICENSES/python__aiohappyeyeballs__aiohappyeyeballs-2.7.1.dist-info__licenses__LICENSE": "3b2f81fe21d181c499c59a256c8e1968455d6689d269aa85373bfb6af41da3bf",
+    "LICENSES/python__aiohttp__aiohttp-3.14.3.dist-info__licenses__LICENSE.txt": "ea195371abbf66a39eef56600955d1137c2c196dc144ffec46b6ea530ce70044",
+    "LICENSES/python__aiohttp__aiohttp-3.14.3.dist-info__licenses__vendor__llhttp__LICENSE": "279012e02a10acfd59a3f2d8f13a497332535d871c2b27c89988985b06a3a438",
+    "LICENSES/python__aiosignal__aiosignal-1.4.0.dist-info__licenses__LICENSE": "6fd5243e92dd7f98ec69c7ac377728e74905709ff527a5bf98d6d0263c04f5b6",
+    "LICENSES/python__altgraph__altgraph-0.17.5.dist-info__LICENSE": "6c194d6db0c64d45535d10c95142b9b0cda7b7dcc7f1ddee302b3d536f3dbe46",
+    "LICENSES/python__annotated-doc__annotated_doc-0.0.5.dist-info__licenses__LICENSE": "fff170779a6acbf65abdb405c087f1cee1786691e4a96a4034517e4a504a0cdf",
+    "LICENSES/python__annotated-types__annotated_types-0.8.0.dist-info__licenses__LICENSE": "fe1049884b1a0d9342901e88e07f32925d24b3121d9972b6a6805fb9824b095d",
+    "LICENSES/python__anyio__anyio-4.14.2.dist-info__licenses__LICENSE": "5361ac9dc58f2ef5fd2e9b09c68297c17f04950909bbc8023bdb82eacf22c2b0",
+    "LICENSES/python__attrs__attrs-26.1.0.dist-info__licenses__LICENSE": "882115c95dfc2af1eeb6714f8ec6d5cbcabf667caff8729f42420da63f714e9f",
+    "LICENSES/python__bidict__bidict-0.23.1.dist-info__LICENSE": "f3f53adcecaa48d73a66e238fa5ba906cb41876783b45d28a1346b3142eebd9a",
+    "LICENSES/python__certifi__certifi-2026.7.22.dist-info__licenses__LICENSE": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7",
+    "LICENSES/python__click__click-8.4.2.dist-info__licenses__LICENSE.txt": "9a8ad106a394e853bfe21f42f4e72d592819a22805d991b5f3275029292b658d",
+    "LICENSES/python__colorama__colorama-0.4.6.dist-info__licenses__LICENSE.txt": "cac35c02686e5d04a5a7140bfb3b36e73aed496656e891102e428886d7930318",
+    "LICENSES/python__fastapi__fastapi-0.141.1.dist-info__licenses__LICENSE": "4ec89ffc81485b97fec584b2d4a961032eeffe834453894fd9c1274906cc744e",
+    "LICENSES/python__frozenlist__frozenlist-1.8.0.dist-info__licenses__LICENSE": "6fd5243e92dd7f98ec69c7ac377728e74905709ff527a5bf98d6d0263c04f5b6",
+    "LICENSES/python__h11__h11-0.16.0.dist-info__licenses__LICENSE.txt": "37db5bb85926db28a427a25867f10b1232003aea1be69ccb851138adb8e6f361",
+    "LICENSES/python__httpcore__httpcore-1.0.9.dist-info__licenses__LICENSE.md": "fdcb59154c74cbaba16a11242f7740bea9f23d6feb5547917d8c5f94a80392a5",
+    "LICENSES/python__httpx__httpx-0.28.1.dist-info__licenses__LICENSE.md": "4ec59d544f12b5f539a3a716fd321ac58ccd8030b465221f2c880200cdf28d8d",
+    "LICENSES/python__idna__idna-3.18.dist-info__licenses__LICENSE.md": "1a9a4f0e3d479a27240ddd59a9137a66ab4a0f9dfdc8ca6188cc0bfd85187f04",
+    "LICENSES/python__iniconfig__iniconfig-2.3.0.dist-info__licenses__LICENSE": "3409fa91f7ace557894632676656e32264fe5ef7581535725dc9a23774551bd4",
+    "LICENSES/python__macholib__macholib-1.16.4.dist-info__LICENSE": "47082ab2bc0184123ec9f10fdf80c70723ee68f07d44382e17615c2a6ba70b09",
+    "LICENSES/python__markdown-it-py__markdown_it_py-4.2.0.dist-info__licenses__LICENSE": "4a2260d6e2cd0f5a151a1e86dbfe7d3ed552b1e2beabf9941c1ba5c49cbce484",
+    "LICENSES/python__markdown-it-py__markdown_it_py-4.2.0.dist-info__licenses__LICENSE.markdown-it": "792c48c5a849a15fdf9e37e8bcf9e6d1dd13b32b46c642a748a0a46a9919d473",
+    "LICENSES/python__mdurl__mdurl-0.1.2.dist-info__LICENSE": "7c605df6e28667a9603118e98274f64a49ce3eed0d26fccce9534a345e0ef955",
+    "LICENSES/python__multidict__multidict-6.7.1.dist-info__licenses__LICENSE": "93d11a968e2f0f36373c40811ff6d20e173f58c3cab5884cd6617bbfd795492a",
+    "LICENSES/python__mypy__mypy__typeshed__LICENSE": "13c71e0962836d8850762bda0f6234ff213034871fa66b6c42962549d73517a4",
+    "LICENSES/python__mypy__mypy-1.17.1.dist-info__licenses__LICENSE": "ea563cc7079537e603443c22ad8eab3ff650a486224108bf0c76b2e6c86699d2",
+    "LICENSES/python__mypy-extensions__mypy_extensions-1.1.0.dist-info__licenses__LICENSE": "a50450da1d53cd777b80ced77c58ff96abe0ccd879706bd142c3ec20e245f0b4",
+    "LICENSES/python__packaging__packaging-26.3.dist-info__licenses__LICENSE": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48",
+    "LICENSES/python__packaging__packaging-26.3.dist-info__licenses__LICENSE.APACHE": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+    "LICENSES/python__packaging__packaging-26.3.dist-info__licenses__LICENSE.BSD": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5",
+    "LICENSES/python__pathspec__pathspec-1.1.1.dist-info__licenses__LICENSE": "fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85",
+    "LICENSES/python__pefile__pefile-2023.2.7.dist-info__LICENSE": "bfd4b5e4f8a99c961fd6f94d708e38396cc146bfe8fbc5d2a86e63aa29fb4208",
+    "LICENSES/python__pluggy__pluggy-1.6.0.dist-info__licenses__LICENSE": "d6b65e6c213a5d0b577911d34d6e5949b9f59d76c238c5071a2f3fc16cfb2606",
+    "LICENSES/python__propcache__propcache-0.5.2.dist-info__licenses__LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "LICENSES/python__propcache__propcache-0.5.2.dist-info__licenses__NOTICE": "56d6ac6c8105c0a51304c21db060e361af9a8ea0af9a75c239c28b5d13693838",
+    "LICENSES/python__pydantic__pydantic-2.13.4.dist-info__licenses__LICENSE": "a9e186f3ca16b5eef84318e7a701721351a00cb7b8ae3a4394b67b49e3529ef3",
+    "LICENSES/python__pydantic-core__pydantic_core-2.46.4.dist-info__licenses__LICENSE": "fbe7f615f18d135c07000e5a86325db27f42c7729699ef166ac1f7a3f4586bf4",
+    "LICENSES/python__pygments__pygments-2.20.0.dist-info__licenses__AUTHORS": "0db603a5f4499f690c4425477ff664c166da325d3acc3b5a8d4de3db072443d0",
+    "LICENSES/python__pygments__pygments-2.20.0.dist-info__licenses__LICENSE": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17",
+    "LICENSES/python__pyinstaller__pyinstaller-6.15.0.dist-info__COPYING.txt": "dcf75fdb959db1e3b41c0f8505069d2ece781b5ec6b3d0a4d30975cfc6580245",
+    "LICENSES/python__pyinstaller-hooks-contrib__pyinstaller_hooks_contrib-2026.6.dist-info__licenses__LICENSE": "91d0baaff00773038e72c0a1fc9d5d2d38706b7a2b9c04f34296608f931b9cd0",
+    "LICENSES/python__pytest__pytest-8.4.2.dist-info__licenses__AUTHORS": "c2017d6288262cf9c39aecc8e51df3422a9f2bbca1e4b55d28491022070c7577",
+    "LICENSES/python__pytest__pytest-8.4.2.dist-info__licenses__LICENSE": "ca836a5f9ecca3b2f350230faa20a48fb8b145653b5568d784862df864706b9b",
+    "LICENSES/python__pytest-asyncio__pytest_asyncio-1.4.0.dist-info__licenses__LICENSE": "a8ad31b1c3f40dca5a84119351b8fa8ddc868edd77fad8a8ebf6d8f2d16fa4ae",
+    "LICENSES/python__python-engineio__python_engineio-4.13.4.dist-info__licenses__LICENSE": "c9e97d3dbc1fbbcdb4f7808b282cd646db887aff4f5313fe6bbe8d4c31405a9c",
+    "LICENSES/python__python-socketio__python_socketio-5.16.4.dist-info__licenses__LICENSE": "c9e97d3dbc1fbbcdb4f7808b282cd646db887aff4f5313fe6bbe8d4c31405a9c",
+    "LICENSES/python__pywin32-ctypes__pywin32_ctypes-0.2.3.dist-info__LICENSE.txt": "dfa83b3e2709adfcdb838d9ad55823ca674abb780e60563d9dd9544ccbf785e9",
+    "LICENSES/python__rich__rich-15.0.0.dist-info__licenses__LICENSE": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15",
+    "LICENSES/python__ruff__ruff-0.16.2.dist-info__licenses__LICENSE": "2597d854122b77ddc71971564ca2350a37608575ce324adc5650a2b2051c8f18",
+    "LICENSES/python__setuptools__setuptools___vendor__autocommand-2.2.2.dist-info__LICENSE": "ade78d04982d69972d444a8e14a94f87a2334dd3855cc80348ea8e240aa0df2d",
+    "LICENSES/python__setuptools__setuptools___vendor__backports.tarfile-1.2.0.dist-info__LICENSE": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
+    "LICENSES/python__setuptools__setuptools___vendor__importlib_metadata-8.7.1.dist-info__licenses__LICENSE": "458502e12d97bbf64438606a20044aa85eb05fb0a8a807bb35dbec253fd1fc04",
+    "LICENSES/python__setuptools__setuptools___vendor__jaraco.text-4.0.0.dist-info__LICENSE": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
+    "LICENSES/python__setuptools__setuptools___vendor__jaraco_context-6.1.0.dist-info__licenses__LICENSE": "9755a18519666e5f0f4cae3daad3d7012bcae48a600b31237d75e9fe134e6683",
+    "LICENSES/python__setuptools__setuptools___vendor__jaraco_functools-4.4.0.dist-info__licenses__LICENSE": "5a57cb4db85e2a2dd88c290628908add57e3451449e0a9a71fdfb38776fd759d",
+    "LICENSES/python__setuptools__setuptools___vendor__more_itertools-10.8.0.dist-info__licenses__LICENSE": "09f1c8c9e941af3e584d59641ea9b87d83c0cb0fd007eb5ef391a7e2643c1a46",
+    "LICENSES/python__setuptools__setuptools___vendor__packaging-26.0.dist-info__licenses__LICENSE": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48",
+    "LICENSES/python__setuptools__setuptools___vendor__packaging-26.0.dist-info__licenses__LICENSE.APACHE": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+    "LICENSES/python__setuptools__setuptools___vendor__packaging-26.0.dist-info__licenses__LICENSE.BSD": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5",
+    "LICENSES/python__setuptools__setuptools___vendor__platformdirs-4.4.0.dist-info__licenses__LICENSE": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6",
+    "LICENSES/python__setuptools__setuptools___vendor__tomli-2.4.0.dist-info__licenses__LICENSE": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
+    "LICENSES/python__setuptools__setuptools___vendor__wheel-0.46.3.dist-info__licenses__LICENSE.txt": "30c23618679108f3e8ea1d2a658c7ca417bdfc891c98ef1a89fa4ff0c9828654",
+    "LICENSES/python__setuptools__setuptools___vendor__zipp-3.23.0.dist-info__licenses__LICENSE": "5a57cb4db85e2a2dd88c290628908add57e3451449e0a9a71fdfb38776fd759d",
+    "LICENSES/python__setuptools__setuptools__config___validate_pyproject__NOTICE": "09c9bcea95ca086f8bc5bed174e40bc835b297d40fb5f86bbbb570fe0a5581a7",
+    "LICENSES/python__setuptools__setuptools__config__NOTICE": "2dddf08818297a3b89d43d95ff659d8da85741108c9136dfa3a4d856c0623bd8",
+    "LICENSES/python__setuptools__setuptools-84.0.0.dist-info__licenses__LICENSE": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
+    "LICENSES/python__shellingham__shellingham-1.5.4.dist-info__LICENSE": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d",
+    "LICENSES/python__simple-websocket__simple_websocket-1.1.0.dist-info__LICENSE": "4b8abadcc5e3dd29c71905b84952945699f0a7ba41e6af99eaba46faabe95bb7",
+    "LICENSES/python__starlette__starlette-1.5.0.dist-info__licenses__LICENSE.md": "dcb95677a02240243187e964f941847d19b17821cf99e5afae684fab328c19bf",
+    "LICENSES/python__typer__typer___click__LICENSE.txt": "9a8ad106a394e853bfe21f42f4e72d592819a22805d991b5f3275029292b658d",
+    "LICENSES/python__typer__typer-0.27.1.dist-info__licenses__LICENSE": "58992cebcf8dfb6e40c4e2112ed12126c243666dca3912a3d78b7ecac4859d49",
+    "LICENSES/python__typing-extensions__typing_extensions-4.16.0.dist-info__licenses__LICENSE": "3b2f81fe21d181c499c59a256c8e1968455d6689d269aa85373bfb6af41da3bf",
+    "LICENSES/python__typing-inspection__typing_inspection-0.4.2.dist-info__licenses__LICENSE": "804b59b25f2c31bd278f9202a19ae49a3945aa2664387e2d0a128c7cacc61ec3",
+    "LICENSES/python__uvicorn__uvicorn-0.52.1.dist-info__licenses__LICENSE.md": "efe1acf3e62fb99c288b0ec73e5a773b7268ef4320fe757ea994214e4b63c371",
+    "LICENSES/python__wsproto__wsproto-1.3.2.dist-info__licenses__LICENSE": "c0329a8dbf3437b095f7f5cf4257d6bb855e07120cae8786586073ff7a699959",
+    "LICENSES/python__yarl__yarl-1.24.5.dist-info__licenses__LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "LICENSES/python__yarl__yarl-1.24.5.dist-info__licenses__NOTICE": "56d6ac6c8105c0a51304c21db060e361af9a8ea0af9a75c239c28b5d13693838",
+    "LICENSES/runtime__CPython__Doc-license.rst": "2b734ec5975b21b29ae8b9756a00fc3dfe701abe51687cec4c98a21c51005bca",
+    "LICENSES/runtime__CPython__LICENSE.txt": "886a0ead2d89030ee62dbff52b04e47ab91998341295bb9c56fb952b4e081c7a",
+    "LICENSES/runtime__Expat__COPYING": "31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87",
+    "LICENSES/runtime__libffi__LICENSE": "2c9c2acb9743e6b007b91350475308aee44691d96aa20eacef8e199988c8c388",
+    "LICENSES/runtime__OpenSSL__LICENSE.txt": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a",
+    "LICENSES/runtime__Rust__LICENSE-MIT": "b71bd43a069ca0641a9ecfe585ca7b3c53b5cc1608f8b68321168698e28b5ea1",
+    "LICENSES/runtime__SQLite__LICENSE": "ee6af51062b30d532991face5164136ae6f84e265ecf8abe89dc69dac45ca1e7",
+    "LICENSES/runtime__zlib__LICENSE": "845efc77857d485d91fb3e0b884aaa929368c717ae8186b66fe1ed2495753243",
+    "LICENSES/rust__ahash-0.8.12__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__ahash-0.8.12__LICENSE-MIT": "0444c6991eead6822f7b9102e654448d51624431119546492e8b231db42c48bb",
+    "LICENSES/rust__aho-corasick-1.1.3__COPYING": "01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f",
+    "LICENSES/rust__aho-corasick-1.1.3__LICENSE-MIT": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f",
+    "LICENSES/rust__allocator-api2-0.2.21__LICENSE-APACHE": "20fe7b00e904ed690e3b9fd6073784d3fc428141dbd10b81c01fd143d0797f58",
+    "LICENSES/rust__allocator-api2-0.2.21__LICENSE-MIT": "36516aefdc84c5d5a1e7485425913a22dbda69eb1930c5e84d6ae4972b5194b9",
+    "LICENSES/rust__autocfg-1.3.0__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__autocfg-1.3.0__LICENSE-MIT": "27995d58ad5c1145c1a8cd86244ce844886958a35eb2b78c6b772748669999ac",
+    "LICENSES/rust__base64-0.22.1__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__base64-0.22.1__LICENSE-MIT": "0dd882e53de11566d50f8e8e2d5a651bcf3fabee4987d70f306233cf39094ba7",
+    "LICENSES/rust__bitflags-2.9.1__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__bitflags-2.9.1__LICENSE-MIT": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+    "LICENSES/rust__bitvec-1.0.1__LICENSE.txt": "411781fd38700f2357a14126d0ab048164ab881f1dcb335c1bb932e232c9a2f5",
+    "LICENSES/rust__bumpalo-3.19.0__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__bumpalo-3.19.0__LICENSE-MIT": "65f94e99ddaf4f5d1782a6dae23f35d4293a9a01444a13135a6887017d353cee",
+    "LICENSES/rust__cc-1.0.101__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__cc-1.0.101__LICENSE-MIT": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
+    "LICENSES/rust__cfg-if-1.0.0__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__cfg-if-1.0.0__LICENSE-MIT": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
+    "LICENSES/rust__displaydoc-0.2.5__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__displaydoc-0.2.5__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__enum_dispatch-0.3.13__LICENSE": "1e5d3ddaf5cbc111c8517df39e6f252e4c16dbda26b7cc1ad54c9e3efb0586be",
+    "LICENSES/rust__equivalent-1.0.2__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__equivalent-1.0.2__LICENSE-MIT": "7365cc8878a1d7ce155a58c4ca09c3d7a6be413efa5334a80ea842912b669349",
+    "LICENSES/rust__foldhash-0.2.0__LICENSE": "b1181a40b2a7b25cf66fd01481713bc1005df082c53ef73e851e55071b102744",
+    "LICENSES/rust__form_urlencoded-1.2.2__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__form_urlencoded-1.2.2__LICENSE-MIT": "20c7855c364d57ea4c97889a5e8d98470a9952dade37bd9248b9a54431670e5e",
+    "LICENSES/rust__funty-2.0.0__LICENSE.txt": "f790cc576999f5998c766d3d26d7d64dc368e805a98461484f65e8d961ec6d9f",
+    "LICENSES/rust__getrandom-0.3.3__LICENSE-APACHE": "aaff376532ea30a0cd5330b9502ad4a4c8bf769c539c87ffe78819d188a18ebf",
+    "LICENSES/rust__getrandom-0.3.3__LICENSE-MIT": "29e9fe5074bd27e0e5d5d110394fbbcd841baee2651a3c4b4560a632702cede4",
+    "LICENSES/rust__hashbrown-0.16.1__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__hashbrown-0.16.1__LICENSE-MIT": "ff8f68cb076caf8cefe7a6430d4ac086ce6af2ca8ce2c4e5a2004d4552ef52a2",
+    "LICENSES/rust__heck-0.5.0__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__heck-0.5.0__LICENSE-MIT": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+    "LICENSES/rust__hex-0.4.3__LICENSE-APACHE": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08",
+    "LICENSES/rust__hex-0.4.3__LICENSE-MIT": "f7bdb3426d045cd50efd4953026e3eb5a83d0199f458a075602611b9344da5b9",
+    "LICENSES/rust__icu_collections-1.5.0__LICENSE": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2",
+    "LICENSES/rust__icu_locid-1.5.0__LICENSE": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2",
+    "LICENSES/rust__icu_locid_transform-1.5.0__LICENSE": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2",
+    "LICENSES/rust__icu_locid_transform_data-1.5.0__LICENSE": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2",
+    "LICENSES/rust__icu_normalizer-1.5.0__LICENSE": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2",
+    "LICENSES/rust__icu_normalizer_data-1.5.0__LICENSE": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2",
+    "LICENSES/rust__icu_properties-1.5.1__LICENSE": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2",
+    "LICENSES/rust__icu_properties_data-1.5.0__LICENSE": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2",
+    "LICENSES/rust__icu_provider-1.5.0__LICENSE": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2",
+    "LICENSES/rust__icu_provider_macros-1.5.0__LICENSE": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2",
+    "LICENSES/rust__idna-1.1.0__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__idna-1.1.0__LICENSE-MIT": "b38f11f6096706e6de553dabe2a7ed142d59b6fa8c97e290c67496154745cdd5",
+    "LICENSES/rust__idna_adapter-1.2.0__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__idna_adapter-1.2.0__LICENSE-MIT": "8b43ce8accd61e9d370b5ca9e9c4f953279b5c239926c62315b40e24df51b726",
+    "LICENSES/rust__itoa-1.0.11__LICENSE-APACHE": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+    "LICENSES/rust__itoa-1.0.11__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__jiter-0.14.0__LICENSE": "7c7134b9f7b978c03fca875517cf398db91f19bbb8109b6685e742aa3f57468e",
+    "LICENSES/rust__js-sys-0.3.77__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__js-sys-0.3.77__LICENSE-MIT": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
+    "LICENSES/rust__lexical-parse-float-1.0.5__LICENSE-APACHE": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
+    "LICENSES/rust__lexical-parse-float-1.0.5__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__lexical-parse-float-1.0.5__LICENSE.md": "99aab70a96f3ecab683d8a319d9070af2213ae4c1601fb053fbe85e1361e32fe",
+    "LICENSES/rust__lexical-parse-integer-1.0.5__LICENSE-APACHE": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
+    "LICENSES/rust__lexical-parse-integer-1.0.5__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__lexical-parse-integer-1.0.5__LICENSE.md": "99aab70a96f3ecab683d8a319d9070af2213ae4c1601fb053fbe85e1361e32fe",
+    "LICENSES/rust__lexical-util-1.0.6__LICENSE-APACHE": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
+    "LICENSES/rust__lexical-util-1.0.6__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__libc-0.2.185__LICENSE-APACHE": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+    "LICENSES/rust__libc-0.2.185__LICENSE-MIT": "123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e",
+    "LICENSES/rust__litemap-0.7.3__LICENSE": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2",
+    "LICENSES/rust__log-0.4.27__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__log-0.4.27__LICENSE-MIT": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+    "LICENSES/rust__lru-0.16.3__LICENSE": "061dc50af2cd9340703daf61978af3200cf681b12ea67a323c33ba109a23a45e",
+    "LICENSES/rust__memchr-2.7.4__COPYING": "01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f",
+    "LICENSES/rust__memchr-2.7.4__LICENSE-MIT": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f",
+    "LICENSES/rust__num-bigint-0.4.6__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__num-bigint-0.4.6__LICENSE-MIT": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+    "LICENSES/rust__num-integer-0.1.46__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__num-integer-0.1.46__LICENSE-MIT": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+    "LICENSES/rust__num-traits-0.2.19__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__num-traits-0.2.19__LICENSE-MIT": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+    "LICENSES/rust__once_cell-1.21.3__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__once_cell-1.21.3__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__percent-encoding-2.3.2__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__percent-encoding-2.3.2__LICENSE-MIT": "b38f11f6096706e6de553dabe2a7ed142d59b6fa8c97e290c67496154745cdd5",
+    "LICENSES/rust__portable-atomic-1.6.0__LICENSE-APACHE": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+    "LICENSES/rust__portable-atomic-1.6.0__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__proc-macro2-1.0.86__LICENSE-APACHE": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+    "LICENSES/rust__proc-macro2-1.0.86__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__pyo3-0.28.3__LICENSE-APACHE": "32c76dbe0e73d79100d5ece77c158399f2e2541bc5c78548a4ba45c1cb53c5c9",
+    "LICENSES/rust__pyo3-0.28.3__LICENSE-MIT": "afcbe3b2e6b37172b5a9ca869ee4c0b8cdc09316e5d4384864154482c33e5af6",
+    "LICENSES/rust__pyo3-0.28.3__pyo3-runtime__LICENSE-APACHE": "32c76dbe0e73d79100d5ece77c158399f2e2541bc5c78548a4ba45c1cb53c5c9",
+    "LICENSES/rust__pyo3-0.28.3__pyo3-runtime__LICENSE-MIT": "afcbe3b2e6b37172b5a9ca869ee4c0b8cdc09316e5d4384864154482c33e5af6",
+    "LICENSES/rust__pyo3-build-config-0.28.3__LICENSE-APACHE": "32c76dbe0e73d79100d5ece77c158399f2e2541bc5c78548a4ba45c1cb53c5c9",
+    "LICENSES/rust__pyo3-build-config-0.28.3__LICENSE-MIT": "afcbe3b2e6b37172b5a9ca869ee4c0b8cdc09316e5d4384864154482c33e5af6",
+    "LICENSES/rust__pyo3-ffi-0.28.3__LICENSE-APACHE": "32c76dbe0e73d79100d5ece77c158399f2e2541bc5c78548a4ba45c1cb53c5c9",
+    "LICENSES/rust__pyo3-ffi-0.28.3__LICENSE-MIT": "afcbe3b2e6b37172b5a9ca869ee4c0b8cdc09316e5d4384864154482c33e5af6",
+    "LICENSES/rust__pyo3-macros-0.28.3__LICENSE-APACHE": "32c76dbe0e73d79100d5ece77c158399f2e2541bc5c78548a4ba45c1cb53c5c9",
+    "LICENSES/rust__pyo3-macros-0.28.3__LICENSE-MIT": "afcbe3b2e6b37172b5a9ca869ee4c0b8cdc09316e5d4384864154482c33e5af6",
+    "LICENSES/rust__pyo3-macros-backend-0.28.3__LICENSE-APACHE": "32c76dbe0e73d79100d5ece77c158399f2e2541bc5c78548a4ba45c1cb53c5c9",
+    "LICENSES/rust__pyo3-macros-backend-0.28.3__LICENSE-MIT": "afcbe3b2e6b37172b5a9ca869ee4c0b8cdc09316e5d4384864154482c33e5af6",
+    "LICENSES/rust__python3-dll-a-0.2.14__LICENSE": "c760d1f2e4614d58f2b91cd41b9826457989c09041be0219158b8f7f6d3f8763",
+    "LICENSES/rust__quote-1.0.44__LICENSE-APACHE": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+    "LICENSES/rust__quote-1.0.44__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__r-efi-5.2.0__AUTHORS": "c42285aa32440c3b5358fd4805b817cd8d6e1795111d2e4c547530be41896b2d",
+    "LICENSES/rust__radium-0.7.0__LICENSE.txt": "13f4cc9fbc8d4a447b28aa84019c10ad4abf4b5f6919db061bf6690ccc23bc02",
+    "LICENSES/rust__regex-1.12.3__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__regex-1.12.3__LICENSE-MIT": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+    "LICENSES/rust__regex-automata-0.4.13__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__regex-automata-0.4.13__LICENSE-MIT": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+    "LICENSES/rust__regex-syntax-0.8.5__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__regex-syntax-0.8.5__LICENSE-MIT": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+    "LICENSES/rust__regex-syntax-0.8.5__src__unicode_tables__LICENSE-UNICODE": "74db5baf44a41b1000312c673544b3374e4198af5605c7f9080a402cec42cfa3",
+    "LICENSES/rust__rustversion-1.0.17__LICENSE-APACHE": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+    "LICENSES/rust__rustversion-1.0.17__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__serde-1.0.228__LICENSE-APACHE": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+    "LICENSES/rust__serde-1.0.228__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__serde_core-1.0.228__LICENSE-APACHE": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+    "LICENSES/rust__serde_core-1.0.228__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__serde_derive-1.0.228__LICENSE-APACHE": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+    "LICENSES/rust__serde_derive-1.0.228__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__serde_json-1.0.149__LICENSE-APACHE": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+    "LICENSES/rust__serde_json-1.0.149__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__smallvec-1.15.1__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__smallvec-1.15.1__LICENSE-MIT": "0b28172679e0009b655da42797c03fd163a3379d5cfa67ba1f1655e974a2a1a9",
+    "LICENSES/rust__speedate-0.17.0__LICENSE": "2afdd30d54b4d62b6f488a6bcc1546e84ec5061f13f4209c03d012348783795a",
+    "LICENSES/rust__stable_deref_trait-1.2.0__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__stable_deref_trait-1.2.0__LICENSE-MIT": "5e05b024f653a5ce199e77cbbbd42fb5553562ec714b819421ed0c3e552a75d7",
+    "LICENSES/rust__static_assertions-1.1.0__LICENSE-APACHE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "LICENSES/rust__static_assertions-1.1.0__LICENSE-MIT": "ea084a2373ebc1f0902c09266e7bf25a05ab3814c1805bb017ffa7308f90c061",
+    "LICENSES/rust__strum-0.27.2__LICENSE": "8bce3b45e49ecd1461f223b46de133d8f62cd39f745cfdaf81bee554b908bd42",
+    "LICENSES/rust__strum_macros-0.27.2__LICENSE": "8bce3b45e49ecd1461f223b46de133d8f62cd39f745cfdaf81bee554b908bd42",
+    "LICENSES/rust__syn-2.0.82__LICENSE-APACHE": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+    "LICENSES/rust__syn-2.0.82__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__synstructure-0.13.1__LICENSE": "219920e865eee70b7dcfc948a86b099e7f4fe2de01bcca2ca9a20c0a033f2b59",
+    "LICENSES/rust__tap-1.0.1__LICENSE.txt": "8b4e95f5cf0dc40269c99f7b787203ffe04ded245ca2427422c196efa2b2f42a",
+    "LICENSES/rust__target-lexicon-0.13.4__LICENSE": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
+    "LICENSES/rust__tinystr-0.7.6__LICENSE": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2",
+    "LICENSES/rust__unicode-ident-1.0.12__LICENSE-APACHE": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+    "LICENSES/rust__unicode-ident-1.0.12__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__unicode-ident-1.0.12__LICENSE-UNICODE": "68f5b9f5ea36881a0942ba02f558e9e1faf76cc09cb165ad801744c61b738844",
+    "LICENSES/rust__url-2.5.8__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__url-2.5.8__LICENSE-MIT": "b38f11f6096706e6de553dabe2a7ed142d59b6fa8c97e290c67496154745cdd5",
+    "LICENSES/rust__utf16_iter-1.0.5__LICENSE-APACHE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "LICENSES/rust__utf16_iter-1.0.5__LICENSE-MIT": "3fa4ca83dcc9237839b1bdeb2e6d16bdfb5ec0c5ce42b24694d8bbf0dcbef72c",
+    "LICENSES/rust__utf8_iter-1.0.4__LICENSE-APACHE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "LICENSES/rust__utf8_iter-1.0.4__LICENSE-MIT": "3fa4ca83dcc9237839b1bdeb2e6d16bdfb5ec0c5ce42b24694d8bbf0dcbef72c",
+    "LICENSES/rust__uuid-1.23.0__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__uuid-1.23.0__LICENSE-MIT": "436bc5a105d8e57dcd8778730f3754f7bf39c14d2f530e4cde4bd2d17a83ec3d",
+    "LICENSES/rust__version_check-0.9.5__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__version_check-0.9.5__LICENSE-MIT": "b7e650f3fce5c53249d1cdc608b54df156a97edd636cf9d23498d0cfe7aec63e",
+    "LICENSES/rust__wasi-0.14.2+wasi-0.2.4__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__wasi-0.14.2+wasi-0.2.4__LICENSE-Apache-2.0_WITH_LLVM-exception": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
+    "LICENSES/rust__wasi-0.14.2+wasi-0.2.4__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__wasm-bindgen-0.2.100__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__wasm-bindgen-0.2.100__LICENSE-MIT": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
+    "LICENSES/rust__wasm-bindgen-backend-0.2.100__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__wasm-bindgen-backend-0.2.100__LICENSE-MIT": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
+    "LICENSES/rust__wasm-bindgen-macro-0.2.100__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__wasm-bindgen-macro-0.2.100__LICENSE-MIT": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
+    "LICENSES/rust__wasm-bindgen-macro-support-0.2.100__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__wasm-bindgen-macro-support-0.2.100__LICENSE-MIT": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
+    "LICENSES/rust__wasm-bindgen-shared-0.2.100__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__wasm-bindgen-shared-0.2.100__LICENSE-MIT": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
+    "LICENSES/rust__wit-bindgen-rt-0.39.0__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__write16-1.0.0__LICENSE-APACHE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "LICENSES/rust__write16-1.0.0__LICENSE-MIT": "3fa4ca83dcc9237839b1bdeb2e6d16bdfb5ec0c5ce42b24694d8bbf0dcbef72c",
+    "LICENSES/rust__writeable-0.5.5__LICENSE": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2",
+    "LICENSES/rust__wyz-0.5.1__LICENSE.txt": "411781fd38700f2357a14126d0ab048164ab881f1dcb335c1bb932e232c9a2f5",
+    "LICENSES/rust__yoke-0.7.4__LICENSE": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2",
+    "LICENSES/rust__yoke-derive-0.7.4__LICENSE": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2",
+    "LICENSES/rust__zerocopy-0.8.25__LICENSE-APACHE": "9d185ac6703c4b0453974c0d85e9eee43e6941009296bb1f5eb0b54e2329e9f3",
+    "LICENSES/rust__zerocopy-0.8.25__LICENSE-BSD": "83c1763356e822adde0a2cae748d938a73fdc263849ccff6b27776dff213bd32",
+    "LICENSES/rust__zerocopy-0.8.25__LICENSE-MIT": "1a2f5c12ddc934d58956aa5dbdd3255fe55fd957633ab7d0d39e4f0daa73f7df",
+    "LICENSES/rust__zerocopy-derive-0.8.25__LICENSE-APACHE": "9d185ac6703c4b0453974c0d85e9eee43e6941009296bb1f5eb0b54e2329e9f3",
+    "LICENSES/rust__zerocopy-derive-0.8.25__LICENSE-BSD": "83c1763356e822adde0a2cae748d938a73fdc263849ccff6b27776dff213bd32",
+    "LICENSES/rust__zerocopy-derive-0.8.25__LICENSE-MIT": "1a2f5c12ddc934d58956aa5dbdd3255fe55fd957633ab7d0d39e4f0daa73f7df",
+    "LICENSES/rust__zerofrom-0.1.4__LICENSE": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2",
+    "LICENSES/rust__zerofrom-derive-0.1.4__LICENSE": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2",
+    "LICENSES/rust__zerovec-0.10.4__LICENSE": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2",
+    "LICENSES/rust__zerovec-derive-0.10.3__LICENSE": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2",
+    "LICENSES/rust__zmij-1.0.6__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/runtime__CPython-3.11.9__LICENSE.txt": "e502c6b880ff58d614901495a9009c136539cd0b1e2a2abb8fc00b934c203419",
+    "LICENSES/runtime__CPython-3.11.9__Doc-license.rst": "2b734ec5975b21b29ae8b9756a00fc3dfe701abe51687cec4c98a21c51005bca",
+    "LICENSES/runtime__OpenSSL-3.0.13__LICENSE.txt": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a",
+    "LICENSES/runtime__Expat-2.6.0__COPYING": "122f2c27000472a201d337b9b31f7eb2b52d091b02857061a8880371612d9534"
+  },
+  "lock_sha256": "3381c24043794ebe29eb6a5abe811b442bd54cd59167aa0cc2fadc1d02aaf90e",
+  "original_paths": {
+    "LICENSES/pydantic-core__sbom.json": "LICENSES/pydantic-core/sbom.json",
+    "LICENSES/python__aiohappyeyeballs__aiohappyeyeballs-2.7.1.dist-info__licenses__LICENSE": "LICENSES/python/aiohappyeyeballs/aiohappyeyeballs-2.7.1.dist-info/licenses/LICENSE",
+    "LICENSES/python__aiohttp__aiohttp-3.14.3.dist-info__licenses__LICENSE.txt": "LICENSES/python/aiohttp/aiohttp-3.14.3.dist-info/licenses/LICENSE.txt",
+    "LICENSES/python__aiohttp__aiohttp-3.14.3.dist-info__licenses__vendor__llhttp__LICENSE": "LICENSES/python/aiohttp/aiohttp-3.14.3.dist-info/licenses/vendor/llhttp/LICENSE",
+    "LICENSES/python__aiosignal__aiosignal-1.4.0.dist-info__licenses__LICENSE": "LICENSES/python/aiosignal/aiosignal-1.4.0.dist-info/licenses/LICENSE",
+    "LICENSES/python__altgraph__altgraph-0.17.5.dist-info__LICENSE": "LICENSES/python/altgraph/altgraph-0.17.5.dist-info/LICENSE",
+    "LICENSES/python__annotated-doc__annotated_doc-0.0.5.dist-info__licenses__LICENSE": "LICENSES/python/annotated-doc/annotated_doc-0.0.5.dist-info/licenses/LICENSE",
+    "LICENSES/python__annotated-types__annotated_types-0.8.0.dist-info__licenses__LICENSE": "LICENSES/python/annotated-types/annotated_types-0.8.0.dist-info/licenses/LICENSE",
+    "LICENSES/python__anyio__anyio-4.14.2.dist-info__licenses__LICENSE": "LICENSES/python/anyio/anyio-4.14.2.dist-info/licenses/LICENSE",
+    "LICENSES/python__attrs__attrs-26.1.0.dist-info__licenses__LICENSE": "LICENSES/python/attrs/attrs-26.1.0.dist-info/licenses/LICENSE",
+    "LICENSES/python__bidict__bidict-0.23.1.dist-info__LICENSE": "LICENSES/python/bidict/bidict-0.23.1.dist-info/LICENSE",
+    "LICENSES/python__certifi__certifi-2026.7.22.dist-info__licenses__LICENSE": "LICENSES/python/certifi/certifi-2026.7.22.dist-info/licenses/LICENSE",
+    "LICENSES/python__click__click-8.4.2.dist-info__licenses__LICENSE.txt": "LICENSES/python/click/click-8.4.2.dist-info/licenses/LICENSE.txt",
+    "LICENSES/python__colorama__colorama-0.4.6.dist-info__licenses__LICENSE.txt": "LICENSES/python/colorama/colorama-0.4.6.dist-info/licenses/LICENSE.txt",
+    "LICENSES/python__fastapi__fastapi-0.141.1.dist-info__licenses__LICENSE": "LICENSES/python/fastapi/fastapi-0.141.1.dist-info/licenses/LICENSE",
+    "LICENSES/python__frozenlist__frozenlist-1.8.0.dist-info__licenses__LICENSE": "LICENSES/python/frozenlist/frozenlist-1.8.0.dist-info/licenses/LICENSE",
+    "LICENSES/python__h11__h11-0.16.0.dist-info__licenses__LICENSE.txt": "LICENSES/python/h11/h11-0.16.0.dist-info/licenses/LICENSE.txt",
+    "LICENSES/python__httpcore__httpcore-1.0.9.dist-info__licenses__LICENSE.md": "LICENSES/python/httpcore/httpcore-1.0.9.dist-info/licenses/LICENSE.md",
+    "LICENSES/python__httpx__httpx-0.28.1.dist-info__licenses__LICENSE.md": "LICENSES/python/httpx/httpx-0.28.1.dist-info/licenses/LICENSE.md",
+    "LICENSES/python__idna__idna-3.18.dist-info__licenses__LICENSE.md": "LICENSES/python/idna/idna-3.18.dist-info/licenses/LICENSE.md",
+    "LICENSES/python__iniconfig__iniconfig-2.3.0.dist-info__licenses__LICENSE": "LICENSES/python/iniconfig/iniconfig-2.3.0.dist-info/licenses/LICENSE",
+    "LICENSES/python__macholib__macholib-1.16.4.dist-info__LICENSE": "LICENSES/python/macholib/macholib-1.16.4.dist-info/LICENSE",
+    "LICENSES/python__markdown-it-py__markdown_it_py-4.2.0.dist-info__licenses__LICENSE": "LICENSES/python/markdown-it-py/markdown_it_py-4.2.0.dist-info/licenses/LICENSE",
+    "LICENSES/python__markdown-it-py__markdown_it_py-4.2.0.dist-info__licenses__LICENSE.markdown-it": "LICENSES/python/markdown-it-py/markdown_it_py-4.2.0.dist-info/licenses/LICENSE.markdown-it",
+    "LICENSES/python__mdurl__mdurl-0.1.2.dist-info__LICENSE": "LICENSES/python/mdurl/mdurl-0.1.2.dist-info/LICENSE",
+    "LICENSES/python__multidict__multidict-6.7.1.dist-info__licenses__LICENSE": "LICENSES/python/multidict/multidict-6.7.1.dist-info/licenses/LICENSE",
+    "LICENSES/python__mypy__mypy__typeshed__LICENSE": "LICENSES/python/mypy/mypy/typeshed/LICENSE",
+    "LICENSES/python__mypy__mypy-1.17.1.dist-info__licenses__LICENSE": "LICENSES/python/mypy/mypy-1.17.1.dist-info/licenses/LICENSE",
+    "LICENSES/python__mypy-extensions__mypy_extensions-1.1.0.dist-info__licenses__LICENSE": "LICENSES/python/mypy-extensions/mypy_extensions-1.1.0.dist-info/licenses/LICENSE",
+    "LICENSES/python__packaging__packaging-26.3.dist-info__licenses__LICENSE": "LICENSES/python/packaging/packaging-26.3.dist-info/licenses/LICENSE",
+    "LICENSES/python__packaging__packaging-26.3.dist-info__licenses__LICENSE.APACHE": "LICENSES/python/packaging/packaging-26.3.dist-info/licenses/LICENSE.APACHE",
+    "LICENSES/python__packaging__packaging-26.3.dist-info__licenses__LICENSE.BSD": "LICENSES/python/packaging/packaging-26.3.dist-info/licenses/LICENSE.BSD",
+    "LICENSES/python__pathspec__pathspec-1.1.1.dist-info__licenses__LICENSE": "LICENSES/python/pathspec/pathspec-1.1.1.dist-info/licenses/LICENSE",
+    "LICENSES/python__pefile__pefile-2023.2.7.dist-info__LICENSE": "LICENSES/python/pefile/pefile-2023.2.7.dist-info/LICENSE",
+    "LICENSES/python__pluggy__pluggy-1.6.0.dist-info__licenses__LICENSE": "LICENSES/python/pluggy/pluggy-1.6.0.dist-info/licenses/LICENSE",
+    "LICENSES/python__propcache__propcache-0.5.2.dist-info__licenses__LICENSE": "LICENSES/python/propcache/propcache-0.5.2.dist-info/licenses/LICENSE",
+    "LICENSES/python__propcache__propcache-0.5.2.dist-info__licenses__NOTICE": "LICENSES/python/propcache/propcache-0.5.2.dist-info/licenses/NOTICE",
+    "LICENSES/python__pydantic__pydantic-2.13.4.dist-info__licenses__LICENSE": "LICENSES/python/pydantic/pydantic-2.13.4.dist-info/licenses/LICENSE",
+    "LICENSES/python__pydantic-core__pydantic_core-2.46.4.dist-info__licenses__LICENSE": "LICENSES/python/pydantic-core/pydantic_core-2.46.4.dist-info/licenses/LICENSE",
+    "LICENSES/python__pygments__pygments-2.20.0.dist-info__licenses__AUTHORS": "LICENSES/python/pygments/pygments-2.20.0.dist-info/licenses/AUTHORS",
+    "LICENSES/python__pygments__pygments-2.20.0.dist-info__licenses__LICENSE": "LICENSES/python/pygments/pygments-2.20.0.dist-info/licenses/LICENSE",
+    "LICENSES/python__pyinstaller__pyinstaller-6.15.0.dist-info__COPYING.txt": "LICENSES/python/pyinstaller/pyinstaller-6.15.0.dist-info/COPYING.txt",
+    "LICENSES/python__pyinstaller-hooks-contrib__pyinstaller_hooks_contrib-2026.6.dist-info__licenses__LICENSE": "LICENSES/python/pyinstaller-hooks-contrib/pyinstaller_hooks_contrib-2026.6.dist-info/licenses/LICENSE",
+    "LICENSES/python__pytest__pytest-8.4.2.dist-info__licenses__AUTHORS": "LICENSES/python/pytest/pytest-8.4.2.dist-info/licenses/AUTHORS",
+    "LICENSES/python__pytest__pytest-8.4.2.dist-info__licenses__LICENSE": "LICENSES/python/pytest/pytest-8.4.2.dist-info/licenses/LICENSE",
+    "LICENSES/python__pytest-asyncio__pytest_asyncio-1.4.0.dist-info__licenses__LICENSE": "LICENSES/python/pytest-asyncio/pytest_asyncio-1.4.0.dist-info/licenses/LICENSE",
+    "LICENSES/python__python-engineio__python_engineio-4.13.4.dist-info__licenses__LICENSE": "LICENSES/python/python-engineio/python_engineio-4.13.4.dist-info/licenses/LICENSE",
+    "LICENSES/python__python-socketio__python_socketio-5.16.4.dist-info__licenses__LICENSE": "LICENSES/python/python-socketio/python_socketio-5.16.4.dist-info/licenses/LICENSE",
+    "LICENSES/python__pywin32-ctypes__pywin32_ctypes-0.2.3.dist-info__LICENSE.txt": "LICENSES/python/pywin32-ctypes/pywin32_ctypes-0.2.3.dist-info/LICENSE.txt",
+    "LICENSES/python__rich__rich-15.0.0.dist-info__licenses__LICENSE": "LICENSES/python/rich/rich-15.0.0.dist-info/licenses/LICENSE",
+    "LICENSES/python__ruff__ruff-0.16.2.dist-info__licenses__LICENSE": "LICENSES/python/ruff/ruff-0.16.2.dist-info/licenses/LICENSE",
+    "LICENSES/python__setuptools__setuptools___vendor__autocommand-2.2.2.dist-info__LICENSE": "LICENSES/python/setuptools/setuptools/_vendor/autocommand-2.2.2.dist-info/LICENSE",
+    "LICENSES/python__setuptools__setuptools___vendor__backports.tarfile-1.2.0.dist-info__LICENSE": "LICENSES/python/setuptools/setuptools/_vendor/backports.tarfile-1.2.0.dist-info/LICENSE",
+    "LICENSES/python__setuptools__setuptools___vendor__importlib_metadata-8.7.1.dist-info__licenses__LICENSE": "LICENSES/python/setuptools/setuptools/_vendor/importlib_metadata-8.7.1.dist-info/licenses/LICENSE",
+    "LICENSES/python__setuptools__setuptools___vendor__jaraco.text-4.0.0.dist-info__LICENSE": "LICENSES/python/setuptools/setuptools/_vendor/jaraco.text-4.0.0.dist-info/LICENSE",
+    "LICENSES/python__setuptools__setuptools___vendor__jaraco_context-6.1.0.dist-info__licenses__LICENSE": "LICENSES/python/setuptools/setuptools/_vendor/jaraco_context-6.1.0.dist-info/licenses/LICENSE",
+    "LICENSES/python__setuptools__setuptools___vendor__jaraco_functools-4.4.0.dist-info__licenses__LICENSE": "LICENSES/python/setuptools/setuptools/_vendor/jaraco_functools-4.4.0.dist-info/licenses/LICENSE",
+    "LICENSES/python__setuptools__setuptools___vendor__more_itertools-10.8.0.dist-info__licenses__LICENSE": "LICENSES/python/setuptools/setuptools/_vendor/more_itertools-10.8.0.dist-info/licenses/LICENSE",
+    "LICENSES/python__setuptools__setuptools___vendor__packaging-26.0.dist-info__licenses__LICENSE": "LICENSES/python/setuptools/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE",
+    "LICENSES/python__setuptools__setuptools___vendor__packaging-26.0.dist-info__licenses__LICENSE.APACHE": "LICENSES/python/setuptools/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.APACHE",
+    "LICENSES/python__setuptools__setuptools___vendor__packaging-26.0.dist-info__licenses__LICENSE.BSD": "LICENSES/python/setuptools/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.BSD",
+    "LICENSES/python__setuptools__setuptools___vendor__platformdirs-4.4.0.dist-info__licenses__LICENSE": "LICENSES/python/setuptools/setuptools/_vendor/platformdirs-4.4.0.dist-info/licenses/LICENSE",
+    "LICENSES/python__setuptools__setuptools___vendor__tomli-2.4.0.dist-info__licenses__LICENSE": "LICENSES/python/setuptools/setuptools/_vendor/tomli-2.4.0.dist-info/licenses/LICENSE",
+    "LICENSES/python__setuptools__setuptools___vendor__wheel-0.46.3.dist-info__licenses__LICENSE.txt": "LICENSES/python/setuptools/setuptools/_vendor/wheel-0.46.3.dist-info/licenses/LICENSE.txt",
+    "LICENSES/python__setuptools__setuptools___vendor__zipp-3.23.0.dist-info__licenses__LICENSE": "LICENSES/python/setuptools/setuptools/_vendor/zipp-3.23.0.dist-info/licenses/LICENSE",
+    "LICENSES/python__setuptools__setuptools__config___validate_pyproject__NOTICE": "LICENSES/python/setuptools/setuptools/config/_validate_pyproject/NOTICE",
+    "LICENSES/python__setuptools__setuptools__config__NOTICE": "LICENSES/python/setuptools/setuptools/config/NOTICE",
+    "LICENSES/python__setuptools__setuptools-84.0.0.dist-info__licenses__LICENSE": "LICENSES/python/setuptools/setuptools-84.0.0.dist-info/licenses/LICENSE",
+    "LICENSES/python__shellingham__shellingham-1.5.4.dist-info__LICENSE": "LICENSES/python/shellingham/shellingham-1.5.4.dist-info/LICENSE",
+    "LICENSES/python__simple-websocket__simple_websocket-1.1.0.dist-info__LICENSE": "LICENSES/python/simple-websocket/simple_websocket-1.1.0.dist-info/LICENSE",
+    "LICENSES/python__starlette__starlette-1.5.0.dist-info__licenses__LICENSE.md": "LICENSES/python/starlette/starlette-1.5.0.dist-info/licenses/LICENSE.md",
+    "LICENSES/python__typer__typer___click__LICENSE.txt": "LICENSES/python/typer/typer/_click/LICENSE.txt",
+    "LICENSES/python__typer__typer-0.27.1.dist-info__licenses__LICENSE": "LICENSES/python/typer/typer-0.27.1.dist-info/licenses/LICENSE",
+    "LICENSES/python__typing-extensions__typing_extensions-4.16.0.dist-info__licenses__LICENSE": "LICENSES/python/typing-extensions/typing_extensions-4.16.0.dist-info/licenses/LICENSE",
+    "LICENSES/python__typing-inspection__typing_inspection-0.4.2.dist-info__licenses__LICENSE": "LICENSES/python/typing-inspection/typing_inspection-0.4.2.dist-info/licenses/LICENSE",
+    "LICENSES/python__uvicorn__uvicorn-0.52.1.dist-info__licenses__LICENSE.md": "LICENSES/python/uvicorn/uvicorn-0.52.1.dist-info/licenses/LICENSE.md",
+    "LICENSES/python__wsproto__wsproto-1.3.2.dist-info__licenses__LICENSE": "LICENSES/python/wsproto/wsproto-1.3.2.dist-info/licenses/LICENSE",
+    "LICENSES/python__yarl__yarl-1.24.5.dist-info__licenses__LICENSE": "LICENSES/python/yarl/yarl-1.24.5.dist-info/licenses/LICENSE",
+    "LICENSES/python__yarl__yarl-1.24.5.dist-info__licenses__NOTICE": "LICENSES/python/yarl/yarl-1.24.5.dist-info/licenses/NOTICE",
+    "LICENSES/runtime__CPython__Doc-license.rst": "LICENSES/runtime/CPython/Doc-license.rst",
+    "LICENSES/runtime__CPython__LICENSE.txt": "LICENSES/runtime/CPython/LICENSE.txt",
+    "LICENSES/runtime__Expat__COPYING": "LICENSES/runtime/Expat/COPYING",
+    "LICENSES/runtime__libffi__LICENSE": "LICENSES/runtime/libffi/LICENSE",
+    "LICENSES/runtime__OpenSSL__LICENSE.txt": "LICENSES/runtime/OpenSSL/LICENSE.txt",
+    "LICENSES/runtime__Rust__LICENSE-MIT": "LICENSES/runtime/Rust/LICENSE-MIT",
+    "LICENSES/runtime__SQLite__LICENSE": "LICENSES/runtime/SQLite/LICENSE",
+    "LICENSES/runtime__zlib__LICENSE": "LICENSES/runtime/zlib/LICENSE",
+    "LICENSES/rust__ahash-0.8.12__LICENSE-APACHE": "LICENSES/rust/ahash-0.8.12/LICENSE-APACHE",
+    "LICENSES/rust__ahash-0.8.12__LICENSE-MIT": "LICENSES/rust/ahash-0.8.12/LICENSE-MIT",
+    "LICENSES/rust__aho-corasick-1.1.3__COPYING": "LICENSES/rust/aho-corasick-1.1.3/COPYING",
+    "LICENSES/rust__aho-corasick-1.1.3__LICENSE-MIT": "LICENSES/rust/aho-corasick-1.1.3/LICENSE-MIT",
+    "LICENSES/rust__allocator-api2-0.2.21__LICENSE-APACHE": "LICENSES/rust/allocator-api2-0.2.21/LICENSE-APACHE",
+    "LICENSES/rust__allocator-api2-0.2.21__LICENSE-MIT": "LICENSES/rust/allocator-api2-0.2.21/LICENSE-MIT",
+    "LICENSES/rust__autocfg-1.3.0__LICENSE-APACHE": "LICENSES/rust/autocfg-1.3.0/LICENSE-APACHE",
+    "LICENSES/rust__autocfg-1.3.0__LICENSE-MIT": "LICENSES/rust/autocfg-1.3.0/LICENSE-MIT",
+    "LICENSES/rust__base64-0.22.1__LICENSE-APACHE": "LICENSES/rust/base64-0.22.1/LICENSE-APACHE",
+    "LICENSES/rust__base64-0.22.1__LICENSE-MIT": "LICENSES/rust/base64-0.22.1/LICENSE-MIT",
+    "LICENSES/rust__bitflags-2.9.1__LICENSE-APACHE": "LICENSES/rust/bitflags-2.9.1/LICENSE-APACHE",
+    "LICENSES/rust__bitflags-2.9.1__LICENSE-MIT": "LICENSES/rust/bitflags-2.9.1/LICENSE-MIT",
+    "LICENSES/rust__bitvec-1.0.1__LICENSE.txt": "LICENSES/rust/bitvec-1.0.1/LICENSE.txt",
+    "LICENSES/rust__bumpalo-3.19.0__LICENSE-APACHE": "LICENSES/rust/bumpalo-3.19.0/LICENSE-APACHE",
+    "LICENSES/rust__bumpalo-3.19.0__LICENSE-MIT": "LICENSES/rust/bumpalo-3.19.0/LICENSE-MIT",
+    "LICENSES/rust__cc-1.0.101__LICENSE-APACHE": "LICENSES/rust/cc-1.0.101/LICENSE-APACHE",
+    "LICENSES/rust__cc-1.0.101__LICENSE-MIT": "LICENSES/rust/cc-1.0.101/LICENSE-MIT",
+    "LICENSES/rust__cfg-if-1.0.0__LICENSE-APACHE": "LICENSES/rust/cfg-if-1.0.0/LICENSE-APACHE",
+    "LICENSES/rust__cfg-if-1.0.0__LICENSE-MIT": "LICENSES/rust/cfg-if-1.0.0/LICENSE-MIT",
+    "LICENSES/rust__displaydoc-0.2.5__LICENSE-APACHE": "LICENSES/rust/displaydoc-0.2.5/LICENSE-APACHE",
+    "LICENSES/rust__displaydoc-0.2.5__LICENSE-MIT": "LICENSES/rust/displaydoc-0.2.5/LICENSE-MIT",
+    "LICENSES/rust__enum_dispatch-0.3.13__LICENSE": "LICENSES/rust/enum_dispatch-0.3.13/LICENSE",
+    "LICENSES/rust__equivalent-1.0.2__LICENSE-APACHE": "LICENSES/rust/equivalent-1.0.2/LICENSE-APACHE",
+    "LICENSES/rust__equivalent-1.0.2__LICENSE-MIT": "LICENSES/rust/equivalent-1.0.2/LICENSE-MIT",
+    "LICENSES/rust__foldhash-0.2.0__LICENSE": "LICENSES/rust/foldhash-0.2.0/LICENSE",
+    "LICENSES/rust__form_urlencoded-1.2.2__LICENSE-APACHE": "LICENSES/rust/form_urlencoded-1.2.2/LICENSE-APACHE",
+    "LICENSES/rust__form_urlencoded-1.2.2__LICENSE-MIT": "LICENSES/rust/form_urlencoded-1.2.2/LICENSE-MIT",
+    "LICENSES/rust__funty-2.0.0__LICENSE.txt": "LICENSES/rust/funty-2.0.0/LICENSE.txt",
+    "LICENSES/rust__getrandom-0.3.3__LICENSE-APACHE": "LICENSES/rust/getrandom-0.3.3/LICENSE-APACHE",
+    "LICENSES/rust__getrandom-0.3.3__LICENSE-MIT": "LICENSES/rust/getrandom-0.3.3/LICENSE-MIT",
+    "LICENSES/rust__hashbrown-0.16.1__LICENSE-APACHE": "LICENSES/rust/hashbrown-0.16.1/LICENSE-APACHE",
+    "LICENSES/rust__hashbrown-0.16.1__LICENSE-MIT": "LICENSES/rust/hashbrown-0.16.1/LICENSE-MIT",
+    "LICENSES/rust__heck-0.5.0__LICENSE-APACHE": "LICENSES/rust/heck-0.5.0/LICENSE-APACHE",
+    "LICENSES/rust__heck-0.5.0__LICENSE-MIT": "LICENSES/rust/heck-0.5.0/LICENSE-MIT",
+    "LICENSES/rust__hex-0.4.3__LICENSE-APACHE": "LICENSES/rust/hex-0.4.3/LICENSE-APACHE",
+    "LICENSES/rust__hex-0.4.3__LICENSE-MIT": "LICENSES/rust/hex-0.4.3/LICENSE-MIT",
+    "LICENSES/rust__icu_collections-1.5.0__LICENSE": "LICENSES/rust/icu_collections-1.5.0/LICENSE",
+    "LICENSES/rust__icu_locid-1.5.0__LICENSE": "LICENSES/rust/icu_locid-1.5.0/LICENSE",
+    "LICENSES/rust__icu_locid_transform-1.5.0__LICENSE": "LICENSES/rust/icu_locid_transform-1.5.0/LICENSE",
+    "LICENSES/rust__icu_locid_transform_data-1.5.0__LICENSE": "LICENSES/rust/icu_locid_transform_data-1.5.0/LICENSE",
+    "LICENSES/rust__icu_normalizer-1.5.0__LICENSE": "LICENSES/rust/icu_normalizer-1.5.0/LICENSE",
+    "LICENSES/rust__icu_normalizer_data-1.5.0__LICENSE": "LICENSES/rust/icu_normalizer_data-1.5.0/LICENSE",
+    "LICENSES/rust__icu_properties-1.5.1__LICENSE": "LICENSES/rust/icu_properties-1.5.1/LICENSE",
+    "LICENSES/rust__icu_properties_data-1.5.0__LICENSE": "LICENSES/rust/icu_properties_data-1.5.0/LICENSE",
+    "LICENSES/rust__icu_provider-1.5.0__LICENSE": "LICENSES/rust/icu_provider-1.5.0/LICENSE",
+    "LICENSES/rust__icu_provider_macros-1.5.0__LICENSE": "LICENSES/rust/icu_provider_macros-1.5.0/LICENSE",
+    "LICENSES/rust__idna-1.1.0__LICENSE-APACHE": "LICENSES/rust/idna-1.1.0/LICENSE-APACHE",
+    "LICENSES/rust__idna-1.1.0__LICENSE-MIT": "LICENSES/rust/idna-1.1.0/LICENSE-MIT",
+    "LICENSES/rust__idna_adapter-1.2.0__LICENSE-APACHE": "LICENSES/rust/idna_adapter-1.2.0/LICENSE-APACHE",
+    "LICENSES/rust__idna_adapter-1.2.0__LICENSE-MIT": "LICENSES/rust/idna_adapter-1.2.0/LICENSE-MIT",
+    "LICENSES/rust__itoa-1.0.11__LICENSE-APACHE": "LICENSES/rust/itoa-1.0.11/LICENSE-APACHE",
+    "LICENSES/rust__itoa-1.0.11__LICENSE-MIT": "LICENSES/rust/itoa-1.0.11/LICENSE-MIT",
+    "LICENSES/rust__jiter-0.14.0__LICENSE": "LICENSES/rust/jiter-0.14.0/LICENSE",
+    "LICENSES/rust__js-sys-0.3.77__LICENSE-APACHE": "LICENSES/rust/js-sys-0.3.77/LICENSE-APACHE",
+    "LICENSES/rust__js-sys-0.3.77__LICENSE-MIT": "LICENSES/rust/js-sys-0.3.77/LICENSE-MIT",
+    "LICENSES/rust__lexical-parse-float-1.0.5__LICENSE-APACHE": "LICENSES/rust/lexical-parse-float-1.0.5/LICENSE-APACHE",
+    "LICENSES/rust__lexical-parse-float-1.0.5__LICENSE-MIT": "LICENSES/rust/lexical-parse-float-1.0.5/LICENSE-MIT",
+    "LICENSES/rust__lexical-parse-float-1.0.5__LICENSE.md": "LICENSES/rust/lexical-parse-float-1.0.5/LICENSE.md",
+    "LICENSES/rust__lexical-parse-integer-1.0.5__LICENSE-APACHE": "LICENSES/rust/lexical-parse-integer-1.0.5/LICENSE-APACHE",
+    "LICENSES/rust__lexical-parse-integer-1.0.5__LICENSE-MIT": "LICENSES/rust/lexical-parse-integer-1.0.5/LICENSE-MIT",
+    "LICENSES/rust__lexical-parse-integer-1.0.5__LICENSE.md": "LICENSES/rust/lexical-parse-integer-1.0.5/LICENSE.md",
+    "LICENSES/rust__lexical-util-1.0.6__LICENSE-APACHE": "LICENSES/rust/lexical-util-1.0.6/LICENSE-APACHE",
+    "LICENSES/rust__lexical-util-1.0.6__LICENSE-MIT": "LICENSES/rust/lexical-util-1.0.6/LICENSE-MIT",
+    "LICENSES/rust__libc-0.2.185__LICENSE-APACHE": "LICENSES/rust/libc-0.2.185/LICENSE-APACHE",
+    "LICENSES/rust__libc-0.2.185__LICENSE-MIT": "LICENSES/rust/libc-0.2.185/LICENSE-MIT",
+    "LICENSES/rust__litemap-0.7.3__LICENSE": "LICENSES/rust/litemap-0.7.3/LICENSE",
+    "LICENSES/rust__log-0.4.27__LICENSE-APACHE": "LICENSES/rust/log-0.4.27/LICENSE-APACHE",
+    "LICENSES/rust__log-0.4.27__LICENSE-MIT": "LICENSES/rust/log-0.4.27/LICENSE-MIT",
+    "LICENSES/rust__lru-0.16.3__LICENSE": "LICENSES/rust/lru-0.16.3/LICENSE",
+    "LICENSES/rust__memchr-2.7.4__COPYING": "LICENSES/rust/memchr-2.7.4/COPYING",
+    "LICENSES/rust__memchr-2.7.4__LICENSE-MIT": "LICENSES/rust/memchr-2.7.4/LICENSE-MIT",
+    "LICENSES/rust__num-bigint-0.4.6__LICENSE-APACHE": "LICENSES/rust/num-bigint-0.4.6/LICENSE-APACHE",
+    "LICENSES/rust__num-bigint-0.4.6__LICENSE-MIT": "LICENSES/rust/num-bigint-0.4.6/LICENSE-MIT",
+    "LICENSES/rust__num-integer-0.1.46__LICENSE-APACHE": "LICENSES/rust/num-integer-0.1.46/LICENSE-APACHE",
+    "LICENSES/rust__num-integer-0.1.46__LICENSE-MIT": "LICENSES/rust/num-integer-0.1.46/LICENSE-MIT",
+    "LICENSES/rust__num-traits-0.2.19__LICENSE-APACHE": "LICENSES/rust/num-traits-0.2.19/LICENSE-APACHE",
+    "LICENSES/rust__num-traits-0.2.19__LICENSE-MIT": "LICENSES/rust/num-traits-0.2.19/LICENSE-MIT",
+    "LICENSES/rust__once_cell-1.21.3__LICENSE-APACHE": "LICENSES/rust/once_cell-1.21.3/LICENSE-APACHE",
+    "LICENSES/rust__once_cell-1.21.3__LICENSE-MIT": "LICENSES/rust/once_cell-1.21.3/LICENSE-MIT",
+    "LICENSES/rust__percent-encoding-2.3.2__LICENSE-APACHE": "LICENSES/rust/percent-encoding-2.3.2/LICENSE-APACHE",
+    "LICENSES/rust__percent-encoding-2.3.2__LICENSE-MIT": "LICENSES/rust/percent-encoding-2.3.2/LICENSE-MIT",
+    "LICENSES/rust__portable-atomic-1.6.0__LICENSE-APACHE": "LICENSES/rust/portable-atomic-1.6.0/LICENSE-APACHE",
+    "LICENSES/rust__portable-atomic-1.6.0__LICENSE-MIT": "LICENSES/rust/portable-atomic-1.6.0/LICENSE-MIT",
+    "LICENSES/rust__proc-macro2-1.0.86__LICENSE-APACHE": "LICENSES/rust/proc-macro2-1.0.86/LICENSE-APACHE",
+    "LICENSES/rust__proc-macro2-1.0.86__LICENSE-MIT": "LICENSES/rust/proc-macro2-1.0.86/LICENSE-MIT",
+    "LICENSES/rust__pyo3-0.28.3__LICENSE-APACHE": "LICENSES/rust/pyo3-0.28.3/LICENSE-APACHE",
+    "LICENSES/rust__pyo3-0.28.3__LICENSE-MIT": "LICENSES/rust/pyo3-0.28.3/LICENSE-MIT",
+    "LICENSES/rust__pyo3-0.28.3__pyo3-runtime__LICENSE-APACHE": "LICENSES/rust/pyo3-0.28.3/pyo3-runtime/LICENSE-APACHE",
+    "LICENSES/rust__pyo3-0.28.3__pyo3-runtime__LICENSE-MIT": "LICENSES/rust/pyo3-0.28.3/pyo3-runtime/LICENSE-MIT",
+    "LICENSES/rust__pyo3-build-config-0.28.3__LICENSE-APACHE": "LICENSES/rust/pyo3-build-config-0.28.3/LICENSE-APACHE",
+    "LICENSES/rust__pyo3-build-config-0.28.3__LICENSE-MIT": "LICENSES/rust/pyo3-build-config-0.28.3/LICENSE-MIT",
+    "LICENSES/rust__pyo3-ffi-0.28.3__LICENSE-APACHE": "LICENSES/rust/pyo3-ffi-0.28.3/LICENSE-APACHE",
+    "LICENSES/rust__pyo3-ffi-0.28.3__LICENSE-MIT": "LICENSES/rust/pyo3-ffi-0.28.3/LICENSE-MIT",
+    "LICENSES/rust__pyo3-macros-0.28.3__LICENSE-APACHE": "LICENSES/rust/pyo3-macros-0.28.3/LICENSE-APACHE",
+    "LICENSES/rust__pyo3-macros-0.28.3__LICENSE-MIT": "LICENSES/rust/pyo3-macros-0.28.3/LICENSE-MIT",
+    "LICENSES/rust__pyo3-macros-backend-0.28.3__LICENSE-APACHE": "LICENSES/rust/pyo3-macros-backend-0.28.3/LICENSE-APACHE",
+    "LICENSES/rust__pyo3-macros-backend-0.28.3__LICENSE-MIT": "LICENSES/rust/pyo3-macros-backend-0.28.3/LICENSE-MIT",
+    "LICENSES/rust__python3-dll-a-0.2.14__LICENSE": "LICENSES/rust/python3-dll-a-0.2.14/LICENSE",
+    "LICENSES/rust__quote-1.0.44__LICENSE-APACHE": "LICENSES/rust/quote-1.0.44/LICENSE-APACHE",
+    "LICENSES/rust__quote-1.0.44__LICENSE-MIT": "LICENSES/rust/quote-1.0.44/LICENSE-MIT",
+    "LICENSES/rust__r-efi-5.2.0__AUTHORS": "LICENSES/rust/r-efi-5.2.0/AUTHORS",
+    "LICENSES/rust__radium-0.7.0__LICENSE.txt": "LICENSES/rust/radium-0.7.0/LICENSE.txt",
+    "LICENSES/rust__regex-1.12.3__LICENSE-APACHE": "LICENSES/rust/regex-1.12.3/LICENSE-APACHE",
+    "LICENSES/rust__regex-1.12.3__LICENSE-MIT": "LICENSES/rust/regex-1.12.3/LICENSE-MIT",
+    "LICENSES/rust__regex-automata-0.4.13__LICENSE-APACHE": "LICENSES/rust/regex-automata-0.4.13/LICENSE-APACHE",
+    "LICENSES/rust__regex-automata-0.4.13__LICENSE-MIT": "LICENSES/rust/regex-automata-0.4.13/LICENSE-MIT",
+    "LICENSES/rust__regex-syntax-0.8.5__LICENSE-APACHE": "LICENSES/rust/regex-syntax-0.8.5/LICENSE-APACHE",
+    "LICENSES/rust__regex-syntax-0.8.5__LICENSE-MIT": "LICENSES/rust/regex-syntax-0.8.5/LICENSE-MIT",
+    "LICENSES/rust__regex-syntax-0.8.5__src__unicode_tables__LICENSE-UNICODE": "LICENSES/rust/regex-syntax-0.8.5/src/unicode_tables/LICENSE-UNICODE",
+    "LICENSES/rust__rustversion-1.0.17__LICENSE-APACHE": "LICENSES/rust/rustversion-1.0.17/LICENSE-APACHE",
+    "LICENSES/rust__rustversion-1.0.17__LICENSE-MIT": "LICENSES/rust/rustversion-1.0.17/LICENSE-MIT",
+    "LICENSES/rust__serde-1.0.228__LICENSE-APACHE": "LICENSES/rust/serde-1.0.228/LICENSE-APACHE",
+    "LICENSES/rust__serde-1.0.228__LICENSE-MIT": "LICENSES/rust/serde-1.0.228/LICENSE-MIT",
+    "LICENSES/rust__serde_core-1.0.228__LICENSE-APACHE": "LICENSES/rust/serde_core-1.0.228/LICENSE-APACHE",
+    "LICENSES/rust__serde_core-1.0.228__LICENSE-MIT": "LICENSES/rust/serde_core-1.0.228/LICENSE-MIT",
+    "LICENSES/rust__serde_derive-1.0.228__LICENSE-APACHE": "LICENSES/rust/serde_derive-1.0.228/LICENSE-APACHE",
+    "LICENSES/rust__serde_derive-1.0.228__LICENSE-MIT": "LICENSES/rust/serde_derive-1.0.228/LICENSE-MIT",
+    "LICENSES/rust__serde_json-1.0.149__LICENSE-APACHE": "LICENSES/rust/serde_json-1.0.149/LICENSE-APACHE",
+    "LICENSES/rust__serde_json-1.0.149__LICENSE-MIT": "LICENSES/rust/serde_json-1.0.149/LICENSE-MIT",
+    "LICENSES/rust__smallvec-1.15.1__LICENSE-APACHE": "LICENSES/rust/smallvec-1.15.1/LICENSE-APACHE",
+    "LICENSES/rust__smallvec-1.15.1__LICENSE-MIT": "LICENSES/rust/smallvec-1.15.1/LICENSE-MIT",
+    "LICENSES/rust__speedate-0.17.0__LICENSE": "LICENSES/rust/speedate-0.17.0/LICENSE",
+    "LICENSES/rust__stable_deref_trait-1.2.0__LICENSE-APACHE": "LICENSES/rust/stable_deref_trait-1.2.0/LICENSE-APACHE",
+    "LICENSES/rust__stable_deref_trait-1.2.0__LICENSE-MIT": "LICENSES/rust/stable_deref_trait-1.2.0/LICENSE-MIT",
+    "LICENSES/rust__static_assertions-1.1.0__LICENSE-APACHE": "LICENSES/rust/static_assertions-1.1.0/LICENSE-APACHE",
+    "LICENSES/rust__static_assertions-1.1.0__LICENSE-MIT": "LICENSES/rust/static_assertions-1.1.0/LICENSE-MIT",
+    "LICENSES/rust__strum-0.27.2__LICENSE": "LICENSES/rust/strum-0.27.2/LICENSE",
+    "LICENSES/rust__strum_macros-0.27.2__LICENSE": "LICENSES/rust/strum_macros-0.27.2/LICENSE",
+    "LICENSES/rust__syn-2.0.82__LICENSE-APACHE": "LICENSES/rust/syn-2.0.82/LICENSE-APACHE",
+    "LICENSES/rust__syn-2.0.82__LICENSE-MIT": "LICENSES/rust/syn-2.0.82/LICENSE-MIT",
+    "LICENSES/rust__synstructure-0.13.1__LICENSE": "LICENSES/rust/synstructure-0.13.1/LICENSE",
+    "LICENSES/rust__tap-1.0.1__LICENSE.txt": "LICENSES/rust/tap-1.0.1/LICENSE.txt",
+    "LICENSES/rust__target-lexicon-0.13.4__LICENSE": "LICENSES/rust/target-lexicon-0.13.4/LICENSE",
+    "LICENSES/rust__tinystr-0.7.6__LICENSE": "LICENSES/rust/tinystr-0.7.6/LICENSE",
+    "LICENSES/rust__unicode-ident-1.0.12__LICENSE-APACHE": "LICENSES/rust/unicode-ident-1.0.12/LICENSE-APACHE",
+    "LICENSES/rust__unicode-ident-1.0.12__LICENSE-MIT": "LICENSES/rust/unicode-ident-1.0.12/LICENSE-MIT",
+    "LICENSES/rust__unicode-ident-1.0.12__LICENSE-UNICODE": "LICENSES/rust/unicode-ident-1.0.12/LICENSE-UNICODE",
+    "LICENSES/rust__url-2.5.8__LICENSE-APACHE": "LICENSES/rust/url-2.5.8/LICENSE-APACHE",
+    "LICENSES/rust__url-2.5.8__LICENSE-MIT": "LICENSES/rust/url-2.5.8/LICENSE-MIT",
+    "LICENSES/rust__utf16_iter-1.0.5__LICENSE-APACHE": "LICENSES/rust/utf16_iter-1.0.5/LICENSE-APACHE",
+    "LICENSES/rust__utf16_iter-1.0.5__LICENSE-MIT": "LICENSES/rust/utf16_iter-1.0.5/LICENSE-MIT",
+    "LICENSES/rust__utf8_iter-1.0.4__LICENSE-APACHE": "LICENSES/rust/utf8_iter-1.0.4/LICENSE-APACHE",
+    "LICENSES/rust__utf8_iter-1.0.4__LICENSE-MIT": "LICENSES/rust/utf8_iter-1.0.4/LICENSE-MIT",
+    "LICENSES/rust__uuid-1.23.0__LICENSE-APACHE": "LICENSES/rust/uuid-1.23.0/LICENSE-APACHE",
+    "LICENSES/rust__uuid-1.23.0__LICENSE-MIT": "LICENSES/rust/uuid-1.23.0/LICENSE-MIT",
+    "LICENSES/rust__version_check-0.9.5__LICENSE-APACHE": "LICENSES/rust/version_check-0.9.5/LICENSE-APACHE",
+    "LICENSES/rust__version_check-0.9.5__LICENSE-MIT": "LICENSES/rust/version_check-0.9.5/LICENSE-MIT",
+    "LICENSES/rust__wasi-0.14.2+wasi-0.2.4__LICENSE-APACHE": "LICENSES/rust/wasi-0.14.2+wasi-0.2.4/LICENSE-APACHE",
+    "LICENSES/rust__wasi-0.14.2+wasi-0.2.4__LICENSE-Apache-2.0_WITH_LLVM-exception": "LICENSES/rust/wasi-0.14.2+wasi-0.2.4/LICENSE-Apache-2.0_WITH_LLVM-exception",
+    "LICENSES/rust__wasi-0.14.2+wasi-0.2.4__LICENSE-MIT": "LICENSES/rust/wasi-0.14.2+wasi-0.2.4/LICENSE-MIT",
+    "LICENSES/rust__wasm-bindgen-0.2.100__LICENSE-APACHE": "LICENSES/rust/wasm-bindgen-0.2.100/LICENSE-APACHE",
+    "LICENSES/rust__wasm-bindgen-0.2.100__LICENSE-MIT": "LICENSES/rust/wasm-bindgen-0.2.100/LICENSE-MIT",
+    "LICENSES/rust__wasm-bindgen-backend-0.2.100__LICENSE-APACHE": "LICENSES/rust/wasm-bindgen-backend-0.2.100/LICENSE-APACHE",
+    "LICENSES/rust__wasm-bindgen-backend-0.2.100__LICENSE-MIT": "LICENSES/rust/wasm-bindgen-backend-0.2.100/LICENSE-MIT",
+    "LICENSES/rust__wasm-bindgen-macro-0.2.100__LICENSE-APACHE": "LICENSES/rust/wasm-bindgen-macro-0.2.100/LICENSE-APACHE",
+    "LICENSES/rust__wasm-bindgen-macro-0.2.100__LICENSE-MIT": "LICENSES/rust/wasm-bindgen-macro-0.2.100/LICENSE-MIT",
+    "LICENSES/rust__wasm-bindgen-macro-support-0.2.100__LICENSE-APACHE": "LICENSES/rust/wasm-bindgen-macro-support-0.2.100/LICENSE-APACHE",
+    "LICENSES/rust__wasm-bindgen-macro-support-0.2.100__LICENSE-MIT": "LICENSES/rust/wasm-bindgen-macro-support-0.2.100/LICENSE-MIT",
+    "LICENSES/rust__wasm-bindgen-shared-0.2.100__LICENSE-APACHE": "LICENSES/rust/wasm-bindgen-shared-0.2.100/LICENSE-APACHE",
+    "LICENSES/rust__wasm-bindgen-shared-0.2.100__LICENSE-MIT": "LICENSES/rust/wasm-bindgen-shared-0.2.100/LICENSE-MIT",
+    "LICENSES/rust__wit-bindgen-rt-0.39.0__LICENSE-APACHE": "LICENSES/rust/wit-bindgen-rt-0.39.0/LICENSE-APACHE",
+    "LICENSES/rust__write16-1.0.0__LICENSE-APACHE": "LICENSES/rust/write16-1.0.0/LICENSE-APACHE",
+    "LICENSES/rust__write16-1.0.0__LICENSE-MIT": "LICENSES/rust/write16-1.0.0/LICENSE-MIT",
+    "LICENSES/rust__writeable-0.5.5__LICENSE": "LICENSES/rust/writeable-0.5.5/LICENSE",
+    "LICENSES/rust__wyz-0.5.1__LICENSE.txt": "LICENSES/rust/wyz-0.5.1/LICENSE.txt",
+    "LICENSES/rust__yoke-0.7.4__LICENSE": "LICENSES/rust/yoke-0.7.4/LICENSE",
+    "LICENSES/rust__yoke-derive-0.7.4__LICENSE": "LICENSES/rust/yoke-derive-0.7.4/LICENSE",
+    "LICENSES/rust__zerocopy-0.8.25__LICENSE-APACHE": "LICENSES/rust/zerocopy-0.8.25/LICENSE-APACHE",
+    "LICENSES/rust__zerocopy-0.8.25__LICENSE-BSD": "LICENSES/rust/zerocopy-0.8.25/LICENSE-BSD",
+    "LICENSES/rust__zerocopy-0.8.25__LICENSE-MIT": "LICENSES/rust/zerocopy-0.8.25/LICENSE-MIT",
+    "LICENSES/rust__zerocopy-derive-0.8.25__LICENSE-APACHE": "LICENSES/rust/zerocopy-derive-0.8.25/LICENSE-APACHE",
+    "LICENSES/rust__zerocopy-derive-0.8.25__LICENSE-BSD": "LICENSES/rust/zerocopy-derive-0.8.25/LICENSE-BSD",
+    "LICENSES/rust__zerocopy-derive-0.8.25__LICENSE-MIT": "LICENSES/rust/zerocopy-derive-0.8.25/LICENSE-MIT",
+    "LICENSES/rust__zerofrom-0.1.4__LICENSE": "LICENSES/rust/zerofrom-0.1.4/LICENSE",
+    "LICENSES/rust__zerofrom-derive-0.1.4__LICENSE": "LICENSES/rust/zerofrom-derive-0.1.4/LICENSE",
+    "LICENSES/rust__zerovec-0.10.4__LICENSE": "LICENSES/rust/zerovec-0.10.4/LICENSE",
+    "LICENSES/rust__zerovec-derive-0.10.3__LICENSE": "LICENSES/rust/zerovec-derive-0.10.3/LICENSE",
+    "LICENSES/rust__zmij-1.0.6__LICENSE-MIT": "LICENSES/rust/zmij-1.0.6/LICENSE-MIT",
+    "LICENSES/runtime__CPython-3.11.9__LICENSE.txt": "LICENSES/runtime__CPython-3.11.9__LICENSE.txt",
+    "LICENSES/runtime__CPython-3.11.9__Doc-license.rst": "LICENSES/runtime__CPython-3.11.9__Doc-license.rst",
+    "LICENSES/runtime__OpenSSL-3.0.13__LICENSE.txt": "LICENSES/runtime__OpenSSL-3.0.13__LICENSE.txt",
+    "LICENSES/runtime__Expat-2.6.0__COPYING": "LICENSES/runtime__Expat-2.6.0__COPYING"
+  },
+  "runtime_variants": {
+    "3.11.15": {
+      "versions": {
+        "python": "3.11.15",
+        "openssl": "OpenSSL 3.5.6 7 Apr 2026",
+        "sqlite": "3.53.1",
+        "zlib": "1.3.1",
+        "expat": "expat_2.7.4"
+      },
+      "license_file": "LICENSES/runtime__CPython__LICENSE.txt"
+    },
+    "3.11.9": {
+      "versions": {
+        "python": "3.11.9",
+        "openssl": "OpenSSL 3.0.13 30 Jan 2024",
+        "sqlite": "3.45.1",
+        "zlib": "1.3.1",
+        "expat": "expat_2.6.0"
+      },
+      "license_file": "LICENSES/runtime__CPython-3.11.9__LICENSE.txt"
+    }
+  }
+}

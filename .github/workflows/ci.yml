@@ -20,6 +20,9 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run ruff check .
       - run: uv run mypy src
+      - run: uv run python scripts/check_licenses.py
+      - run: uv build --out-dir dist/python
+      - run: uv run python scripts/check_licenses.py --python-artifacts dist/python
       - run: uv run pytest -q
 
   executable-build-smoke:
@@ -32,6 +35,7 @@ jobs:
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
         with: { version: "0.8.11", enable-cache: true }
       - run: uv sync --locked --python 3.11
+      - run: uv run python scripts/check_licenses.py --runtime
       - shell: pwsh
         run: |
           $env:SOURCE_DATE_EPOCH = git show -s --format=%ct HEAD

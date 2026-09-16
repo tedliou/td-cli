@@ -8,6 +8,8 @@ import zipfile
 from importlib.metadata import version
 from pathlib import Path
 
+from td_cli.licensing import license_files
+
 RELEASE_VERSION = version("touchdesigner-cli")
 LOCKED_TOUCHDESIGNER_VERSION = "2025.32050"
 PRE_1_RELEASE_VERSION = re.compile(
@@ -66,6 +68,7 @@ def package_release(
     expected_commit: str | None = None,
 ) -> list[Path]:
     validate_agent_stage(agent_stage, expected_commit=expected_commit)
+    notices = license_files(Path("."))
     output.mkdir(parents=True, exist_ok=True)
     layouts = {
         f"td-v{RELEASE_VERSION}-windows-x86_64.zip": {"td.exe": executables / "td.exe"},
@@ -80,6 +83,8 @@ def package_release(
             for name in ("td-agent.tox", "manifest.json", "verification.json")
         },
     }
+    for files in layouts.values():
+        files.update(notices)
     missing = [
         str(path) for files in layouts.values() for path in files.values() if not path.is_file()
     ]
