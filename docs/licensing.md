@@ -25,6 +25,12 @@ pydantic-core wheel 提供 Rust SBOM；既有安裝驗證只檢查根目錄，�
 MPL 元件若有修改，必須更新對應原始碼取得方式，不能繼續宣稱是未修改的上游版本。
 上游來源、精確版本及原文 SHA-256 應隨清單更新，不可只更新檢查碼來略過審查。
 
+原文以平面檔名保存於 `LICENSES/`，上游路徑記錄於 inventory 的 `original_paths`。
+這讓 wheel 的 `License-File` 明確涵蓋每一份原文，不依賴 backend 的遞迴 glob 行為。
+CI 實際建置 wheel／sdist，逐一比較 metadata、文件集合及內容；ZIP 與安裝器也有整合測試。
+`scripts/build_release.py` 會核對實際 Python／原生函式庫版本與 Python LICENSE，
+若環境與快照不同則拒絕打包，須先重新審查授權快照。
+
 ## 依據
 
 - [MIT 標準全文](https://opensource.org/license/mit)

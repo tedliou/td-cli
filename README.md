@@ -84,6 +84,16 @@ not `protocol_incompatible`. Keep the Request ID when a save times out, inspect
 its outcome and disk state before making another mutation. An executable upgrade
 still does not replace the Agent embedded in a saved project.
 
+<!-- doc-section: license -->
+
+## License
+
+td-cli's original code is licensed under the [MIT License](LICENSE).
+[Third-party notices](THIRD_PARTY_NOTICES.md) preserve dependency licenses,
+copyright notices, and source links. These documents accompany all four Release
+Artifacts and Python packages. TouchDesigner remains subject to Derivative's license.
+
+
 <!-- doc-section: development -->
 
 ## Development

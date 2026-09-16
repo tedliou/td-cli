@@ -7,6 +7,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from td_cli.licensing import license_files
 from td_cli.release import package_release
 
 
@@ -18,6 +19,7 @@ def main() -> None:
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--skip-build", action="store_true")
     args = parser.parse_args()
+    license_files(Path("."), check_runtime=True)
     binaries = Path("dist")
     if not args.skip_build:
         env = {**os.environ, "PYTHONHASHSEED": "0", "SOURCE_DATE_EPOCH": str(args.source_epoch)}
