@@ -29,6 +29,14 @@ CI 完成後檢查 annotations 與 logs，確認沒有 Node20 deprecation 訊息
 正式 Agent staging 與 Release 發布不在本輪執行範圍；其 action 介面採靜態核對。
 透過 `develop → main` PR 流程合併，版本維持 0.7.1，不建立 tag、不發版。
 
+本機完整 gate：522 tests passed；ruff check／format、mypy、uv lock check、
+授權快照檢查與 Agent source inspection 均通過。既有一項 Starlette/httpx deprecation warning。
+Standards 與 Spec 獨立審查均為 0 項發現；Standards 審查者另直接核對三個 exact SHA
+的上游 action.yml 與現有 inputs/outputs。
+版本註解置於 `uses` 前一行，保持既有 workflow SHA 契約檢查不變。
+實際 Windows CI 與 annotations/logs 驗收結果記錄於
+[實作 PR #139](https://github.com/tedliou/td-cli/pull/139)。
+
 ## 官方來源
 
 - [Node20 移除公告](https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/)
