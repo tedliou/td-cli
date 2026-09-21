@@ -128,6 +128,16 @@ Protocol v3 是唯一 runtime protocol，不提供 v1 alias 或 fallback。Reque
 授權後斷線會成為 `unknown`；td-cli 絕不自動重試，但同一 execution 保留的結果之後可將它細化為
 `succeeded` 或 `failed`。
 
+`--json` 指令失敗時會輸出一個錯誤 envelope，內含 `code`、`message`、`details` 與
+`retryable`；若已有 Request，另附其 Request ID 與狀態。錯誤碼來自單一封閉詞彙表
+[`src/td_cli/error_catalog.py`](src/td_cli/error_catalog.py)。只有當錯誤碼能證明 Command
+從未開始、且狀況是暫時性時，`retryable` 才是 `true`：`instance_busy`、`instance_offline`、
+`instance_draining`、`instance_synchronizing`、`daemon_shutdown` 與 `execution_capacity_full`。
+唯有此時，才能以新的 Request 再次送出同一 Command 而不重複副作用。`wait_timeout`、
+`daemon_unavailable` 與所有 `unknown` 結果都是 `false`，因為 Request 可能已存在或仍在執行；
+請改用 `td requests get <request-id>` 查詢。此 CLI 無法辨識的錯誤碼會回報為
+`protocol_incompatible`，並保留 Request ID 與狀態。
+
 <!-- doc-section: agent-component -->
 
 ## Agent Component
