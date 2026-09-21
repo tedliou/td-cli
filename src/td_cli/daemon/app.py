@@ -16,6 +16,7 @@ from pydantic import field_validator
 
 from td_cli import __version__
 from td_cli.daemon.storage import RequestIdentityConflict, RequestStore
+from td_cli.error_catalog import ERROR_CATALOG
 from td_cli.protocol import PROTOCOL_VERSIONS, Command, RequestSnapshot, StrictModel
 
 
@@ -186,12 +187,7 @@ async def _recover_requests(store: RequestStore) -> None:
                 expected_statuses={str(snapshot["status"])},
                 changes={
                     "status": target,
-                    "error": {
-                        "code": code,
-                        "message": code,
-                        "details": {},
-                        "retryable": False,
-                    },
+                    "error": ERROR_CATALOG.error(code),
                     "completed_at": _now(),
                 },
             )
