@@ -281,7 +281,7 @@ def _finish_reinit_probe(initial_emissions):
     agent_comp = op("/project1/td_agent")  # type: ignore[name-defined]
     agent = agent_comp.ext.Agent
     errors = [
-        {"path": str(item.path), "errors": list(item.errors())}
+        {"path": str(item.path), "errors": str(item.errors())}
         for item in [agent_comp, *agent_comp.findChildren()]
         if item.errors()
     ]
