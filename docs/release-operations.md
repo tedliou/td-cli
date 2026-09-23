@@ -31,20 +31,38 @@ version, and packaging contracts that do not require TouchDesigner.
 
 Before publication, an administrator must configure:
 
-- `develop` and `main` branch rulesets: block deletion, direct/force push;
-  require resolved conversations, one approval, and both CI jobs. `develop`
-  additionally requires the local TouchDesigner evidence status; `main`
-  requires promotion from `develop` and the packaging/staging evidence.
+- A `develop` and `main` branch ruleset that blocks deletion and force push,
+  requires every change to land through a pull request with resolved
+  conversations, and requires the `quality-and-tests` and
+  `executable-build-smoke` CI checks. The single maintainer authors every pull
+  request and GitHub does not accept self-approval, so the required approval
+  count is zero; the maintainer's merge is the review.
+- A `main` ruleset that additionally requires the `promotion-policy` check, so
+  `main` only accepts pull requests from this repository's `develop`. The job
+  runs only for pull requests into `main`, which is why it cannot be required on
+  `develop`.
 - A `v*` tag ruleset that blocks updates and deletion of published version
   tags. Initial creation remains available to the manually approved Release
   workflow, which uses its repository-scoped short-lived `GITHUB_TOKEN`.
-- A protected `release` environment with human approval. The workflow receives
-  `contents: write` only for its publish job and needs no long-lived Release
-  credential or additional GitHub App.
-- Immutable Releases in repository settings. Administrators retain emergency
-  bypass only with a recorded reason.
+- A protected `release` environment with human approval, deployable only from
+  `main`. The workflow receives `contents: write` only for its publish job and
+  needs no long-lived Release credential or additional GitHub App.
+- Immutable Releases in repository settings.
 
-The current configuration can be audited with `gh api repos/tedliou/td-cli/rulesets`.
+No ruleset has bypass actors. An emergency change requires an administrator to
+edit the ruleset and record the reason, then restore it.
+
+Required checks are limited to checks a workflow actually reports; a required
+check that nothing reports would block every pull request. TouchDesigner
+validation is therefore not a status check: it runs on the local development
+machine and is recorded as `docs/*-acceptance.md` with `docs/evidence/`. The
+packaging and staging evidence is enforced at publication, where
+**Publish Release** validates the staged artifact ID, digest, version, and
+exact `main` commit.
+
+The current configuration can be audited with `gh api repos/tedliou/td-cli/rulesets`,
+`gh api repos/tedliou/td-cli/environments`, and
+`gh api repos/tedliou/td-cli/immutable-releases`.
 The environment approval, exact-main validation, immutable staged artifact,
 draft-first upload, and remote digest checks remain mandatory publication gates.
 
