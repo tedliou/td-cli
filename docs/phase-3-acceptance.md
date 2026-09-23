@@ -23,9 +23,10 @@ and the existing Protocol v1 error enum.
 - `project.metadata`: only name, folder, and saved-with version, build, time,
   OS name, and OS version. It cannot save, load, or quit a project.
 - `events.read`: cursor reads from the last 1000 Agent Command outcomes, 1
-  through 200 at a time, optionally with at most 100 current recursive Operator
-  errors. It does not claim to capture the separate Console or all Textport
-  output.
+  through 200 at a time, optionally with the current recursive Operator error
+  text returned verbatim as one string, bounded to 16 KiB with an explicit
+  `errors_truncated` flag (see `events-error-text-acceptance.md`). It does not
+  claim to capture the separate Console or all Textport output.
 
 The overall 256 KiB result guard remains authoritative. The development-only
 diagnostic bridge remains loopback-only, bearer-token authenticated,

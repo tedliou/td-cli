@@ -2478,6 +2478,7 @@ class AgentExt:
     MAX_OUTCOME_BYTES = 256 * 1024
     OUTCOME_CHUNK_BYTES = 24 * 1024
     MAX_TOTAL_OUTCOME_BYTES = 16 * 1024 * 1024
+    MAX_ERROR_TEXT_BYTES = 16 * 1024
 
     CAPABILITIES = tuple(OperatorControl.HANDLERS) + (
         "batch.execute",
@@ -3038,14 +3039,16 @@ class AgentExt:
     def _events(self, payload):
         after = payload["after"]
         events = [item for item in self.events if item["id"] > after][: payload["limit"]]
-        if payload["include_errors"]:
-            root = self.operator_lookup("/")
-            errors = [str(value) for value in (root.errors(recurse=True) if root else [])]
-        else:
-            errors = []
+        root = self.operator_lookup("/") if payload["include_errors"] else None
+        # OP.errors() returns one str in which a single error may span several lines, so the
+        # text is kept verbatim and only bounded, never split into guessed messages.
+        encoded = str(root.errors(recurse=True) if root else "").encode("utf-8")
+        truncated = len(encoded) > self.MAX_ERROR_TEXT_BYTES
+        errors = encoded[: self.MAX_ERROR_TEXT_BYTES].decode("utf-8", errors="ignore")
         return {
             "events": events,
-            "errors": errors[:100],
+            "errors": errors,
+            "errors_truncated": truncated,
             "next_after": events[-1]["id"] if events else after,
         }
 
