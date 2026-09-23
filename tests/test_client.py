@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from td_cli.client import ClientError, DaemonClient
+from td_cli.error_catalog import ERROR_CATALOG
 
 
 def client(tmp_path: Path) -> DaemonClient:
@@ -165,75 +166,8 @@ def test_network_mutation_error_remains_typed(tmp_path: Path, monkeypatch) -> No
     assert client(tmp_path).get_request("request-1")["error"]["code"] == "connector_occupied"
 
 
-@pytest.mark.parametrize(
-    "code",
-    [
-        "operator_rename_forbidden",
-        "operator_rename_failed",
-        "operator_rename_rollback_failed",
-        "connection_not_found",
-        "connector_disconnect_failed",
-        "connector_replace_failed",
-        "connector_replace_rollback_failed",
-        "hierarchy_comp_required",
-        "hierarchy_kind_unsupported",
-        "hierarchy_kind_mismatch",
-        "hierarchy_connector_not_found",
-        "hierarchy_connector_state_ambiguous",
-        "hierarchy_connector_occupied",
-        "hierarchy_connection_not_found",
-        "hierarchy_connector_connect_failed",
-        "hierarchy_connector_disconnect_failed",
-        "hierarchy_connector_replace_failed",
-        "hierarchy_connector_replace_rollback_failed",
-        "hierarchy_connector_outcome_unknown",
-        "hierarchy_cycle",
-        "hierarchy_parent_mismatch",
-        "operator_type_unsupported",
-        "operator_type_conditional",
-        "operator_mutation_forbidden",
-        "operator_not_empty",
-        "operator_connected",
-        "operator_destroy_failed",
-        "operator_destroy_outcome_unknown",
-        "operator_copy_failed",
-        "operator_copy_rollback_failed",
-        "operator_docked",
-        "operator_move_failed",
-        "operator_move_rollback_failed",
-        "operator_move_outcome_unknown",
-        "tox_trust_required",
-        "tox_path_rejected",
-        "tox_file_too_large",
-        "tox_destination_exists",
-        "tox_parent_protected",
-        "tox_load_failed",
-        "tox_verification_failed",
-        "tox_backup_failed",
-        "tox_commit_failed",
-        "tox_rollback_failed",
-        "tox_import_outcome_unknown",
-        "operator_state_unavailable",
-        "operator_state_failed",
-        "operator_state_rollback_failed",
-        "operator_state_outcome_unknown",
-        "operator_family_unsupported",
-        "family_inspection_unavailable",
-        "family_inspection_outcome_unknown",
-        "dat_type_mismatch",
-        "dat_content_unavailable",
-        "dat_content_not_writable",
-        "dat_content_too_large",
-        "text_dat_write_failed",
-        "text_dat_rollback_failed",
-        "text_dat_outcome_unknown",
-        "table_dat_patch_out_of_bounds",
-        "table_dat_write_failed",
-        "table_dat_rollback_failed",
-        "table_dat_outcome_unknown",
-    ],
-)
-def test_execution_errors_remain_typed(tmp_path: Path, monkeypatch, code: str) -> None:
+@pytest.mark.parametrize("code", sorted(ERROR_CATALOG.codes))
+def test_every_catalogued_error_code_remains_typed(tmp_path: Path, monkeypatch, code: str) -> None:
     monkeypatch.setattr(
         httpx,
         "request",
@@ -244,11 +178,31 @@ def test_execution_errors_remain_typed(tmp_path: Path, monkeypatch, code: str) -
                 "status": "failed",
                 "command": {"name": "ops.rename", "input": {}},
                 "result": None,
-                "error": {"code": code, "message": code, "details": {}, "retryable": False},
+                "error": ERROR_CATALOG.error(code),
             },
         ),
     )
     assert client(tmp_path).get_request("request-1")["error"]["code"] == code
+
+
+def test_uncatalogued_error_code_is_incompatible_without_losing_the_request(
+    tmp_path: Path, monkeypatch
+) -> None:
+    snapshot = {
+        "request_id": "request-1",
+        "status": "unknown",
+        "command": {"name": "parameters.set", "input": {}},
+        "result": None,
+        "error": ERROR_CATALOG.error("future_outcome_unknown"),
+    }
+    monkeypatch.setattr(httpx, "request", lambda *a, **k: httpx.Response(200, json=snapshot))
+
+    with pytest.raises(ClientError) as caught:
+        client(tmp_path).wait("request-1")
+
+    assert caught.value.code == "protocol_incompatible"
+    assert caught.value.details["request_id"] == "request-1"
+    assert caught.value.details["request"]["status"] == "unknown"
 
 
 @pytest.mark.parametrize("mode", ["constant", "expression", "export", "bind"])

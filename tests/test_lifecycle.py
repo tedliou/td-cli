@@ -273,6 +273,37 @@ async def test_offline_retention_expires_only_current_generation_queue() -> None
         await effect(lifecycle, "instance_expired")
         persisted = await store.get(str(item["request_id"]))
         assert persisted is not None and persisted["status"] == "instance_offline"
+        assert persisted["error"]["retryable"] is True
+    finally:
+        await lifecycle.close()
+
+
+@pytest.mark.asyncio
+async def test_agent_rejection_keeps_the_catalogued_retry_safety_of_its_code() -> None:
+    store = MemoryStore()
+    lifecycle = RequestLifecycle(store)
+    await lifecycle.start()
+    first, second = request(1), request(2)
+    try:
+        await lifecycle.register(INSTANCE_ID, CONNECTION_ID, {"ops.get"})
+        await effect(lifecycle, "registered")
+        await lifecycle.synchronized(INSTANCE_ID, CONNECTION_ID)
+        await lifecycle.submit(first)
+        await lifecycle.submit(second)
+        await effect(lifecycle, "request_dispatch")
+        await lifecycle.rejected(
+            INSTANCE_ID, CONNECTION_ID, str(first["request_id"]), "execution_capacity_full"
+        )
+        await effect(lifecycle, "request_dispatch")
+        await lifecycle.rejected(
+            INSTANCE_ID, CONNECTION_ID, str(second["request_id"]), "command_wire_invalid"
+        )
+
+        capacity = await store.get(str(first["request_id"]))
+        wire = await store.get(str(second["request_id"]))
+        assert capacity is not None and capacity["status"] == "failed"
+        assert capacity["error"]["retryable"] is True
+        assert wire is not None and wire["error"]["retryable"] is False
     finally:
         await lifecycle.close()
 
@@ -359,6 +390,12 @@ async def test_controlled_shutdown_maps_each_nonterminal_authorization_boundary(
         running = next(item for item in store.requests.values() if item["execution_id"] is not None)
         assert running["status"] == "unknown"
         assert running["error"]["code"] == "request_outcome_unknown"
+        assert running["error"]["retryable"] is False
+        assert all(
+            item["error"]["retryable"] is True
+            for item in store.requests.values()
+            if item["status"] == "daemon_shutdown"
+        )
     finally:
         await lifecycle.close()
 

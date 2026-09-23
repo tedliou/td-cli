@@ -8,6 +8,7 @@ import httpx
 
 from td_cli.daemon.cli import ENDPOINT, ensure_running
 from td_cli.daemon.runtime_files import data_root, load_token
+from td_cli.error_catalog import ERROR_CATALOG
 from td_cli.processes import LaunchError
 from td_cli.protocol import PROTOCOL_VERSION, RequestStatus
 
@@ -122,7 +123,13 @@ class DaemonClient:
             raise ClientError("instance_selector_ambiguous")
         instance = matches[0]
         if online_only and instance["status"] != "online":
-            raise ClientError(f"instance_{instance['status']}")
+            raise ClientError(
+                {
+                    "offline": "instance_offline",
+                    "draining": "instance_draining",
+                    "synchronizing": "instance_synchronizing",
+                }[instance["status"]]
+            )
         return instance
 
     def submit(self, request_id: str, instance_id: str, command: dict[str, Any]) -> dict[str, Any]:
@@ -139,131 +146,10 @@ class DaemonClient:
     def get_request(self, request_id: str) -> dict[str, Any]:
         snapshot = self.request("GET", f"/v3/requests/{request_id}")
         if snapshot.get("status") not in _REQUEST_STATUSES:
-            raise ClientError("protocol_incompatible")
+            raise _incompatible(snapshot)
         error = snapshot.get("error")
-        if isinstance(error, dict) and error.get("code") not in {
-            "invalid_arguments",
-            "daemon_unavailable",
-            "transport_error",
-            "protocol_incompatible",
-            "instance_not_found",
-            "instance_selector_ambiguous",
-            "instance_offline",
-            "instance_draining",
-            "instance_busy",
-            "command_unsupported",
-            "request_not_found",
-            "request_id_conflict",
-            "request_rejected",
-            "request_outcome_unknown",
-            "result_buffer_full",
-            "operator_not_found",
-            "operator_parent_invalid",
-            "operator_already_exists",
-            "operator_create_failed",
-            "operator_type_unsupported",
-            "operator_type_conditional",
-            "operator_rename_forbidden",
-            "operator_rename_failed",
-            "operator_rename_rollback_failed",
-            "operator_mutation_forbidden",
-            "operator_not_empty",
-            "operator_connected",
-            "operator_destroy_failed",
-            "operator_destroy_outcome_unknown",
-            "operator_copy_failed",
-            "operator_copy_rollback_failed",
-            "operator_docked",
-            "operator_move_failed",
-            "operator_move_rollback_failed",
-            "operator_move_outcome_unknown",
-            "tox_trust_required",
-            "tox_path_rejected",
-            "tox_file_too_large",
-            "tox_destination_exists",
-            "tox_parent_protected",
-            "tox_load_failed",
-            "tox_verification_failed",
-            "tox_backup_failed",
-            "tox_commit_failed",
-            "tox_rollback_failed",
-            "tox_import_outcome_unknown",
-            "operator_state_unavailable",
-            "operator_state_failed",
-            "operator_state_rollback_failed",
-            "operator_state_outcome_unknown",
-            "operator_family_unsupported",
-            "family_inspection_unavailable",
-            "family_inspection_outcome_unknown",
-            "dat_type_mismatch",
-            "dat_content_unavailable",
-            "dat_content_not_writable",
-            "dat_content_too_large",
-            "text_dat_write_failed",
-            "text_dat_rollback_failed",
-            "text_dat_outcome_unknown",
-            "table_dat_patch_out_of_bounds",
-            "table_dat_write_failed",
-            "table_dat_rollback_failed",
-            "table_dat_outcome_unknown",
-            "operator_family_mismatch",
-            "connector_not_found",
-            "connector_occupied",
-            "connector_connect_failed",
-            "connection_not_found",
-            "connector_disconnect_failed",
-            "connector_replace_failed",
-            "connector_replace_rollback_failed",
-            "hierarchy_comp_required",
-            "hierarchy_kind_unsupported",
-            "hierarchy_kind_mismatch",
-            "hierarchy_connector_not_found",
-            "hierarchy_connector_state_ambiguous",
-            "hierarchy_connector_occupied",
-            "hierarchy_connection_not_found",
-            "hierarchy_connector_connect_failed",
-            "hierarchy_connector_disconnect_failed",
-            "hierarchy_connector_replace_failed",
-            "hierarchy_connector_replace_rollback_failed",
-            "hierarchy_connector_outcome_unknown",
-            "hierarchy_cycle",
-            "hierarchy_parent_mismatch",
-            "result_too_large",
-            "parameter_not_found",
-            "parameter_exists",
-            "parameter_page_exists",
-            "parameter_page_failed",
-            "parameter_page_rollback_failed",
-            "parameter_page_outcome_unknown",
-            "parameter_read_only",
-            "parameter_not_pulseable",
-            "parameter_type_unsupported",
-            "parameter_write_rejected",
-            "parameter_disabled",
-            "parameter_obsolete",
-            "parameter_value_invalid",
-            "parameter_source_not_found",
-            "parameter_export_source_unavailable",
-            "parameter_rollback_failed",
-            "parameter_outcome_unknown",
-            "parameter_sequence_not_found",
-            "parameter_sequence_too_large",
-            "parameter_sequence_not_writable",
-            "parameter_sequence_shape_invalid",
-            "parameter_value_too_large",
-            "parameter_sequence_write_failed",
-            "parameter_sequence_rollback_failed",
-            "parameter_sequence_outcome_unknown",
-            "expression_invalid",
-            "project_path_mismatch",
-            "project_file_changed",
-            "project_file_unavailable",
-            "project_save_outcome_unknown",
-            "wait_timeout",
-            "daemon_shutdown",
-            "internal_error",
-        }:
-            raise ClientError("protocol_incompatible")
+        if isinstance(error, dict) and error.get("code") not in ERROR_CATALOG:
+            raise _incompatible(snapshot)
         command = snapshot.get("command")
         result = snapshot.get("result")
         if (
@@ -286,7 +172,7 @@ class DaemonClient:
                 }
             )
         ):
-            raise ClientError("protocol_incompatible")
+            raise _incompatible(snapshot)
         if (
             isinstance(command, dict)
             and command.get("name") == "parameters.set"
@@ -297,7 +183,7 @@ class DaemonClient:
                 not in {"boolean", "integer", "number", "string", "operator", "multi_operator"}
             )
         ):
-            raise ClientError("protocol_incompatible")
+            raise _incompatible(snapshot)
         if (
             isinstance(command, dict)
             and command.get("name") == "parameters.list"
@@ -323,14 +209,14 @@ class DaemonClient:
                 }
                 for parameter in parameters
             ):
-                raise ClientError("protocol_incompatible")
+                raise _incompatible(snapshot)
         if (
             isinstance(command, dict)
             and command.get("name") in {"parameters.sequence.get", "parameters.sequence.replace"}
             and isinstance(result, dict)
             and not isinstance(result.get("blocks"), list)
         ):
-            raise ClientError("protocol_incompatible")
+            raise _incompatible(snapshot)
         return snapshot
 
     def wait(self, request_id: str) -> dict[str, Any]:
@@ -357,3 +243,8 @@ class DaemonClient:
             if time.monotonic() >= deadline:
                 raise ClientError("wait_timeout", details={"request": snapshot})
             time.sleep(min(0.05, max(0, deadline - time.monotonic())))
+
+
+def _incompatible(snapshot: dict[str, Any]) -> ClientError:
+    """Reject an uninterpretable Request without discarding its identity or status."""
+    return ClientError("protocol_incompatible", details={"request": snapshot})

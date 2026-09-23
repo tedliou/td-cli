@@ -143,6 +143,19 @@ Connection ID. A disconnect after authorization becomes `unknown`; td-cli never
 automatically retries it, though the same retained execution outcome may later
 refine it to `succeeded` or `failed`.
 
+A failing `--json` command prints one error envelope with `code`, `message`,
+`details` and `retryable`, plus the Request ID and status when a Request exists.
+Codes come from one closed vocabulary in
+[`src/td_cli/error_catalog.py`](src/td_cli/error_catalog.py). `retryable` is
+`true` only when the code proves the Command never started under a transient
+condition: `instance_busy`, `instance_offline`, `instance_draining`,
+`instance_synchronizing`, `daemon_shutdown` and `execution_capacity_full`. Only
+then can the same Command be submitted as a new Request without duplicating a
+side effect. `wait_timeout`, `daemon_unavailable` and every `unknown` outcome
+are `false` because the Request may exist or still be running; query it with
+`td requests get <request-id>` instead. A code this CLI does not recognize is
+reported as `protocol_incompatible` with the Request ID and status preserved.
+
 <!-- doc-section: agent-component -->
 
 ## Agent Component

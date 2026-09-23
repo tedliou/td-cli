@@ -15,6 +15,7 @@ from typer._click.exceptions import ClickException, UsageError
 from td_cli import __version__
 from td_cli.client import ClientError, DaemonClient
 from td_cli.command_catalog import MAX_DAT_CONTENT_BYTES, MAX_INSPECTION_ITEMS, MAX_TOX_FILE_BYTES
+from td_cli.error_catalog import ERROR_CATALOG
 from td_cli.operator_catalog import OPERATOR_CATALOG
 from td_cli.processes import LaunchError, launch_detached
 from td_cli.protocol import PROTOCOL_VERSION, Command
@@ -91,18 +92,20 @@ def _emit(ctx: typer.Context, data: object, *, request: dict[str, Any] | None = 
         typer.echo(json.dumps(data, indent=2, ensure_ascii=True))
 
 
+EXIT_CODES = {
+    "invalid_arguments": 2,
+    "daemon_unavailable": 3,
+    "transport_error": 3,
+    "instance_not_found": 4,
+    "instance_selector_ambiguous": 4,
+    "instance_offline": 4,
+    "instance_draining": 4,
+    "wait_timeout": 6,
+}
+
+
 def _fail(ctx: typer.Context, error: ClientError) -> None:
-    exits = {
-        "invalid_arguments": 2,
-        "daemon_unavailable": 3,
-        "transport_error": 3,
-        "instance_not_found": 4,
-        "instance_selector_ambiguous": 4,
-        "instance_offline": 4,
-        "instance_draining": 4,
-        "wait_timeout": 6,
-    }
-    code = exits.get(error.code, 5)
+    code = EXIT_CODES.get(error.code, 5)
     if ctx.obj["json"]:
         envelope: dict[str, object] = {
             "protocol_version": 3,
@@ -110,21 +113,14 @@ def _fail(ctx: typer.Context, error: ClientError) -> None:
                 "code": error.code,
                 "message": error.code,
                 "details": error.details,
-                "retryable": error.code
-                in {
-                    "daemon_unavailable",
-                    "transport_error",
-                    "instance_busy",
-                    "result_buffer_full",
-                    "wait_timeout",
-                },
+                "retryable": ERROR_CATALOG.retryable(error.code),
             },
         }
         snapshot = error.details.get("request")
         if isinstance(snapshot, dict):
             envelope["request"] = {
-                "request_id": snapshot["request_id"],
-                "status": snapshot["status"],
+                "request_id": snapshot.get("request_id"),
+                "status": snapshot.get("status"),
             }
         typer.echo(json.dumps(envelope, separators=(",", ":")), err=False)
     typer.echo(error.code, err=True)
@@ -1271,12 +1267,7 @@ def run() -> None:
                 json.dumps(
                     {
                         "protocol_version": 3,
-                        "error": {
-                            "code": "invalid_arguments",
-                            "message": "invalid_arguments",
-                            "details": {},
-                            "retryable": False,
-                        },
+                        "error": ERROR_CATALOG.error("invalid_arguments"),
                     },
                     separators=(",", ":"),
                 )

@@ -13,20 +13,18 @@
 `unknown` 終態**。重試只能重送同一 Request ID 以查回既有結果；不得以新 Request ID
 自動重做未知 mutation。
 
-目前方向大致符合此模型，但有三個必須先處理的實作風險：
+研究當時的 `develop` 大致符合此模型，但有三個實作風險；2026-09-21 對照目前程式碼，三項均已修正：
 
-1. `RequestStore` 以 `check_same_thread=False` 共用一條 connection；FastAPI 官方說普通
-   `def` endpoint 會在線程池執行，而 Python 3.11 官方要求跨執行緒共用時由應用程式
-   序列化寫入。現有讀取 endpoint 與 event-loop 寫入可能同時使用同一 connection。
-2. `isolation_level=None` 代表 SQLite autocommit；Python 官方說 connection context manager
-   在沒有開啟 transaction 時是 no-op。因此 `recover()` 的多筆轉態不是一個 transaction，
-   `update()` 的 read-modify-write 也不是原子狀態轉移。
-3. `python-socketio` 官方註明對同一 connection 的 `emit()` 不是 concurrency-safe；目前 dispatch、
-   draining 與其他 background task 沒有一個共同的 per-connection outbound serializer。
-
-建議先把 persistence 做成單一擁有者，並讓每一個 Request 狀態轉移由條件式 SQL 在明確
-transaction 中原子完成，再談更多重試或 recovery 功能。這是修正資料一致性邊界，不是
-加入 fallback。
+1. `RequestStore` 曾以 `check_same_thread=False` 讓 FastAPI 線程池與 event loop 共用一條
+   connection。現在唯一的 connection 由單一 worker thread 擁有
+   （`src/td_cli/daemon/storage.py` 的 `ThreadPoolExecutor(max_workers=1)`），HTTP 與
+   Socket.IO adapter 只經 `RequestLifecycle`／`RequestStore` 介面存取。
+2. `isolation_level=None` 的 autocommit 曾使 `recover()` 與 `update()` 不是原子轉態。現在
+   schema、migration、建立與每次狀態轉移都以明確的 `BEGIN IMMEDIATE`／`COMMIT`／`ROLLBACK`
+   包住；轉態是帶預期舊狀態的條件式 `UPDATE`（`compare_and_set`），以 rowcount 判定競爭，
+   啟動時並驗證 WAL 實際生效。
+3. 同一 connection 的 `emit()` 曾缺少共同序列化。現在每個 connection 只有一條 outbound queue
+   與唯一的 sender task（`src/td_cli/daemon/transport.py` 的 `_Outbound`／`sender`）。
 
 ## 1. TouchDesigner 執行緒與 Socket.IO 邊界
 
@@ -96,15 +94,25 @@ transaction 中原子完成，再談更多重試或 recovery 功能。這是修�
 
 ### 可接受的 Request 狀態模型
 
-`queued → dispatched → running → succeeded|failed`
+`queued → dispatched → accepted → running → succeeded|failed|unknown`
 
-- daemon crash：`queued → daemon_shutdown`；`dispatched|running → unknown`。
-- Instance disconnect/application heartbeat timeout：當代 connection 的
-  `dispatched|running → unknown`；舊 connection 的遲到事件不能推進新 generation。
-- 相同 Request ID + 相同 canonical Command：回傳原 snapshot/result；相同 ID + 不同 Command：
-  衝突。Agent 也必須以相同規則去重。
-- `unknown` 是可查詢的終態，不是 retryable failure。若操作者選擇再次 mutation，應是明確的
-  新 Request，且 CLI 必須呈現風險，不能由 daemon 自動進行。
+`accepted` 表示 Agent 已驗證並保留 outcome 容量，但尚未取得執行授權；只有 `running` 之後
+TouchDesigner mutation 才可能已發生。以下對照 `src/td_cli/daemon/lifecycle.py`：
+
+- Agent 拒絕（`request_rejected`）：`dispatched → failed`；派送時能力已不支援：`queued → failed`。
+- daemon crash 或受控關閉：`queued|dispatched|accepted → daemon_shutdown`；`running → unknown`。
+- Instance disconnect/application heartbeat 或 execution lease 逾時：當代 connection 的
+  `dispatched|accepted` 以同一 Request ID 回到 lane 開頭重新 `queued`；`running → unknown`。
+  Instance 離線超過保留期限後，仍在 lane 中的 `queued → instance_offline`。舊 connection 的
+  遲到事件不能推進新 generation。
+- 相同 Request ID + 相同 Instance 與 canonical Command：回傳原 snapshot/result；相同 ID +
+  不同 Instance 或 Command：衝突。Agent 也以相同規則去重。
+- `unknown` 可由同一 execution 保留的 outcome 細化為 `succeeded|failed`，但它本身是可查詢的
+  終態，不是 retryable failure。若操作者選擇再次 mutation，應是明確的新 Request，且 CLI 必須
+  呈現風險，不能由 daemon 自動進行。
+- 公開錯誤碼的 `retryable` 由 `src/td_cli/error_catalog.py` 單一定義：只有能證明 Command
+  從未開始且狀況暫時的錯誤碼（例如 `instance_offline`、`daemon_shutdown`）為 `true`；
+  `wait_timeout`、`daemon_unavailable` 與所有 `unknown` 結果一律為 `false`。
 
 若未引入可包住 TD graph side effects 的真正 transaction/undo protocol，就不可把上述模型
 改名為 exactly-once。傳輸去重最多提供「同一 Agent runtime 對同一 Request ID 不重複執行」；
