@@ -2221,7 +2221,7 @@
     "LICENSES/runtime__OpenSSL-3.0.13__LICENSE.txt": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a",
     "LICENSES/runtime__Expat-2.6.0__COPYING": "122f2c27000472a201d337b9b31f7eb2b52d091b02857061a8880371612d9534"
   },
-  "lock_sha256": "3381c24043794ebe29eb6a5abe811b442bd54cd59167aa0cc2fadc1d02aaf90e",
+  "lock_sha256": "a8542a63269230c433118e753d00f35827aa08419e70789f9c42554ed9f27e6c",
   "original_paths": {
     "LICENSES/pydantic-core__sbom.json": "LICENSES/pydantic-core/sbom.json",
     "LICENSES/python__aiohappyeyeballs__aiohappyeyeballs-2.7.1.dist-info__licenses__LICENSE": "LICENSES/python/aiohappyeyeballs/aiohappyeyeballs-2.7.1.dist-info/licenses/LICENSE",

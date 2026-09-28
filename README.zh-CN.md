@@ -410,4 +410,4 @@ read-only Command 使用。
 终态 snapshot。请保存输出；中断或 outcome unknown 后先查询已记录的 Request，
 不要盲目重跑整份计划。不接受嵌套 `batch.execute`。
 
-0.7.1 离线升级除现有来源外，新增精确 canonical 0.7.0 Agent 白名单，保留 Connectionstate 定义；并修正 Constant CHOP Sequence 读取与替换时的原生组重复列举。
+0.8.0 离线升级除现有来源（含 0.7.0）外，新增精确 canonical 0.7.1 Agent 白名单，保留 Connectionstate 定义；新增修改已有自定义 Menu 选项的 `parameters menu-set`，`events.read` 改为逐字返回 TouchDesigner 错误文本。
