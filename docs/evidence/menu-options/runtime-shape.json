@@ -1,0 +1,379 @@
+{
+ "pid": 492,
+ "build": "2025.32050",
+ "fresh": {
+  "name": "Scene",
+  "style": "Menu",
+  "val": "name1",
+  "default": "name1",
+  "menuIndex": 0,
+  "menuNames": [
+   "name1",
+   "name2",
+   "name3"
+  ],
+  "menuLabels": [
+   "Label 1",
+   "Label 2",
+   "Label 3"
+  ],
+  "menuSource": null,
+  "isCustom": true,
+  "isMenu": true,
+  "mode": "ParMode.CONSTANT",
+  "readOnly": false,
+  "eval": "name1"
+ },
+ "after_names_no_default": {
+  "name": "Scene",
+  "style": "Menu",
+  "val": "a",
+  "default": "a",
+  "menuIndex": 0,
+  "menuNames": [
+   "a",
+   "b",
+   "c"
+  ],
+  "menuLabels": [
+   "A",
+   "B",
+   "C"
+  ],
+  "menuSource": null,
+  "isCustom": true,
+  "isMenu": true,
+  "mode": "ParMode.CONSTANT",
+  "readOnly": false,
+  "eval": "a"
+ },
+ "val_b": {
+  "name": "Scene",
+  "style": "Menu",
+  "val": "b",
+  "default": "a",
+  "menuIndex": 1,
+  "menuNames": [
+   "a",
+   "b",
+   "c"
+  ],
+  "menuLabels": [
+   "A",
+   "B",
+   "C"
+  ],
+  "menuSource": null,
+  "isCustom": true,
+  "isMenu": true,
+  "mode": "ParMode.CONSTANT",
+  "readOnly": false,
+  "eval": "b"
+ },
+ "renamed_val_missing": {
+  "name": "Scene",
+  "style": "Menu",
+  "val": "y",
+  "default": "a",
+  "menuIndex": 1,
+  "menuNames": [
+   "x",
+   "y",
+   "z"
+  ],
+  "menuLabels": [
+   "X",
+   "Y",
+   "Z"
+  ],
+  "menuSource": null,
+  "isCustom": true,
+  "isMenu": true,
+  "mode": "ParMode.CONSTANT",
+  "readOnly": false,
+  "eval": "y"
+ },
+ "set_menuIndex_1": {
+  "name": "Scene",
+  "style": "Menu",
+  "val": "y",
+  "default": "a",
+  "menuIndex": 1,
+  "menuNames": [
+   "x",
+   "y",
+   "z"
+  ],
+  "menuLabels": [
+   "X",
+   "Y",
+   "Z"
+  ],
+  "menuSource": null,
+  "isCustom": true,
+  "isMenu": true,
+  "mode": "ParMode.CONSTANT",
+  "readOnly": false,
+  "eval": "y"
+ },
+ "shrunk": {
+  "name": "Scene",
+  "style": "Menu",
+  "val": "y",
+  "default": "a",
+  "menuIndex": 1,
+  "menuNames": [
+   "x",
+   "y"
+  ],
+  "menuLabels": [
+   "X",
+   "Y"
+  ],
+  "menuSource": null,
+  "isCustom": true,
+  "isMenu": true,
+  "mode": "ParMode.CONSTANT",
+  "readOnly": false,
+  "eval": "y"
+ },
+ "unequal_labels": {
+  "name": "Scene",
+  "style": "Menu",
+  "val": "y",
+  "default": "a",
+  "menuIndex": 1,
+  "menuNames": [
+   "x",
+   "y"
+  ],
+  "menuLabels": [
+   "X",
+   "Y"
+  ],
+  "menuSource": null,
+  "isCustom": true,
+  "isMenu": true,
+  "mode": "ParMode.CONSTANT",
+  "readOnly": false,
+  "eval": "y"
+ },
+ "val_invalid_set": {
+  "name": "Scene",
+  "style": "Menu",
+  "val": "x",
+  "default": "a",
+  "menuIndex": 0,
+  "menuNames": [
+   "x",
+   "y",
+   "Z",
+   "W"
+  ],
+  "menuLabels": [
+   "X",
+   "Y",
+   "Z",
+   "W"
+  ],
+  "menuSource": null,
+  "isCustom": true,
+  "isMenu": true,
+  "mode": "ParMode.CONSTANT",
+  "readOnly": false,
+  "eval": "x"
+ },
+ "expr_mode": {
+  "name": "Scene",
+  "style": "Menu",
+  "val": "y",
+  "default": "a",
+  "menuIndex": 0,
+  "menuNames": [
+   "x",
+   "y",
+   "Z",
+   "W"
+  ],
+  "menuLabels": [
+   "X",
+   "Y",
+   "Z",
+   "W"
+  ],
+  "menuSource": null,
+  "isCustom": true,
+  "isMenu": true,
+  "mode": "ParMode.EXPRESSION",
+  "readOnly": false,
+  "eval": "x"
+ },
+ "back_constant": {
+  "name": "Scene",
+  "style": "Menu",
+  "val": "x",
+  "default": "a",
+  "menuIndex": 0,
+  "menuNames": [
+   "x",
+   "y",
+   "Z",
+   "W"
+  ],
+  "menuLabels": [
+   "X",
+   "Y",
+   "Z",
+   "W"
+  ],
+  "menuSource": null,
+  "isCustom": true,
+  "isMenu": true,
+  "mode": "ParMode.CONSTANT",
+  "readOnly": false,
+  "eval": "x"
+ },
+ "sourced": {
+  "name": "Sourced",
+  "style": "Menu",
+  "val": "r",
+  "default": "r",
+  "menuIndex": 0,
+  "menuNames": [
+   "r"
+  ],
+  "menuLabels": [
+   "r"
+  ],
+  "menuSource": "tdu.TableMenu(op('menu_table'))",
+  "isCustom": true,
+  "isMenu": true,
+  "mode": "ParMode.CONSTANT",
+  "readOnly": false,
+  "eval": "r"
+ },
+ "sourced_set_names": {
+  "name": "Sourced",
+  "style": "Menu",
+  "val": "r",
+  "default": "r",
+  "menuIndex": 0,
+  "menuNames": [
+   "r"
+  ],
+  "menuLabels": [
+   "r"
+  ],
+  "menuSource": "tdu.TableMenu(op('menu_table'))",
+  "isCustom": true,
+  "isMenu": true,
+  "mode": "ParMode.CONSTANT",
+  "readOnly": false,
+  "eval": "r"
+ },
+ "strmenu": {
+  "name": "Strmenu",
+  "style": "StrMenu",
+  "val": "",
+  "default": "",
+  "menuIndex": 0,
+  "menuNames": [
+   "s1",
+   "s2"
+  ],
+  "menuLabels": [
+   "S1",
+   "S2"
+  ],
+  "menuSource": null,
+  "isCustom": true,
+  "isMenu": true,
+  "mode": "ParMode.CONSTANT",
+  "readOnly": false,
+  "eval": ""
+ },
+ "builtin": {
+  "name": "type",
+  "style": "Menu",
+  "val": "simplex3d",
+  "default": "simplex3d",
+  "menuIndex": 4,
+  "menuNames": [
+   "perlin2d",
+   "perlin3d",
+   "perlin4d",
+   "simplex2d",
+   "simplex3d",
+   "simplex4d",
+   "randomgpu",
+   "sparse",
+   "hermite",
+   "harmonic",
+   "random",
+   "alligator"
+  ],
+  "menuLabels": [
+   "Perlin 2D (GPU)",
+   "Perlin 3D (GPU)",
+   "Perlin 4D (GPU)",
+   "Simplex 2D (GPU)",
+   "Simplex 3D (GPU)",
+   "Simplex 4D (GPU)",
+   "Random (GPU)",
+   "Sparse",
+   "Hermite",
+   "Harmomic Summation",
+   "Random",
+   "Alligator"
+  ],
+  "menuSource": null,
+  "isCustom": false,
+  "isMenu": true,
+  "mode": "ParMode.CONSTANT",
+  "readOnly": false,
+  "eval": "simplex3d"
+ },
+ "builtin_set_names": "ERR tdError(\"Custom menu parameter expected. Value:type:Par name:type owner:/project1/builtin_probe value:simplex3d Type:<class 'td.Par'>.\")",
+ "customPars": [
+  "Scene",
+  "Sourced",
+  "Strmenu"
+ ],
+ "builtin_in_customPars": [],
+ "dup_names": {
+  "name": "Scene",
+  "style": "Menu",
+  "val": "x",
+  "default": "a",
+  "menuIndex": 0,
+  "menuNames": [
+   "x",
+   "x"
+  ],
+  "menuLabels": [
+   "X",
+   "X2"
+  ],
+  "menuSource": null,
+  "isCustom": true,
+  "isMenu": true,
+  "mode": "ParMode.CONSTANT",
+  "readOnly": false,
+  "eval": "x"
+ },
+ "empty_names": {
+  "name": "Scene",
+  "style": "Menu",
+  "val": "",
+  "default": "a",
+  "menuIndex": null,
+  "menuNames": [],
+  "menuLabels": [],
+  "menuSource": null,
+  "isCustom": true,
+  "isMenu": true,
+  "mode": "ParMode.CONSTANT",
+  "readOnly": false,
+  "eval": ""
+ }
+}
