@@ -1,0 +1,74 @@
+{
+ "pid": 23492,
+ "build": "2025.32050",
+ "implicit_initial": {
+  "names": [
+   "a",
+   "b",
+   "c"
+  ],
+  "val": "a",
+  "default": "a",
+  "index": 0
+ },
+ "implicit_after_reorder": {
+  "names": [
+   "c",
+   "a",
+   "b"
+  ],
+  "val": "c",
+  "default": "c",
+  "index": 0
+ },
+ "orphan_after_rename": {
+  "names": [
+   "x",
+   "y",
+   "z"
+  ],
+  "val": "z",
+  "default": "b",
+  "index": 2
+ },
+ "orphan_rewrite_same": {
+  "names": [
+   "x",
+   "y",
+   "z"
+  ],
+  "val": "z",
+  "default": "b",
+  "index": 2
+ },
+ "orphan_write_missing": {
+  "names": [
+   "x",
+   "y",
+   "z"
+  ],
+  "val": "z",
+  "default": "missing",
+  "index": 2
+ },
+ "default_write_existing": {
+  "names": [
+   "x",
+   "y",
+   "z"
+  ],
+  "val": "z",
+  "default": "y",
+  "index": 2
+ },
+ "explicit_after_reorder": {
+  "names": [
+   "c",
+   "a",
+   "b"
+  ],
+  "val": "c",
+  "default": "a",
+  "index": 0
+ }
+}

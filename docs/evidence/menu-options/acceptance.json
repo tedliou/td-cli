@@ -1,9 +1,9 @@
 {
   "phase": "mutate",
-  "pid": 20704,
+  "pid": 27104,
   "build": "2025.32050",
   "project": "E:/td-cli/.codex/menu-set/menu-options.toe",
-  "source_sha256": "28c69c682ce1e083acc4c0bc9d16b7bf405871ac76d47d1e485924eeaf40ad50",
+  "source_sha256": "a25dd504ee48501cfbb9daabb4bf5a8bc5fb38a30d2ee697f1bc1fa4aeca5fae",
   "scene_index": {
     "operator_path": "/project1/controls",
     "parameter": "Scene",
@@ -591,6 +591,116 @@
       "unchanged": true
     }
   },
+  "orphan_before": {
+    "names": [
+      "x",
+      "y",
+      "z"
+    ],
+    "labels": [
+      "A",
+      "B",
+      "C"
+    ],
+    "value": "z",
+    "default": "b",
+    "index": 2
+  },
+  "orphan_index": {
+    "operator_path": "/project1/controls",
+    "parameter": "Orphan",
+    "preserve": "index",
+    "menu_names": [
+      "p",
+      "q",
+      "r"
+    ],
+    "menu_labels": [
+      "P",
+      "Q",
+      "R"
+    ],
+    "before": {
+      "value": "z",
+      "index": 2,
+      "default": "b"
+    },
+    "after": {
+      "value": "r",
+      "index": 2,
+      "default": "b"
+    }
+  },
+  "orphan_readback": {
+    "names": [
+      "p",
+      "q",
+      "r"
+    ],
+    "labels": [
+      "P",
+      "Q",
+      "R"
+    ],
+    "value": "r",
+    "default": "b",
+    "index": 2
+  },
+  "implicit_before": {
+    "names": [
+      "a",
+      "b",
+      "c"
+    ],
+    "labels": [
+      "A",
+      "B",
+      "C"
+    ],
+    "value": "b",
+    "default": "a",
+    "index": 1
+  },
+  "implicit_name": {
+    "operator_path": "/project1/controls",
+    "parameter": "Implicit",
+    "preserve": "name",
+    "menu_names": [
+      "c",
+      "a",
+      "b"
+    ],
+    "menu_labels": [
+      "C",
+      "A",
+      "B"
+    ],
+    "before": {
+      "value": "b",
+      "index": 1,
+      "default": "a"
+    },
+    "after": {
+      "value": "b",
+      "index": 2,
+      "default": "a"
+    }
+  },
+  "implicit_readback": {
+    "names": [
+      "c",
+      "a",
+      "b"
+    ],
+    "labels": [
+      "C",
+      "A",
+      "B"
+    ],
+    "value": "b",
+    "default": "a",
+    "index": 2
+  },
   "saved_states": {
     "Scene": {
       "names": [
@@ -742,7 +852,37 @@
       "value": "y",
       "default": "x",
       "index": 1
+    },
+    "Orphan": {
+      "names": [
+        "p",
+        "q",
+        "r"
+      ],
+      "labels": [
+        "P",
+        "Q",
+        "R"
+      ],
+      "value": "r",
+      "default": "b",
+      "index": 2
+    },
+    "Implicit": {
+      "names": [
+        "c",
+        "a",
+        "b"
+      ],
+      "labels": [
+        "C",
+        "A",
+        "B"
+      ],
+      "value": "b",
+      "default": "a",
+      "index": 2
     }
   },
-  "saved_sha256": "32b67e4e9edda3a728988b36f2487c93666e7cd6a6c9b0502a0e60e3f2d2a33b"
+  "saved_sha256": "5f5591670c0d46138c86e4198eb72faf3397634e1a8f796bd630b717aaf59001"
 }

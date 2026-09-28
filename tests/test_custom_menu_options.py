@@ -56,7 +56,12 @@ class FakeMenuParameter:
 
     Assigning names keeps the selected index and pairs names with the current labels
     (truncating to the shorter list); assigning longer labels fills new names from labels.
-    Built-in menus reject option writes and a ``menuSource`` silently ignores them.
+    A default naming no option is stored verbatim. Built-in menus reject option writes and
+    a ``menuSource`` silently ignores them.
+
+    ``failures`` maps an attribute to how many writes succeed before exactly one write of
+    it raises; ``corrupt_labels`` maps the 1-based labels write that silently loses its
+    last label, modelling a write TouchDesigner accepts but does not apply.
     """
 
     def __init__(self, names, labels, value, default, *, custom=True, menu_source=None):
@@ -71,11 +76,14 @@ class FakeMenuParameter:
         self.menuSource = menu_source
         self._entries = list(zip(names, labels, strict=True))
         self.val, self.default = value, default
-        self.fail_on = set()
+        self.failures = {}
+        self.writes = {}
+        self.corrupt_labels = set()
 
     def _check(self, attribute):
-        if attribute in self.fail_on:
-            self.fail_on.discard(attribute)
+        count = self.writes.get(attribute, 0)
+        self.writes[attribute] = count + 1
+        if self.failures.get(attribute) == count:
             raise RuntimeError(f"TD rejected {attribute}")
 
     def eval(self):
@@ -106,6 +114,8 @@ class FakeMenuParameter:
         self._check("menuLabels")
         if not self.isCustom:
             raise RuntimeError("Custom menu parameter expected")
+        if self.writes["menuLabels"] in self.corrupt_labels:
+            labels = [*labels[:-1], "lost"]
         names = self.menuNames
         self._entries = [
             (names[i] if i < len(names) else labels[i], labels[i]) for i in range(len(labels))
@@ -117,7 +127,7 @@ class FakeMenuParameter:
         return names.index(self.val) if self.val in names else None
 
     def __setattr__(self, attribute, value):
-        if attribute in {"val", "default"} and hasattr(self, "fail_on"):
+        if attribute in {"val", "default"} and hasattr(self, "failures"):
             self._check(attribute)
         object.__setattr__(self, attribute, value)
 
@@ -126,7 +136,8 @@ class MenuComp:
     path = "/project1/controls"
     isCOMP = True
 
-    def __init__(self, parameter):
+    def __init__(self, parameter, operator_id=1):
+        self.id = operator_id
         self.par = SimpleNamespace(Scene=parameter, Gain=FakeParameter(0.5))
 
 
@@ -245,39 +256,100 @@ def test_menu_set_rejects_non_menu_parameters():
         run_menu_set(_menu(), parameter="Gain")
 
 
-def test_menu_set_rolls_back_a_partial_write():
+THIRTY = [f"D{i:02}" for i in range(1, 31)]
+
+
+@pytest.mark.parametrize(
+    ("overrides", "failures"),
+    [
+        ({}, {"default": 0}),
+        ({"menu_names": THIRTY, "menu_labels": THIRTY}, {"default": 0}),
+        ({"menu_names": THIRTY, "menu_labels": THIRTY}, {"menuNames": 1}),
+        ({"menu_names": ["D01", "D02"], "menu_labels": ["a", "b"]}, {"default": 0}),
+        ({"menu_names": ["D01", "D02"], "menu_labels": ["a", "b"]}, {"val": 0}),
+    ],
+)
+def test_menu_set_rolls_back_a_partial_write(overrides, failures):
     parameter = _menu("D02")
-    parameter.fail_on = {"default"}
+    parameter.failures = failures
     with pytest.raises(module.AgentCommandError, match="parameter_write_rejected"):
-        run_menu_set(parameter)
-    parameter.fail_on = set()
+        run_menu_set(parameter, **overrides)
     assert menu_state(parameter) == (OLD_SCENES, OLD_LABELS, "D02", "D10")
 
 
-def test_menu_set_reports_a_failed_rollback():
+@pytest.mark.parametrize("names", [["D01", "D02", "D03"], THIRTY, ["D01", "D02"]])
+def test_menu_set_rolls_back_a_write_that_reads_back_differently(names):
     parameter = _menu("D02")
-    parameter.fail_on = {"default"}
-    writes = []
-    original = type(parameter).menuNames.fset
+    parameter.corrupt_labels = {1}
+    with pytest.raises(module.AgentCommandError, match="parameter_write_rejected"):
+        run_menu_set(parameter, menu_names=names, menu_labels=[f"L{name}" for name in names])
+    assert menu_state(parameter) == (OLD_SCENES, OLD_LABELS, "D02", "D10")
 
-    class RestoreRejectingMenu(FakeMenuParameter):
-        @FakeMenuParameter.menuNames.setter
-        def menuNames(self, names):
-            writes.append(names)
-            if names == OLD_SCENES:
-                raise RuntimeError("TD rejected restore")
-            original(self, names)
 
-    parameter.__class__ = RestoreRejectingMenu
+def test_menu_set_keeps_an_orphan_default_without_rewriting_it():
+    parameter = FakeMenuParameter(OLD_SCENES, OLD_LABELS, "D02", "gone")
+    parameter.failures = {"default": 0}
+    result = run_menu_set(parameter, menu_names=THIRTY, menu_labels=THIRTY)
+    assert result["after"] == {"value": "D02", "index": 1, "default": "gone"}
+    assert "default" not in parameter.writes
+
+
+def test_menu_set_restores_an_orphan_default_menu_after_a_failed_write():
+    parameter = FakeMenuParameter(OLD_SCENES, OLD_LABELS, "D02", "gone")
+    parameter.failures = {"val": 0}
+    with pytest.raises(module.AgentCommandError, match="parameter_write_rejected"):
+        run_menu_set(parameter)
+    assert menu_state(parameter) == (OLD_SCENES, OLD_LABELS, "D02", "gone")
+    assert "default" not in parameter.writes
+
+
+@pytest.mark.parametrize(
+    ("failures", "corrupt_labels"),
+    [({"default": 0, "menuNames": 2}, set()), ({"default": 0}, {2})],
+)
+def test_menu_set_reports_a_failed_or_unverified_rollback(failures, corrupt_labels):
+    parameter = _menu("D02")
+    parameter.failures = failures
+    parameter.corrupt_labels = corrupt_labels
     with pytest.raises(module.AgentCommandError, match="parameter_rollback_failed"):
         run_menu_set(parameter)
-    assert OLD_SCENES in writes
+
+
+def _vanishing(*targets):
+    lookups = iter(targets)
+    return lambda path: next(lookups)
 
 
 def test_menu_set_target_vanishing_after_a_failed_write_is_unknown():
     parameter = _menu("D02")
-    parameter.fail_on = {"default"}
+    parameter.failures = {"default": 0}
     comp = MenuComp(parameter)
-    lookups = iter([comp, None])
     with pytest.raises(module.AgentCommandError, match="parameter_outcome_unknown"):
-        run_menu_set(parameter, lookup=lambda path: next(lookups))
+        run_menu_set(parameter, lookup=_vanishing(comp, None))
+
+
+def test_menu_set_target_vanishing_during_rollback_is_unknown():
+    parameter = _menu("D02")
+    parameter.failures = {"default": 0, "menuNames": 2}
+    comp = MenuComp(parameter)
+    with pytest.raises(module.AgentCommandError, match="parameter_outcome_unknown"):
+        run_menu_set(parameter, lookup=_vanishing(comp, comp, None))
+
+
+@pytest.mark.parametrize(
+    "replacement",
+    [
+        MenuComp(_menu(), operator_id=2),
+        SimpleNamespace(path="/project1/controls", id=1, par=SimpleNamespace()),
+    ],
+    ids=["operator-replaced", "parameter-destroyed"],
+)
+def test_menu_set_never_restores_onto_a_different_target(replacement):
+    parameter = _menu("D02")
+    parameter.failures = {"default": 0}
+    comp = MenuComp(parameter)
+    foreign = menu_state(replacement.par.Scene) if hasattr(replacement.par, "Scene") else None
+    with pytest.raises(module.AgentCommandError, match="parameter_outcome_unknown"):
+        run_menu_set(parameter, lookup=_vanishing(comp, replacement))
+    if foreign is not None:
+        assert menu_state(replacement.par.Scene) == foreign

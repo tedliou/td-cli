@@ -699,16 +699,7 @@ class OperatorControl:
             if self._menu_state(parameter) != expected:
                 raise RuntimeError("menu readback mismatch")
         except Exception as error:
-            if self.operator_lookup(path) is None:
-                raise AgentCommandError("parameter_outcome_unknown") from error
-            try:
-                self._write_menu_state(parameter, before)
-                if self._menu_state(parameter) != before:
-                    raise RuntimeError("menu rollback verification failed")
-            except Exception as rollback_error:
-                if self.operator_lookup(path) is None:
-                    raise AgentCommandError("parameter_outcome_unknown") from rollback_error
-                raise AgentCommandError("parameter_rollback_failed") from rollback_error
+            self._rollback_menu_state(operator, payload["parameter"], before, error)
             raise AgentCommandError("parameter_write_rejected") from error
         return {
             "operator_path": path,
@@ -744,6 +735,29 @@ class OperatorControl:
             "index": None if index is None else int(index),
         }
 
+    def _rollback_menu_state(self, operator, name, before, cause):
+        """Restore the prior menu on the same live Par, or report the outcome unknown."""
+        path = str(operator.path)
+        current = self.operator_lookup(path)
+        if (
+            current is None
+            or str(current.path) != path
+            or getattr(current, "id", None) != getattr(operator, "id", None)
+        ):
+            raise AgentCommandError("parameter_outcome_unknown") from cause
+        try:
+            parameter = self._parameter(current, name)
+        except AgentCommandError as error:
+            raise AgentCommandError("parameter_outcome_unknown") from error
+        try:
+            self._write_menu_state(parameter, before)
+            if self._menu_state(parameter) != before:
+                raise RuntimeError("menu rollback verification failed")
+        except Exception as rollback_error:
+            if self.operator_lookup(path) is None:
+                raise AgentCommandError("parameter_outcome_unknown") from rollback_error
+            raise AgentCommandError("parameter_rollback_failed") from rollback_error
+
     @staticmethod
     def _write_menu_state(parameter, state):
         # TD 2025.32050 pairs assigned names with the current labels, truncating to the
@@ -752,7 +766,9 @@ class OperatorControl:
         parameter.menuNames = state["names"]
         parameter.menuLabels = state["labels"]
         parameter.menuNames = state["names"]
-        parameter.default = state["default"]
+        # A default naming no option is kept as it is; only write one that differs.
+        if str(parameter.default) != state["default"]:
+            parameter.default = state["default"]
         parameter.val = state["value"]
 
     def _get_operator_state(self, payload):

@@ -28,6 +28,7 @@ TITLES = [f"場景{index:02}" for index in range(1, 31)]
 OLD_LABELS = [f"{index:02} {name} {title}" for index, (name, title) in enumerate(
     zip(OLD, TITLES, strict=True), start=1)]  # fmt: skip
 NEW = [f"D{index:02}" for index in range(1, 31)]
+PERSISTED = ("Scene", "Reorder", "Small", "Orphan", "Implicit")
 NEW_LABELS = [f"{index:02} {title}" for index, title in enumerate(TITLES, start=1)]
 
 
@@ -175,11 +176,27 @@ def _mutate(module, control):
     }  # fmt: skip
     for name in ("Sourced", "Driven", "Free"):
         getattr(comp.par, name).destroy()
+
+    # A default that names no option must survive untouched: TD stores it verbatim.
+    orphan = page.appendMenu("Orphan", label="Orphan")[0]
+    orphan.menuNames, orphan.menuLabels = ["a", "b", "c"], ["A", "B", "C"]
+    orphan.default, orphan.val = "b", "c"
+    orphan.menuNames = ["x", "y", "z"]
+    observations["orphan_before"] = _state(orphan)
+    observations["orphan_index"] = _menu_set(control, "Orphan", ["p", "q", "r"], ["P", "Q", "R"],
+                                             "index")  # fmt: skip
+    observations["orphan_readback"] = _state(orphan)
+    # A never-assigned default reports the first option; the name policy must pin it.
+    implicit = page.appendMenu("Implicit", label="Implicit")[0]
+    implicit.menuNames, implicit.menuLabels = ["a", "b", "c"], ["A", "B", "C"]
+    implicit.val = "b"
+    observations["implicit_before"] = _state(implicit)
+    observations["implicit_name"] = _menu_set(control, "Implicit", ["c", "a", "b"],
+                                              ["C", "A", "B"], "name")  # fmt: skip
+    observations["implicit_readback"] = _state(implicit)
     noise.destroy()
     table.destroy()
-    observations["saved_states"] = {
-        name: _state(getattr(comp.par, name)) for name in ("Scene", "Reorder", "Small")
-    }
+    observations["saved_states"] = {name: _state(getattr(comp.par, name)) for name in PERSISTED}
     project.save(str(SAVED))
     observations["saved_sha256"] = hashlib.sha256(SAVED.read_bytes()).hexdigest()
     return observations
@@ -201,7 +218,7 @@ def _probe():
             result.update(_mutate(module, control))
         else:
             result["reloaded_states"] = {
-                name: _state(getattr(comp.par, name)) for name in ("Scene", "Reorder", "Small")
+                name: _state(getattr(comp.par, name)) for name in PERSISTED
             }
     except Exception:  # noqa: BLE001 - persist any locked-runtime probe failure
         result["error"] = traceback.format_exc()
