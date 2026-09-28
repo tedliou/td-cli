@@ -1,0 +1,15 @@
+{
+  "artifact_sha256": "4bd95da6c1f03f8d769ceccb127342c6dc54eb157b9574062af8df80f73b6122",
+  "facts": {
+    "agent_path": "/project1/td_agent",
+    "agent_version": "0.7.1",
+    "connection_state": "waiting_for_daemon",
+    "socket_active": false,
+    "menu_capability": false
+  },
+  "saved_sha256": "26fd3d90edbf59d1b35a97a0ab5253fe977e69ded85c802714ab34d8ce06affa",
+  "pid": 28556,
+  "build": "2025.32050",
+  "project": "E:/td-cli/.codex/release080/src071.toe",
+  "localappdata": "E:\\td-cli\\.codex\\release080\\localappdata"
+}
