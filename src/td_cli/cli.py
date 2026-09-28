@@ -397,6 +397,18 @@ def _json_blocks(ctx: typer.Context, value: str | None) -> list[dict[str, Any]] 
     return decoded
 
 
+def _json_strings(ctx: typer.Context, value: str | None) -> list[str] | None:
+    if value is None:
+        return None
+    try:
+        decoded = json.loads(value)
+    except json.JSONDecodeError:
+        _fail(ctx, ClientError("invalid_arguments"))
+    if not isinstance(decoded, list) or any(not isinstance(item, str) for item in decoded):
+        _fail(ctx, ClientError("invalid_arguments"))
+    return decoded
+
+
 @ops_app.command("get")
 def ops_get(
     ctx: typer.Context,
@@ -1109,6 +1121,34 @@ def parameters_page_create(
 ) -> None:
     """Create a new COMP custom page from bounded float, toggle and menu definitions."""
     _command(ctx, "parameters.page.create", None, input, input_file, no_wait, request_id)
+
+
+@parameters_app.command("menu-set")
+def parameters_menu_set(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    parameter: Annotated[str | None, typer.Argument()] = None,
+    names_json: Annotated[str | None, typer.Option("--names-json")] = None,
+    labels_json: Annotated[str | None, typer.Option("--labels-json")] = None,
+    preserve: Annotated[str | None, typer.Option("--preserve", help="index or name")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    """Replace the names and labels of an existing custom Menu, keeping its selection."""
+    fields = {
+        "operator_path": operator_path,
+        "parameter": parameter,
+        "menu_names": _json_strings(ctx, names_json),
+        "menu_labels": _json_strings(ctx, labels_json),
+        "preserve": preserve,
+    }
+    provided = [value is not None for value in fields.values()]
+    if any(provided) and not all(provided):
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = fields if all(provided) else None
+    _command(ctx, "parameters.menu.set", dedicated, input, input_file, no_wait, request_id)
 
 
 @parameters_app.command("sequence-get")

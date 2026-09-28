@@ -75,6 +75,7 @@ class OperatorControl:
         "parameters.get": "_get_parameter",
         "parameters.page.create": "_create_parameter_page",
         "parameters.list": "_list_parameters",
+        "parameters.menu.set": "_set_menu_options",
         "parameters.pulse": "_pulse_parameter",
         "parameters.set": "_set_parameter",
         "parameters.sequence.get": "_get_parameter_sequence",
@@ -665,6 +666,110 @@ class OperatorControl:
                 and list(parameter.menuLabels) == item["menu_labels"]
             )
         return True
+
+    def _set_menu_options(self, payload):
+        operator, parameter = self._parameter_for_payload(payload)
+        path = str(operator.path)
+        self._require_mutable_path(path)
+        self._require_parameter_writable(parameter)
+        if self._parameter_value_kind(parameter) != "menu":
+            raise AgentCommandError("parameter_type_unsupported")
+        if (
+            not getattr(parameter, "isCustom", False)
+            or getattr(parameter, "menuSource", None)
+            or self._parameter_mode(parameter) != "constant"
+        ):
+            raise AgentCommandError("parameter_menu_not_writable")
+        before = self._menu_state(parameter)
+        names = payload["menu_names"]
+        preserve = payload["preserve"]
+        value = self._mapped_menu_item(before["names"], before["value"], names, preserve)
+        default = before["default"]
+        if default in before["names"]:
+            default = self._mapped_menu_item(before["names"], default, names, preserve)
+        expected = {
+            "names": names,
+            "labels": payload["menu_labels"],
+            "value": value,
+            "default": default,
+            "index": names.index(value),
+        }
+        try:
+            self._write_menu_state(parameter, expected)
+            if self._menu_state(parameter) != expected:
+                raise RuntimeError("menu readback mismatch")
+        except Exception as error:
+            self._rollback_menu_state(operator, payload["parameter"], before, error)
+            raise AgentCommandError("parameter_write_rejected") from error
+        return {
+            "operator_path": path,
+            "parameter": payload["parameter"],
+            "preserve": preserve,
+            "menu_names": expected["names"],
+            "menu_labels": expected["labels"],
+            "before": {key: before[key] for key in ("value", "index", "default")},
+            "after": {key: expected[key] for key in ("value", "index", "default")},
+        }
+
+    @staticmethod
+    def _mapped_menu_item(old_names, item, new_names, preserve):
+        if item not in old_names:
+            raise AgentCommandError("parameter_value_invalid")
+        if preserve == "name":
+            if item not in new_names:
+                raise AgentCommandError("parameter_value_invalid")
+            return item
+        index = old_names.index(item)
+        if index >= len(new_names):
+            raise AgentCommandError("parameter_value_invalid")
+        return new_names[index]
+
+    @staticmethod
+    def _menu_state(parameter):
+        index = parameter.menuIndex
+        return {
+            "names": [str(item) for item in parameter.menuNames],
+            "labels": [str(item) for item in parameter.menuLabels],
+            "value": str(parameter.eval()),
+            "default": str(parameter.default),
+            "index": None if index is None else int(index),
+        }
+
+    def _rollback_menu_state(self, operator, name, before, cause):
+        """Restore the prior menu on the same live Par, or report the outcome unknown."""
+        path = str(operator.path)
+        current = self.operator_lookup(path)
+        if (
+            current is None
+            or str(current.path) != path
+            or getattr(current, "id", None) != getattr(operator, "id", None)
+        ):
+            raise AgentCommandError("parameter_outcome_unknown") from cause
+        try:
+            parameter = self._parameter(current, name)
+        except AgentCommandError as error:
+            raise AgentCommandError("parameter_outcome_unknown") from error
+        try:
+            self._write_menu_state(parameter, before)
+            if self._menu_state(parameter) != before:
+                raise RuntimeError("menu rollback verification failed")
+        except Exception as rollback_error:
+            if self.operator_lookup(path) is None:
+                raise AgentCommandError("parameter_outcome_unknown") from rollback_error
+            raise AgentCommandError("parameter_rollback_failed") from rollback_error
+
+    @staticmethod
+    def _write_menu_state(parameter, state):
+        # TD 2025.32050 pairs assigned names with the current labels, truncating to the
+        # shorter list, and fills names added by longer labels from those labels. Writing
+        # names again after the labels define the length yields the exact pairs.
+        parameter.menuNames = state["names"]
+        parameter.menuLabels = state["labels"]
+        parameter.menuNames = state["names"]
+        # A default naming no option is kept as it is; only write one that differs.
+        if str(parameter.default) != state["default"]:
+            parameter.default = state["default"]
+        parameter.val = state["value"]
 
     def _get_operator_state(self, payload):
         operator = self._operator(payload)
