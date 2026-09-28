@@ -137,6 +137,24 @@ def test_json_output_is_ascii_portable_and_unicode_lossless(monkeypatch) -> None
     assert json.loads(result.stdout)["data"]["text"] == "繁體 😀"
 
 
+@pytest.mark.parametrize(
+    "options",
+    [
+        ["--names-json", '["D01"]', "--labels-json", '["01"]'],
+        ["--names-json", '["D01"]', "--labels-json", "[1]", "--preserve", "index"],
+        ["--names-json", '"D01"', "--labels-json", '["01"]', "--preserve", "index"],
+    ],
+)
+def test_menu_set_rejects_incomplete_or_untyped_dedicated_options(monkeypatch, options) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+    monkeypatch.setattr(FakeDaemonClient, "submitted", None)
+    argv = ["--json", "parameters", "menu-set", "/project1/controls", "Scene", *options]
+    result = CliRunner().invoke(cli.app, argv)
+    assert result.exit_code == 2
+    assert json.loads(result.stdout)["error"]["code"] == "invalid_arguments"
+    assert FakeDaemonClient.submitted is None
+
+
 def test_command_rejects_mixed_input_modes_as_json(monkeypatch) -> None:
     monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
 
@@ -282,6 +300,31 @@ def test_parameters_set_bool_consumes_an_explicit_boolean_value(monkeypatch) -> 
                             ],
                         }
                     ],
+                },
+            },
+        ),
+        (
+            [
+                "--json",
+                "parameters",
+                "menu-set",
+                "/project1/controls",
+                "Scene",
+                "--names-json",
+                '["D01","D02"]',
+                "--labels-json",
+                '["01 潮汐呼吸","02 霧"]',
+                "--preserve",
+                "index",
+            ],
+            {
+                "name": "parameters.menu.set",
+                "input": {
+                    "operator_path": "/project1/controls",
+                    "parameter": "Scene",
+                    "menu_names": ["D01", "D02"],
+                    "menu_labels": ["01 潮汐呼吸", "02 霧"],
+                    "preserve": "index",
                 },
             },
         ),

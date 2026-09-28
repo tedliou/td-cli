@@ -295,6 +295,17 @@ td --json --instance <selector> parameters list /project1/controls
 {"operator_path":"/project1/controls","page":"Controls","parameters":[{"name":"Gyrox","label":"Gyro X","kind":"float","default":0,"minimum":-1,"maximum":1},{"name":"Manual","label":"Manual","kind":"toggle","default":true},{"name":"Source","label":"Source","kind":"menu","default":"manual","menu_names":["manual","device"],"menu_labels":["Manual","Device"]}]}
 ```
 
+Replace the options of an existing custom `Menu` parameter with `parameters menu-set` (Command `parameters.menu.set`). It takes 1–32 unique non-empty names and the same number of non-empty labels (maximum 128 characters each) and a required `--preserve` policy: `index` keeps the selected position, `name` keeps the selected name. The menu default follows the same policy; a default that names no current option is left unchanged. Only custom, constant-mode `Menu` parameters whose options are not driven by a `menuSource` are accepted; built-in, `menuSource`, and expression/export/bind parameters fail with `parameter_menu_not_writable`, other styles (including StrMenu) with `parameter_type_unsupported`, and a selection or default the policy cannot map with `parameter_value_invalid`, all before any change. The result reports the new names and labels plus the value, index, and default before and after. A rejected write is rolled back and verified (`parameter_write_rejected`); `parameter_rollback_failed` or `parameter_outcome_unknown` require inspection before the next mutation. The Command is a mutation, so it can appear in `commands execute` plans but not in `batch execute`.
+
+```powershell
+td --json --instance <selector> parameters menu-set /project1/controls Source --names-json '["manual","device","replay"]' --labels-json '["Manual","Device","Replay"]' --preserve index
+td --json --instance <selector> parameters menu-set --input-file source-menu.json
+```
+
+```json
+{"operator_path":"/project1/controls","parameter":"Source","preserve":"index","menu_names":["manual","device","replay"],"menu_labels":["Manual","Device","Replay"],"before":{"value":"device","index":1,"default":"manual"},"after":{"value":"device","index":1,"default":"manual"}}
+```
+
 <!-- doc-section: regular-connections -->
 
 Inspect every regular input and output connector before changing a graph. The

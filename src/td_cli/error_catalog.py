@@ -158,6 +158,7 @@ ERROR_CATALOG = ErrorCatalog(
         "parameter_export_source_unavailable",
         "parameter_rollback_failed",
         "parameter_outcome_unknown",
+        "parameter_menu_not_writable",
         "parameter_page_exists",
         "parameter_page_failed",
         "parameter_page_verification_failed",

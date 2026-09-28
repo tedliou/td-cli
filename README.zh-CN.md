@@ -253,6 +253,17 @@ td --json --instance <selector> parameters list /project1/controls
 {"operator_path":"/project1/controls","page":"Controls","parameters":[{"name":"Gyrox","label":"Gyro X","kind":"float","default":0,"minimum":-1,"maximum":1},{"name":"Manual","label":"Manual","kind":"toggle","default":true},{"name":"Source","label":"Source","kind":"menu","default":"manual","menu_names":["manual","device"],"menu_labels":["Manual","Device"]}]}
 ```
 
+使用 `parameters menu-set`（Command `parameters.menu.set`）替换已有自定义 `Menu` 参数的选项。输入 1–32 个唯一且非空的名称、等量的非空标签（每项最多 128 字符），以及必填的 `--preserve`：`index` 保留当前选中的位置，`name` 保留当前选中的名称。菜单 default 按同一规则对应；原本就不对应任何选项的 default 保持不变。只接受自定义、constant mode、选项不由 `menuSource` 生成的 `Menu` 参数；内置、`menuSource` 与 expression／export／bind 参数返回 `parameter_menu_not_writable`，其他样式（含 StrMenu）返回 `parameter_type_unsupported`，当前值或 default 无法按规则对应时返回 `parameter_value_invalid`，以上都在修改前拒绝。结果返回新的名称与标签，以及修改前后的值、索引与 default。被拒绝的写入会回滚并验证（`parameter_write_rejected`）；`parameter_rollback_failed` 或 `parameter_outcome_unknown` 须先查询再执行下一次修改。此 Command 属于 mutation，可放入 `commands execute` 计划，不可放入 `batch execute`。
+
+```powershell
+td --json --instance <selector> parameters menu-set /project1/controls Source --names-json '["manual","device","replay"]' --labels-json '["Manual","Device","Replay"]' --preserve index
+td --json --instance <selector> parameters menu-set --input-file source-menu.json
+```
+
+```json
+{"operator_path":"/project1/controls","parameter":"Source","preserve":"index","menu_names":["manual","device","replay"],"menu_labels":["Manual","Device","Replay"],"before":{"value":"device","index":1,"default":"manual"},"after":{"value":"device","index":1,"default":"manual"}}
+```
+
 <!-- doc-section: regular-connections -->
 
 ## Regular Connection
