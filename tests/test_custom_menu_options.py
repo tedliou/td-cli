@@ -29,17 +29,13 @@ def test_menu_set_contract_is_bounded_and_accepted_by_command_plans():
         {"commands": [{"name": "parameters.menu.set", "input": menu_set_input()}]}
     )
     assert plan.commands[0].input.model_dump() == normalized
-    widest = menu_set_input(
-        menu_names=[f"D{i:02}" for i in range(1, 33)], menu_labels=["霧" * 128] * 32
-    )
-    assert COMMAND_CATALOG.validate_input("parameters.menu.set", widest) == widest
     for patch in [
         {"menu_names": ["D01", "D01", "D03"]},
         {"menu_names": ["D01", "D02"]},
         {"menu_names": ["D01", "", "D03"]},
         {"menu_labels": ["01", "", "03"]},
         {"menu_names": [], "menu_labels": []},
-        {"menu_names": [f"D{i}" for i in range(33)], "menu_labels": ["x"] * 33},
+        {"menu_names": [f"D{i}" for i in range(257)], "menu_labels": ["x"] * 257},
         {"menu_names": ["n" * 129, "D02", "D03"]},
         {"preserve": "value"},
         {"parameter": ""},

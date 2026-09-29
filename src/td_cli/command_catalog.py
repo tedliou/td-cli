@@ -71,8 +71,10 @@ class CustomToggleDefinition(CustomParameterDefinition):
     default: bool
 
 
-MAX_MENU_ITEMS = 32
+MAX_MENU_ITEMS = 256
 MAX_MENU_ITEM_CHARACTERS = 128
+# Results echo names and labels once; this ASCII-escaped bound keeps them well inside an outcome.
+MAX_MENU_JSON_BYTES = 65_536
 
 
 def _valid_menu_items(names: list[str], labels: list[str]) -> None:
@@ -82,6 +84,8 @@ def _valid_menu_items(names: list[str], labels: list[str]) -> None:
         or any(not item or len(item) > MAX_MENU_ITEM_CHARACTERS for item in names + labels)
     ):
         raise ValueError("menu names must be unique and match non-empty bounded labels")
+    if len(json.dumps(names + labels, ensure_ascii=True)) > MAX_MENU_JSON_BYTES:
+        raise ValueError(f"menu names and labels exceed the {MAX_MENU_JSON_BYTES}-byte JSON budget")
 
 
 class CustomMenuDefinition(CustomParameterDefinition):

@@ -259,7 +259,7 @@ def _submit(
     try:
         command = Command.model_validate({"name": name, "input": payload}).model_dump(mode="json")
     except ValidationError as error:
-        raise ClientError("invalid_arguments") from error
+        raise ClientError.invalid_arguments(error) from error
     client = _client(ctx)
     instance = client.select_instance(ctx.obj["instance"])
     snapshot = client.submit(request_id or _uuid7(), instance["instance_id"], command)

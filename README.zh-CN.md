@@ -137,6 +137,10 @@ Protocol v3 是唯一 runtime protocol，不提供 v1 alias 或 fallback。Reque
 `daemon_unavailable` 与所有 `unknown` 结果都是 `false`，因为 Request 可能已存在或仍在执行；
 请改用 `td requests get <request-id>` 查询。此 CLI 无法识别的错误码会报告为
 `protocol_incompatible`，并保留 Request ID 与状态。
+Command 或 `commands execute` 计划在提交前验证失败时，`invalid_arguments` 的 details
+列出最多八条 `validation_errors`，每条包含字段位置 `location`（在计划中以 `commands`
+与从 0 开始的 Command 索引开头）、错误类型 `type`，以及说明所违反限制的 `message`；
+`validation_errors_truncated` 表示是否还有更多错误。被拒绝的输入值不会返回。
 
 <!-- doc-section: agent-component -->
 
@@ -240,7 +244,7 @@ Operator／channel identity。Sequence replacement 最多 128 blocks、每 block
 
 Sequence 读取会将每个实际 Parameter 列出一次，包括 Constant CHOP 的 name/value 复合组；替换时沿用此有序形状。
 
-使用 `parameters page-create` 在 COMP 创建新的原生自定义参数页。每页支持 1–32 个标量 `float`、`toggle` 或 `menu` 控件。名称以大写 ASCII 字母开头，后接小写字母或数字（最多 32 字符）。浮点控件需有限的最小值、最大值与默认值，并启用硬性范围限制；菜单需 1–32 个唯一名称与对应标签。已存在的页面或参数名称会被拒绝，不覆盖。结果返回已验证的描述与值，后续以 `parameters list/get/set` 检查与修改。创建失败只移除本次新页面；回滚失败或结果未知时，须先查询再执行下一次修改。
+使用 `parameters page-create` 在 COMP 创建新的原生自定义参数页。每页支持 1–32 个标量 `float`、`toggle` 或 `menu` 控件。名称以大写 ASCII 字母开头，后接小写字母或数字（最多 32 字符）。浮点控件需有限的最小值、最大值与默认值，并启用硬性范围限制；菜单需 1–256 个唯一名称与对应标签。已存在的页面或参数名称会被拒绝，不覆盖。结果返回已验证的描述与值，后续以 `parameters list/get/set` 检查与修改。创建失败只移除本次新页面；回滚失败或结果未知时，须先查询再执行下一次修改。
 
 ASCII 转义后的输入 JSON，加上每个参数一份序列化目标路径，合计限 16,384 bytes，以保留结果描述所需空间。
 
@@ -253,7 +257,7 @@ td --json --instance <selector> parameters list /project1/controls
 {"operator_path":"/project1/controls","page":"Controls","parameters":[{"name":"Gyrox","label":"Gyro X","kind":"float","default":0,"minimum":-1,"maximum":1},{"name":"Manual","label":"Manual","kind":"toggle","default":true},{"name":"Source","label":"Source","kind":"menu","default":"manual","menu_names":["manual","device"],"menu_labels":["Manual","Device"]}]}
 ```
 
-使用 `parameters menu-set`（Command `parameters.menu.set`）替换已有自定义 `Menu` 参数的选项。输入 1–32 个唯一且非空的名称、等量的非空标签（每项最多 128 字符），以及必填的 `--preserve`：`index` 保留当前选中的位置，`name` 保留当前选中的名称。菜单 default 按同一规则对应；原本就不对应任何选项的 default 保持不变。从未指定过的 default 会返回第一个选项；规则需要移动它时会明确写入，而 TouchDesigner 无法把它还原为未指定，所以只要已经尝试写入它（包括写入 default 本身被拒绝，因为 TouchDesigner 可能已应用），之后的失败即使读回与原来相同，也返回 `parameter_rollback_failed`。只接受自定义、constant mode、选项不由 `menuSource` 生成的 `Menu` 参数；内置、`menuSource` 与 expression／export／bind 参数返回 `parameter_menu_not_writable`，其他样式（含 StrMenu）返回 `parameter_type_unsupported`，当前值或 default 无法按规则对应时返回 `parameter_value_invalid`，以上都在修改前拒绝。结果返回新的名称与标签，以及修改前后的值、索引与 default。被拒绝的写入会回滚并验证（`parameter_write_rejected`）；`parameter_rollback_failed` 或 `parameter_outcome_unknown` 须先查询再执行下一次修改。此 Command 属于 mutation，可放入 `commands execute` 计划，不可放入 `batch execute`。
+使用 `parameters menu-set`（Command `parameters.menu.set`）替换已有自定义 `Menu` 参数的选项。输入 1–256 个唯一且非空的名称、等量的非空标签（每项最多 128 字符；名称与标签合计须在 65,536 bytes 的 JSON 预算内，非 ASCII 字符每个算 6 bytes，基本多文种平面以外的字符算 12 bytes），以及必填的 `--preserve`：`index` 保留当前选中的位置，`name` 保留当前选中的名称。菜单 default 按同一规则对应；原本就不对应任何选项的 default 保持不变。从未指定过的 default 会返回第一个选项；规则需要移动它时会明确写入，而 TouchDesigner 无法把它还原为未指定，所以只要已经尝试写入它（包括写入 default 本身被拒绝，因为 TouchDesigner 可能已应用），之后的失败即使读回与原来相同，也返回 `parameter_rollback_failed`。只接受自定义、constant mode、选项不由 `menuSource` 生成的 `Menu` 参数；内置、`menuSource` 与 expression／export／bind 参数返回 `parameter_menu_not_writable`，其他样式（含 StrMenu）返回 `parameter_type_unsupported`，当前值或 default 无法按规则对应时返回 `parameter_value_invalid`，以上都在修改前拒绝。结果返回新的名称与标签，以及修改前后的值、索引与 default。被拒绝的写入会回滚并验证（`parameter_write_rejected`）；`parameter_rollback_failed` 或 `parameter_outcome_unknown` 须先查询再执行下一次修改。此 Command 属于 mutation，可放入 `commands execute` 计划，不可放入 `batch execute`。
 
 ```powershell
 td --json --instance <selector> parameters menu-set /project1/controls Source --names-json '["manual","device","replay"]' --labels-json '["Manual","Device","Replay"]' --preserve index

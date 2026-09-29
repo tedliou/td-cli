@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from pydantic import ValidationError
 
 from td_cli.daemon.cli import ENDPOINT, ensure_running
 from td_cli.daemon.runtime_files import data_root, load_token
@@ -13,6 +14,8 @@ from td_cli.processes import LaunchError
 from td_cli.protocol import PROTOCOL_VERSION, RequestStatus
 
 _REQUEST_STATUSES = frozenset(RequestStatus)
+MAX_VALIDATION_ERRORS = 8
+MAX_VALIDATION_MESSAGE_CHARACTERS = 256
 
 
 class ClientError(Exception):
@@ -20,6 +23,23 @@ class ClientError(Exception):
         super().__init__(code)
         self.code = code
         self.details = details or {}
+
+    @classmethod
+    def invalid_arguments(cls, error: ValidationError) -> ClientError:
+        """Name each violated field and its limit without echoing the rejected input."""
+        errors = error.errors(include_url=False, include_context=False, include_input=False)
+        details: dict[str, Any] = {
+            "validation_errors": [
+                {
+                    "location": list(item["loc"]),
+                    "type": item["type"],
+                    "message": item["msg"][:MAX_VALIDATION_MESSAGE_CHARACTERS],
+                }
+                for item in errors[:MAX_VALIDATION_ERRORS]
+            ],
+            "validation_errors_truncated": len(errors) > MAX_VALIDATION_ERRORS,
+        }
+        return cls("invalid_arguments", details=details)
 
 
 class DaemonClient:
