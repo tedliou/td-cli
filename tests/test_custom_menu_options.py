@@ -399,7 +399,10 @@ def test_menu_set_treats_a_rejected_attempt_to_pin_an_implicit_default_as_pinned
     parameter.failures = {"default": 0}
     with pytest.raises(module.AgentCommandError, match="parameter_rollback_failed"):
         run_menu_set(
-            parameter, menu_names=["D05", "D10", "D02"], menu_labels=["a", "b", "c"], preserve="name"
+            parameter,
+            menu_names=["D05", "D10", "D02"],
+            menu_labels=["a", "b", "c"],
+            preserve="name",
         )
     assert menu_state(parameter) == (OLD_SCENES, OLD_LABELS, "D05", "D10")
     assert parameter._default is None
