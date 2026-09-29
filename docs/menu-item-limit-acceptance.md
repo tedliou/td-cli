@@ -15,10 +15,10 @@ Collective Dream Factory 的 `/project1/dream_controls` `Scene` 需要 38 項。
 
 ## Locked 驗收（真實 Daemon transport 與 SocketIO DAT）
 
-`tools/locked_menu_limit_acceptance.py` 在本分支 commit `f98bc96` 上執行：
+`tools/locked_menu_limit_acceptance.py`（commit `df058b6`，產品程式碼與 `f98bc96` 相同）執行：
 
 - 以本分支的 `create_transport_app` 在 `127.0.0.1:19982` 啟動隔離的 acceptance Daemon。data root 位於 scratch `LOCALAPPDATA`（使用者 temp 目錄；放在 E: 時，`secure_layout` 會因 ACL 過寬而拒絕，這是既有的保護）。
-- disposable project 以官方 Samples `NewProject.toe` 加 Execute DAT 建成：TOC 以 LF 寫入，`toecollapse` exit 0、無警告，產物 954 bytes。TD 2025.32050 PID 15128 以 scratch `LOCALAPPDATA` 啟動，執行 `tools/locked_menu_limit_probe.py`，`loadTox` 載入**已發布的 Agent 0.8.0 artifact**（`%LOCALAPPDATA%\Programs\touchdesigner-cli\current\td-agent.tox`，SHA-256 `625de7737adab5d5c1e5792c6945c6fba2e10c4b65b544a5d9f1e76f434a420b`，source commit `a7cd009`，與作品內嵌的 Agent 同版）。
+- disposable project 以官方 Samples `NewProject.toe` 加 Execute DAT 建成：TOC 以 LF 寫入，`toecollapse` exit 0、無警告，產物 954 bytes。TD 2025.32050 PID 28048 以 scratch `LOCALAPPDATA` 啟動，執行 `tools/locked_menu_limit_probe.py`，`loadTox` 載入**已發布的 Agent 0.8.0 artifact**（`%LOCALAPPDATA%\Programs\touchdesigner-cli\current\td-agent.tox`，SHA-256 `625de7737adab5d5c1e5792c6945c6fba2e10c4b65b544a5d9f1e76f434a420b`，source commit `a7cd009`，與作品內嵌的 Agent 同版）。
 - scratch 內沒有 token，所以 Agent 停在 `waiting_for_daemon`，socket 未啟用。probe 把 `socketio1.par.url` 改為 19982 之後，harness 才建立 token 並啟動 Daemon，Agent 隨即連線（Instance online，agent_version 0.8.0）。使用者的 Daemon（9982）、data root 與作品 TD（PID 2780）全程未觸碰。
 - 所有 Command 都由 `DaemonClient` 經 HTTP → Daemon → SocketIO DAT → Agent 執行。harness 寫入 `done` 後，TD 自行退出（exit 0），acceptance Daemon 的 thread 也已停止。
 

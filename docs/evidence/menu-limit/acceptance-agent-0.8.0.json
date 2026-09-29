@@ -3,10 +3,10 @@
   "artifact_sha256": "625de7737adab5d5c1e5792c6945c6fba2e10c4b65b544a5d9f1e76f434a420b",
   "project": "E:\\td-cli\\.codex\\menu-limit\\probe.toe",
   "port": 19982,
-  "touchdesigner_pid": 15128,
+  "touchdesigner_pid": 28048,
   "touchdesigner_ready": {
     "before_redirect": {
-      "pid": 15128,
+      "pid": 28048,
       "build": "2025.32050",
       "localappdata": "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\E--collective-dream-factory\\84fddf26-3e3b-4ea1-bdb2-d974cba6d121\\scratchpad\\tdcli\\menu-limit\\localappdata",
       "agent_path": "/project1/td_agent",
@@ -16,7 +16,7 @@
       "socket_url": "http://127.0.0.1:9982"
     },
     "after_redirect": {
-      "pid": 15128,
+      "pid": 28048,
       "build": "2025.32050",
       "localappdata": "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\E--collective-dream-factory\\84fddf26-3e3b-4ea1-bdb2-d974cba6d121\\scratchpad\\tdcli\\menu-limit\\localappdata",
       "agent_path": "/project1/td_agent",
@@ -27,9 +27,9 @@
     }
   },
   "instance": {
-    "instance_id": "4076959d-3f13-4734-a4ee-27e4d0acaa9a",
-    "connection_id": "38c3d156-1d79-4b14-81a2-1296b0f6e77e",
-    "selector": "4076",
+    "instance_id": "828bd225-f4b0-4bfd-933c-67eb9cdec48f",
+    "connection_id": "7435374b-b6cd-47ff-ba07-12092a1cc4c8",
+    "selector": "828b",
     "status": "online",
     "agent_version": "0.8.0",
     "protocol_version": 3,
@@ -71,7 +71,7 @@
       "project.save",
       "project.snapshot"
     ],
-    "last_heartbeat_at": "2026-09-29T16:37:36.638Z",
+    "last_heartbeat_at": "2026-09-29T16:39:00.904Z",
     "offline_expires_at": null
   },
   "menu_sets": {
@@ -170,17 +170,17 @@
     {
       "step": "create test COMP",
       "command": "ops.create",
-      "request_id": "01a0ee07-63a3-72d5-bee6-fd394e1b7c69",
+      "request_id": "01a0ee08-ac96-735f-9b59-2ef9ec47bfdb",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 94.0,
       "dispatch_command_bytes": 146,
       "result_bytes": 117
     },
     {
       "step": "create 30-item Scene menu",
       "command": "parameters.page.create",
-      "request_id": "01a0ee07-6410-74f7-8552-e47d5fde17de",
+      "request_id": "01a0ee08-acfe-7bf6-80dc-832ee2b64729",
       "status": "succeeded",
       "error": null,
       "elapsed_ms": 109.0,
@@ -190,7 +190,7 @@
     {
       "step": "select D05",
       "command": "parameters.set",
-      "request_id": "01a0ee07-647c-782d-b6f1-f5bc6bac71f2",
+      "request_id": "01a0ee08-ad67-7b3c-b8dc-35fce6291319",
       "status": "succeeded",
       "error": null,
       "elapsed_ms": 110.0,
@@ -200,27 +200,27 @@
     {
       "step": "30 to 38 items",
       "command": "parameters.menu.set",
-      "request_id": "01a0ee07-64e0-7f6d-8a0f-8f22cf1adcaa",
+      "request_id": "01a0ee08-adcb-702f-970c-a2c4a0e3bc6e",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 93.0,
+      "elapsed_ms": 94.0,
       "dispatch_command_bytes": 1514,
       "result_bytes": 1576
     },
     {
       "step": "30 to 38 items value",
       "command": "parameters.get",
-      "request_id": "01a0ee07-654b-7a0f-a14a-aa77839f274b",
+      "request_id": "01a0ee08-ae34-7361-8821-2e03022ce704",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 110.0,
+      "elapsed_ms": 109.0,
       "dispatch_command_bytes": 94,
       "result_bytes": 154
     },
     {
       "step": "30 to 38 items options",
       "command": "parameters.list",
-      "request_id": "01a0ee07-65b1-79b1-aaeb-c8478436a665",
+      "request_id": "01a0ee08-ae9a-776d-8861-f63a042741d6",
       "status": "succeeded",
       "error": null,
       "elapsed_ms": 109.0,
@@ -230,7 +230,7 @@
     {
       "step": "38 to 256 items",
       "command": "parameters.menu.set",
-      "request_id": "01a0ee07-661b-779a-b1d9-50c3d995458a",
+      "request_id": "01a0ee08-af03-7e84-98d2-bb6b95a6e9fb",
       "status": "succeeded",
       "error": null,
       "elapsed_ms": 94.0,
@@ -240,7 +240,7 @@
     {
       "step": "38 to 256 items value",
       "command": "parameters.get",
-      "request_id": "01a0ee07-6681-742d-bdea-a0c802580921",
+      "request_id": "01a0ee08-af67-7678-a2ec-14633836dda6",
       "status": "succeeded",
       "error": null,
       "elapsed_ms": 109.0,
@@ -250,97 +250,97 @@
     {
       "step": "38 to 256 items options",
       "command": "parameters.list",
-      "request_id": "01a0ee07-66ec-7e73-a82a-e97495dbfdfb",
+      "request_id": "01a0ee08-afd0-77a1-82b0-3f1a11e359de",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 110.0,
+      "elapsed_ms": 94.0,
       "dispatch_command_bytes": 75,
       "result_bytes": 24667
     },
     {
       "step": "256 CJK items at budget",
       "command": "parameters.menu.set",
-      "request_id": "01a0ee07-6752-7092-9ca1-252268f38ca4",
+      "request_id": "01a0ee08-b034-74a1-82ce-076a0537b48b",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 93.0,
+      "elapsed_ms": 110.0,
       "dispatch_command_bytes": 65173,
       "result_bytes": 65245
     },
     {
       "step": "256 CJK items at budget value",
       "command": "parameters.get",
-      "request_id": "01a0ee07-67bc-7a9a-91ba-d0bca9bb16b1",
+      "request_id": "01a0ee08-b09f-79c9-bea7-626be12dc0f9",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 110.0,
+      "elapsed_ms": 93.0,
       "dispatch_command_bytes": 94,
       "result_bytes": 159
     },
     {
       "step": "256 CJK items at budget options",
       "command": "parameters.list",
-      "request_id": "01a0ee07-6825-78b4-974d-38e3a4d93ef8",
+      "request_id": "01a0ee08-b105-70af-a84d-471e592c1c18",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 110.0,
       "dispatch_command_bytes": 75,
       "result_bytes": 80062
     },
     {
       "step": "256 astral items at budget",
       "command": "parameters.menu.set",
-      "request_id": "01a0ee07-6891-71e9-8115-3887ff99d70b",
+      "request_id": "01a0ee08-b16c-7565-8134-b738e51b279a",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 110.0,
+      "elapsed_ms": 93.0,
       "dispatch_command_bytes": 65173,
       "result_bytes": 65255
     },
     {
       "step": "256 astral items at budget value",
       "command": "parameters.get",
-      "request_id": "01a0ee07-68f8-73ce-bd83-4c58460af504",
+      "request_id": "01a0ee08-b1d1-74d7-911e-6db90bf8837c",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 94.0,
       "dispatch_command_bytes": 94,
       "result_bytes": 159
     },
     {
       "step": "256 astral items at budget options",
       "command": "parameters.list",
-      "request_id": "01a0ee07-6963-7675-8f34-c1943678068d",
+      "request_id": "01a0ee08-b23a-7a3d-8e34-6fe224763fcd",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 109.0,
       "dispatch_command_bytes": 75,
       "result_bytes": 80062
     },
     {
       "step": "256 back to 38 items",
       "command": "parameters.menu.set",
-      "request_id": "01a0ee07-69ca-7af5-93ef-bdc0804c99d7",
+      "request_id": "01a0ee08-b2a1-76c2-a2e4-3818e066a236",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 94.0,
       "dispatch_command_bytes": 1514,
       "result_bytes": 1586
     },
     {
       "step": "256 back to 38 items value",
       "command": "parameters.get",
-      "request_id": "01a0ee07-6a30-7b10-9c53-cbc38c1f6afe",
+      "request_id": "01a0ee08-b306-7943-bb7b-76fcc9dc61ca",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 125.0,
       "dispatch_command_bytes": 94,
       "result_bytes": 154
     },
     {
       "step": "256 back to 38 items options",
       "command": "parameters.list",
-      "request_id": "01a0ee07-6a9b-7446-8ae7-9fc9977d5a20",
+      "request_id": "01a0ee08-b377-7272-98f6-d32a2c7f1a6c",
       "status": "succeeded",
       "error": null,
       "elapsed_ms": 94.0,
@@ -350,18 +350,18 @@
     {
       "step": "destroy test COMP",
       "command": "ops.destroy",
-      "request_id": "01a0ee07-6b02-73fa-886e-1d24cffbbe8a",
+      "request_id": "01a0ee08-b3dd-7adc-a7b8-8c53af305660",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 110.0,
+      "elapsed_ms": 109.0,
       "dispatch_command_bytes": 132,
       "result_bytes": 102
     }
   ],
   "instance_after": {
-    "instance_id": "4076959d-3f13-4734-a4ee-27e4d0acaa9a",
-    "connection_id": "38c3d156-1d79-4b14-81a2-1296b0f6e77e",
-    "selector": "4076",
+    "instance_id": "828bd225-f4b0-4bfd-933c-67eb9cdec48f",
+    "connection_id": "7435374b-b6cd-47ff-ba07-12092a1cc4c8",
+    "selector": "828b",
     "status": "online",
     "agent_version": "0.8.0",
     "protocol_version": 3,
@@ -403,7 +403,7 @@
       "project.save",
       "project.snapshot"
     ],
-    "last_heartbeat_at": "2026-09-29T16:37:38.637Z",
+    "last_heartbeat_at": "2026-09-29T16:39:02.903Z",
     "offline_expires_at": null
   },
   "cli_rejections": [
@@ -490,7 +490,7 @@
   ],
   "touchdesigner_exit_code": 0,
   "td-final": {
-    "pid": 15128,
+    "pid": 28048,
     "build": "2025.32050",
     "localappdata": "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\E--collective-dream-factory\\84fddf26-3e3b-4ea1-bdb2-d974cba6d121\\scratchpad\\tdcli\\menu-limit\\localappdata",
     "agent_path": "/project1/td_agent",
