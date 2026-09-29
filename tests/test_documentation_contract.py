@@ -40,3 +40,12 @@ def test_runtime_reliability_skill_and_policy_owners_are_discoverable() -> None:
     assert "README.zh-TW.md" in contributing
     assert skill.is_file()
     assert "name: td-runtime-reliability" in skill.read_text(encoding="utf-8")
+
+
+def test_markdown_contains_no_control_characters() -> None:
+    """Escapes such as a Windows path's backslash-t must not reach the documents as TAB or BS."""
+    allowed = {chr(10), chr(13)}
+    for document in sorted(ROOT.glob("*.md")) + sorted((ROOT / "docs").rglob("*.md")):
+        text = document.read_text(encoding="utf-8")
+        found = sorted({f"U+{ord(c):04X}" for c in text if ord(c) < 32 and c not in allowed})
+        assert not found, f"{document.relative_to(ROOT)} contains {found}"

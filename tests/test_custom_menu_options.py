@@ -56,7 +56,8 @@ class FakeMenuParameter:
 
     Assigning names keeps the selected index and pairs names with the current labels
     (truncating to the shorter list); assigning longer labels fills new names from labels.
-    A default naming no option is stored verbatim. Built-in menus reject option writes and
+    A default naming no option is stored verbatim; a default never assigned (``None``)
+    reports the current first option and becomes explicit once assigned. Built-in menus reject option writes and
     a ``menuSource`` silently ignores them.
 
     ``failures`` maps an attribute to how many writes succeed before exactly one write of
@@ -75,10 +76,11 @@ class FakeMenuParameter:
         self.isPython = self.isSequence = self.isOP = self.isPulse = False
         self.menuSource = menu_source
         self._entries = list(zip(names, labels, strict=True))
-        self.val, self.default = value, default
         self.failures = {}
         self.writes = {}
         self.corrupt_labels = set()
+        object.__setattr__(self, "val", value)
+        self._default = default
 
     def _check(self, attribute):
         count = self.writes.get(attribute, 0)
@@ -103,7 +105,7 @@ class FakeMenuParameter:
         index = self.menuIndex or 0
         labels = self.menuLabels
         self._entries = [(names[i], labels[i]) for i in range(min(len(names), len(labels)))]
-        self.val = self._entries[min(index, len(self._entries) - 1)][0]
+        object.__setattr__(self, "val", self._entries[min(index, len(self._entries) - 1)][0])
 
     @property
     def menuLabels(self):
@@ -122,12 +124,23 @@ class FakeMenuParameter:
         ]
 
     @property
+    def default(self):
+        if self._default is None:
+            return self.menuNames[0] if self._entries else ""
+        return self._default
+
+    @default.setter
+    def default(self, value):
+        self._check("default")
+        self._default = value
+
+    @property
     def menuIndex(self):
         names = self.menuNames
         return names.index(self.val) if self.val in names else None
 
     def __setattr__(self, attribute, value):
-        if attribute in {"val", "default"} and hasattr(self, "failures"):
+        if attribute == "val" and hasattr(self, "failures"):
             self._check(attribute)
         object.__setattr__(self, attribute, value)
 
@@ -353,3 +366,63 @@ def test_menu_set_never_restores_onto_a_different_target(replacement):
         run_menu_set(parameter, lookup=_vanishing(comp, replacement))
     if foreign is not None:
         assert menu_state(replacement.par.Scene) == foreign
+
+
+def test_menu_set_pins_an_implicit_default_only_when_the_policy_moves_it():
+    moved = FakeMenuParameter(OLD_SCENES, OLD_LABELS, "D05", None)
+    result = run_menu_set(
+        moved, menu_names=["D05", "D10", "D02"], menu_labels=["a", "b", "c"], preserve="name"
+    )
+    assert result["after"]["default"] == "D10"
+    assert moved._default == "D10"
+    kept = FakeMenuParameter(OLD_SCENES, OLD_LABELS, "D05", None)
+    assert run_menu_set(kept)["after"]["default"] == "D01"
+    assert kept._default is None
+
+
+def test_menu_set_cannot_return_a_pinned_implicit_default_to_implicit():
+    parameter = FakeMenuParameter(OLD_SCENES, OLD_LABELS, "D05", None)
+    parameter.failures = {"val": 0}
+    with pytest.raises(module.AgentCommandError, match="parameter_rollback_failed"):
+        run_menu_set(
+            parameter,
+            menu_names=["D05", "D10", "D02"],
+            menu_labels=["a", "b", "c"],
+            preserve="name",
+        )
+    assert menu_state(parameter) == (OLD_SCENES, OLD_LABELS, "D05", "D10")
+
+
+def test_menu_set_restores_an_untouched_implicit_default_exactly():
+    parameter = FakeMenuParameter(OLD_SCENES, OLD_LABELS, "D05", None)
+    parameter.failures = {"val": 0}
+    with pytest.raises(module.AgentCommandError, match="parameter_write_rejected"):
+        run_menu_set(parameter)
+    assert menu_state(parameter) == (OLD_SCENES, OLD_LABELS, "D05", "D10")
+    assert parameter._default is None
+
+
+class DestroyedDuringWriteComp(MenuComp):
+    """A TD OP whose Python wrapper raises once the node is destroyed by the failed write."""
+
+    @property
+    def path(self):
+        if "default" in self.par.Scene.writes:
+            raise RuntimeError("tdError: Invalid OP object")
+        return "/project1/controls"
+
+    @property
+    def id(self):
+        return 1 if "default" not in self.par.Scene.writes else self.path
+
+    @id.setter
+    def id(self, value):
+        pass
+
+
+def test_menu_set_rollback_uses_the_identity_captured_before_mutation():
+    parameter = _menu("D02")
+    parameter.failures = {"default": 0}
+    comp = DestroyedDuringWriteComp(parameter)
+    with pytest.raises(module.AgentCommandError, match="parameter_outcome_unknown"):
+        run_menu_set(parameter, lookup=_vanishing(comp, None))
