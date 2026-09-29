@@ -6,6 +6,30 @@
 Component、測試與 CI。官方／權威依據集中於
 [`../research/runtime-reliability-primary-sources.md`](../research/runtime-reliability-primary-sources.md)。
 
+## 現況（2026-09-21 對照）
+
+本審查是 2026-09-01 的紀錄，以下判定與表格保留原貌。其後 PR #90 與
+[`../production-runtime-reliability-acceptance.md`](../production-runtime-reliability-acceptance.md)
+已交付全部 P0、P1 與測試投資項目，P2 只剩可觀測性部分完成：
+
+| 項目 | 現況 | 證據 |
+| --- | --- | --- |
+| P0 Request identity | 已修正 | `src/td_cli/daemon/storage.py` `_create_or_get` 比對 `instance_id` 與 canonical Command；Agent `reserve()` 同規則 |
+| P0 mutation batch | 已修正 | `CommandDefinition.batchable` 只允許 read-only；`tests/test_protocol.py` 鎖定 |
+| P0／P1 SQLite 轉態與執行緒 | 已修正 | `RequestStore` 單一 worker 擁有 connection；`BEGIN IMMEDIATE` 與條件式 `compare_and_set`；驗證 WAL |
+| P1 accepted 時序 | 已修正 | Agent `reserve()`／`authorize()`／`execute_authorized()`；execution lease 見 `transport.py` `DEFAULT_EXECUTION_LEASES` |
+| P1 Agent 去重資料 | 已修正 | 保留上限 64 筆，`acknowledge_outcome()`／`release_record()` 刪除紀錄 |
+| P1 outbound emit | 已修正 | 每個 connection 一條 `_Outbound` queue 與唯一 sender task |
+| P1 timeline 暫停 | 已修正 | 所有 `run()` 使用 `delayRef=op.TDResources` |
+| P2 結果正規化 | 已修正 | `COMMAND_CATALOG.normalize_result()`；transport 無 Command 名稱分支 |
+| P2 RequestLifecycle | 已修正 | `src/td_cli/daemon/lifecycle.py` 單一 owner |
+| P2 可觀測性 | 部分完成 | 有界 JSON log 已記錄 `request.cas`（request ID、預期狀態、目標狀態、是否套用）與每個 lifecycle effect；仍缺錯誤碼、lane 深度與延遲，`lifecycle.py` 本身沒有 log，effect queue 飽和觸發的致命關閉也不記錄原因 |
+| 測試投資 1–5 | 已完成 | `tests/test_process_crash_integration.py` 以真實 subprocess 強制終止；CI 只執行一次 `pytest -q` |
+
+公開錯誤碼另於 2026-09-21 收斂為 `src/td_cli/error_catalog.py` 單一詞彙表：client 不再以手寫
+白名單把合法的 `unknown` 結果回報成 `protocol_incompatible`，`retryable` 也改由同一處定義。
+文中的「398 項綠燈」是審查當時的數字，目前測試共 599 項。
+
 ## 判定
 
 目前設計已有正確骨架：Request 先持久化再派送、每個 TouchDesigner Instance

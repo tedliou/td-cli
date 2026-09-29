@@ -128,6 +128,16 @@ Protocol v3 是唯一 runtime protocol，不提供 v1 alias 或 fallback。Reque
 授權後斷線會成為 `unknown`；td-cli 絕不自動重試，但同一 execution 保留的結果之後可將它細化為
 `succeeded` 或 `failed`。
 
+`--json` 指令失敗時會輸出一個錯誤 envelope，內含 `code`、`message`、`details` 與
+`retryable`；若已有 Request，另附其 Request ID 與狀態。錯誤碼來自單一封閉詞彙表
+[`src/td_cli/error_catalog.py`](src/td_cli/error_catalog.py)。只有當錯誤碼能證明 Command
+從未開始、且狀況是暫時性時，`retryable` 才是 `true`：`instance_busy`、`instance_offline`、
+`instance_draining`、`instance_synchronizing`、`daemon_shutdown` 與 `execution_capacity_full`。
+唯有此時，才能以新的 Request 再次送出同一 Command 而不重複副作用。`wait_timeout`、
+`daemon_unavailable` 與所有 `unknown` 結果都是 `false`，因為 Request 可能已存在或仍在執行；
+請改用 `td requests get <request-id>` 查詢。此 CLI 無法辨識的錯誤碼會回報為
+`protocol_incompatible`，並保留 Request ID 與狀態。
+
 <!-- doc-section: agent-component -->
 
 ## Agent Component
@@ -241,6 +251,17 @@ td --json --instance <selector> parameters list /project1/controls
 
 ```json
 {"operator_path":"/project1/controls","page":"Controls","parameters":[{"name":"Gyrox","label":"Gyro X","kind":"float","default":0,"minimum":-1,"maximum":1},{"name":"Manual","label":"Manual","kind":"toggle","default":true},{"name":"Source","label":"Source","kind":"menu","default":"manual","menu_names":["manual","device"],"menu_labels":["Manual","Device"]}]}
+```
+
+使用 `parameters menu-set`（Command `parameters.menu.set`）替換既有自訂 `Menu` 參數的選項。輸入 1–32 個唯一且非空的名稱、等量的非空標籤（每項最多 128 字元），以及必填的 `--preserve`：`index` 保留目前選取的位置，`name` 保留目前選取的名稱。選單 default 依同一規則對應；原本就不對應任何選項的 default 保持不變。只接受自訂、constant mode、選項不由 `menuSource` 產生的 `Menu` 參數；內建、`menuSource` 與 expression／export／bind 參數回傳 `parameter_menu_not_writable`，其他樣式（含 StrMenu）回傳 `parameter_type_unsupported`，目前值或 default 無法依規則對應時回傳 `parameter_value_invalid`，以上都在修改前拒絕。結果回傳新的名稱與標籤，以及修改前後的值、索引與 default。被拒絕的寫入會復原並驗證（`parameter_write_rejected`）；`parameter_rollback_failed` 或 `parameter_outcome_unknown` 須先查詢再執行下一次修改。此 Command 屬於 mutation，可放入 `commands execute` 計畫，不可放入 `batch execute`。
+
+```powershell
+td --json --instance <selector> parameters menu-set /project1/controls Source --names-json '["manual","device","replay"]' --labels-json '["Manual","Device","Replay"]' --preserve index
+td --json --instance <selector> parameters menu-set --input-file source-menu.json
+```
+
+```json
+{"operator_path":"/project1/controls","parameter":"Source","preserve":"index","menu_names":["manual","device","replay"],"menu_labels":["Manual","Device","Replay"],"before":{"value":"device","index":1,"default":"manual"},"after":{"value":"device","index":1,"default":"manual"}}
 ```
 
 <!-- doc-section: regular-connections -->
@@ -389,4 +410,4 @@ read-only Command 使用。
 終態 snapshot。請保存輸出；中斷或 outcome unknown 後先查詢已記錄的 Request，
 不要盲目重跑整份計畫。不接受巢狀 `batch.execute`。
 
-0.7.1 離線升級除既有來源外，新增精確 canonical 0.7.0 Agent 白名單，保留 Connectionstate 定義；並修正 Constant CHOP Sequence 讀取與替換時的原生群組重複列舉。
+0.8.0 離線升級除既有來源（含 0.7.0）外，新增精確 canonical 0.7.1 Agent 白名單，保留 Connectionstate 定義；新增修改既有自訂 Menu 選項的 `parameters menu-set`，`events.read` 改為逐字回傳 TouchDesigner 錯誤文字。

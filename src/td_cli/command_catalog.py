@@ -71,21 +71,30 @@ class CustomToggleDefinition(CustomParameterDefinition):
     default: bool
 
 
+MAX_MENU_ITEMS = 32
+MAX_MENU_ITEM_CHARACTERS = 128
+
+
+def _valid_menu_items(names: list[str], labels: list[str]) -> None:
+    if (
+        len(names) != len(labels)
+        or len(set(names)) != len(names)
+        or any(not item or len(item) > MAX_MENU_ITEM_CHARACTERS for item in names + labels)
+    ):
+        raise ValueError("menu names must be unique and match non-empty bounded labels")
+
+
 class CustomMenuDefinition(CustomParameterDefinition):
     kind: Literal["menu"]
     default: str
-    menu_names: list[str] = Field(min_length=1, max_length=32)
-    menu_labels: list[str] = Field(min_length=1, max_length=32)
+    menu_names: list[str] = Field(min_length=1, max_length=MAX_MENU_ITEMS)
+    menu_labels: list[str] = Field(min_length=1, max_length=MAX_MENU_ITEMS)
 
     @model_validator(mode="after")
     def valid_menu(self) -> CustomMenuDefinition:
-        if (
-            len(self.menu_names) != len(self.menu_labels)
-            or len(set(self.menu_names)) != len(self.menu_names)
-            or self.default not in self.menu_names
-            or any(not item or len(item) > 128 for item in self.menu_names + self.menu_labels)
-        ):
-            raise ValueError("invalid menu names, labels or default")
+        _valid_menu_items(self.menu_names, self.menu_labels)
+        if self.default not in self.menu_names:
+            raise ValueError("menu default must name one of the menu names")
         return self
 
 
@@ -444,6 +453,17 @@ class SetParameterInput(ParameterInput):
                 raise ValueError(f"{self.mode} requires a matching typed source")
         elif self.source is not None:
             raise ValueError("constant and expression modes do not accept source")
+        return self
+
+
+class SetMenuOptionsInput(ParameterInput):
+    menu_names: list[str] = Field(min_length=1, max_length=MAX_MENU_ITEMS)
+    menu_labels: list[str] = Field(min_length=1, max_length=MAX_MENU_ITEMS)
+    preserve: Literal["index", "name"]
+
+    @model_validator(mode="after")
+    def valid_menu(self) -> SetMenuOptionsInput:
+        _valid_menu_items(self.menu_names, self.menu_labels)
         return self
 
 
@@ -850,6 +870,12 @@ COMMAND_CATALOG = CommandCatalog(
             _parameter_result,
         ),
         CommandDefinition(
+            "parameters.menu.set",
+            SetMenuOptionsInput,
+            CommandEffect.MUTATION,
+            ExecutionClass.BOUNDED_MUTATION,
+        ),
+        CommandDefinition(
             "parameters.pulse",
             ParameterInput,
             CommandEffect.MUTATION,
@@ -992,6 +1018,7 @@ CommandInput = (
     | ParameterInput
     | CreateParameterPageInput
     | SetParameterInput
+    | SetMenuOptionsInput
     | SequenceInput
     | ReplaceSequenceInput
     | SnapshotInput

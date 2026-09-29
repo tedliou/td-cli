@@ -10,6 +10,7 @@ from typing import Any, Literal, Protocol, TypeAlias
 
 from td_cli.command_catalog import COMMAND_CATALOG
 from td_cli.daemon.storage import RequestIdentityConflict
+from td_cli.error_catalog import ERROR_CATALOG
 
 
 class LifecycleStore(Protocol):
@@ -312,7 +313,7 @@ class RequestLifecycle:
                     expected_statuses={str(item["status"])},
                     changes={
                         "status": target,
-                        "error": _error(code),
+                        "error": ERROR_CATALOG.error(code),
                         "completed_at": self._now(),
                     },
                 )
@@ -421,7 +422,7 @@ class RequestLifecycle:
                 expected_statuses={"queued"},
                 changes={
                     "status": "failed",
-                    "error": _error("command_unsupported"),
+                    "error": ERROR_CATALOG.error("command_unsupported"),
                     "completed_at": self._now(),
                 },
             )
@@ -471,7 +472,7 @@ class RequestLifecycle:
             expected_statuses={"dispatched"},
             changes={
                 "status": "failed",
-                "error": _error(code),
+                "error": ERROR_CATALOG.error(code),
                 "completed_at": self._now(),
             },
         )
@@ -591,7 +592,7 @@ class RequestLifecycle:
                 expected_statuses={"running"},
                 changes={
                     "status": "unknown",
-                    "error": _error("request_outcome_unknown"),
+                    "error": ERROR_CATALOG.error("request_outcome_unknown"),
                     "completed_at": self._now(),
                 },
             )
@@ -630,7 +631,7 @@ class RequestLifecycle:
                     expected_statuses={"queued"},
                     changes={
                         "status": "instance_offline",
-                        "error": _error("instance_offline"),
+                        "error": ERROR_CATALOG.error("instance_offline"),
                         "completed_at": self._now(),
                     },
                 )
@@ -650,7 +651,11 @@ class RequestLifecycle:
                 await self._store.compare_and_set(
                     str(item["request_id"]),
                     expected_statuses={str(item["status"])},
-                    changes={"status": target, "error": _error(code), "completed_at": self._now()},
+                    changes={
+                        "status": target,
+                        "error": ERROR_CATALOG.error(code),
+                        "completed_at": self._now(),
+                    },
                 )
         self._lanes.clear()
         self._in_flight.clear()
@@ -732,10 +737,6 @@ class RequestLifecycle:
             self._emit("fatal", payload={"type": type(error).__name__})
         except asyncio.QueueFull:
             pass
-
-
-def _error(code: str) -> dict[str, object]:
-    return {"code": code, "message": code, "details": {}, "retryable": False}
 
 
 def _utc_now() -> str:

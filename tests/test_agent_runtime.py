@@ -379,9 +379,11 @@ class FakeOperator:
     def saveByteArray(self, *_):
         return bytearray(b"TD-BINARY")
 
+    error_text = "sample error"
+
     def errors(self, recurse=False):
         assert recurse is True
-        return ["sample error"]
+        return self.error_text
 
     def destroy(self) -> None:
         self.destroyed = True
@@ -3561,7 +3563,8 @@ def test_phase_3_observation_binary_metadata_and_events_are_bounded() -> None:
     )
     assert observed == {
         "events": [{"id": 1, "kind": "command.succeeded", "request_id": "request-1"}],
-        "errors": ["sample error"],
+        "errors": "sample error",
+        "errors_truncated": False,
         "next_after": 1,
     }
 
@@ -3745,6 +3748,53 @@ def test_event_ring_retains_1000_and_reads_at_most_requested_200() -> None:
     assert len(result["events"]) == 200
     assert result["events"][0]["id"] == 2
     assert result["next_after"] == 201
+
+
+# Recorded from locked TouchDesigner 2025.32050: OP.errors(recurse=True) is one str in which a
+# single error may span several lines, so the text is only bounded, never split into messages.
+LOCKED_RECURSIVE_ERRORS = (
+    "/project1/bad_expr:  Error: NameError: name 'undefined_name_xyz' is not defined \n"
+    ", line 1, in <module>\n"
+    "Context:(Parameter: const0value) (/project1/bad_expr)\n"
+    "/project1/bad_scriptdat:  Error: Cannot find function named: onCook (/project1/bad_scriptdat)"
+)
+
+
+def _read_errors(error_text: str, *, include_errors: bool = True) -> dict:
+    root = FakeOperator("/")
+    root.error_text = error_text
+    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: root)
+    return agent.execute_command(
+        {"name": "events.read", "input": {"after": 0, "limit": 1, "include_errors": include_errors}}
+    )
+
+
+def test_events_read_preserves_touchdesigner_error_text() -> None:
+    result = _read_errors(LOCKED_RECURSIVE_ERRORS)
+
+    assert result["errors"] == LOCKED_RECURSIVE_ERRORS
+    assert result["errors_truncated"] is False
+
+
+def test_events_read_truncates_error_text_at_a_utf8_boundary() -> None:
+    limit = AgentExt.MAX_ERROR_TEXT_BYTES
+    result = _read_errors("a" + "錯" * limit)
+
+    encoded = result["errors"].encode("utf-8")
+    assert result["errors_truncated"] is True
+    assert limit - 3 < len(encoded) <= limit
+    assert result["errors"] == ("a" + "錯" * limit)[: len(result["errors"])]
+
+    exact = _read_errors("e" * limit)
+    assert exact["errors"] == "e" * limit
+    assert exact["errors_truncated"] is False
+
+
+def test_events_read_omits_errors_when_not_requested() -> None:
+    result = _read_errors(LOCKED_RECURSIVE_ERRORS, include_errors=False)
+
+    assert result["errors"] == ""
+    assert result["errors_truncated"] is False
 
 
 def test_execution_retains_internal_and_oversized_outcomes() -> None:

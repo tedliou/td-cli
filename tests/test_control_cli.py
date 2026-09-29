@@ -137,6 +137,24 @@ def test_json_output_is_ascii_portable_and_unicode_lossless(monkeypatch) -> None
     assert json.loads(result.stdout)["data"]["text"] == "繁體 😀"
 
 
+@pytest.mark.parametrize(
+    "options",
+    [
+        ["--names-json", '["D01"]', "--labels-json", '["01"]'],
+        ["--names-json", '["D01"]', "--labels-json", "[1]", "--preserve", "index"],
+        ["--names-json", '"D01"', "--labels-json", '["01"]', "--preserve", "index"],
+    ],
+)
+def test_menu_set_rejects_incomplete_or_untyped_dedicated_options(monkeypatch, options) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+    monkeypatch.setattr(FakeDaemonClient, "submitted", None)
+    argv = ["--json", "parameters", "menu-set", "/project1/controls", "Scene", *options]
+    result = CliRunner().invoke(cli.app, argv)
+    assert result.exit_code == 2
+    assert json.loads(result.stdout)["error"]["code"] == "invalid_arguments"
+    assert FakeDaemonClient.submitted is None
+
+
 def test_command_rejects_mixed_input_modes_as_json(monkeypatch) -> None:
     monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
 
@@ -147,6 +165,51 @@ def test_command_rejects_mixed_input_modes_as_json(monkeypatch) -> None:
 
     assert result.exit_code == 2
     assert json.loads(result.stdout)["error"]["code"] == "invalid_arguments"
+
+
+@pytest.mark.parametrize(
+    ("status", "code", "retryable"),
+    [
+        ("instance_offline", "instance_offline", True),
+        ("daemon_shutdown", "daemon_shutdown", True),
+        ("failed", "execution_capacity_full", True),
+        ("failed", "parameter_write_rejected", False),
+        ("unknown", "request_outcome_unknown", False),
+        ("unknown", "outcome_capacity_exceeded", False),
+    ],
+)
+def test_json_error_is_retryable_only_when_the_command_never_started(
+    monkeypatch, status: str, code: str, retryable: bool
+) -> None:
+    class TerminalDaemonClient(FakeDaemonClient):
+        def wait(self, request_id):
+            return {"request_id": request_id, "status": status, "error": {"code": code}}
+
+    monkeypatch.setattr(cli, "DaemonClient", TerminalDaemonClient)
+
+    result = CliRunner().invoke(cli.app, ["--json", "ops", "get", "/project1"])
+
+    envelope = json.loads(result.stdout)
+    assert result.exit_code != 0
+    assert envelope["error"]["code"] == code
+    assert envelope["error"]["retryable"] is retryable
+    assert envelope["request"]["status"] == status
+
+
+def test_wait_timeout_is_not_retryable_because_the_request_may_be_running(monkeypatch) -> None:
+    class TimedOutDaemonClient(FakeDaemonClient):
+        def wait(self, request_id):
+            snapshot = {"request_id": request_id, "status": "running"}
+            raise cli.ClientError("wait_timeout", details={"request": snapshot})
+
+    monkeypatch.setattr(cli, "DaemonClient", TimedOutDaemonClient)
+
+    result = CliRunner().invoke(cli.app, ["--json", "ops", "get", "/project1"])
+
+    envelope = json.loads(result.stdout)
+    assert result.exit_code == 6
+    assert envelope["error"]["retryable"] is False
+    assert envelope["request"]["status"] == "running"
 
 
 def test_parameters_set_bool_consumes_an_explicit_boolean_value(monkeypatch) -> None:
@@ -237,6 +300,31 @@ def test_parameters_set_bool_consumes_an_explicit_boolean_value(monkeypatch) -> 
                             ],
                         }
                     ],
+                },
+            },
+        ),
+        (
+            [
+                "--json",
+                "parameters",
+                "menu-set",
+                "/project1/controls",
+                "Scene",
+                "--names-json",
+                '["D01","D02"]',
+                "--labels-json",
+                '["01 潮汐呼吸","02 霧"]',
+                "--preserve",
+                "index",
+            ],
+            {
+                "name": "parameters.menu.set",
+                "input": {
+                    "operator_path": "/project1/controls",
+                    "parameter": "Scene",
+                    "menu_names": ["D01", "D02"],
+                    "menu_labels": ["01 潮汐呼吸", "02 霧"],
+                    "preserve": "index",
                 },
             },
         ),

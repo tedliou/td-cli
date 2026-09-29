@@ -10,6 +10,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, TypeVar
 
+from td_cli.error_catalog import ERROR_CATALOG
+
 T = TypeVar("T")
 SCHEMA_VERSION = 2
 LOGGER = logging.getLogger("td_cli.daemon.storage")
@@ -182,13 +184,13 @@ def _migrate_v1(connection: sqlite3.Connection) -> None:
             if status == "queued":
                 snapshot.update(
                     status="daemon_shutdown",
-                    error=_error("daemon_shutdown"),
+                    error=ERROR_CATALOG.error("daemon_shutdown"),
                     completed_at=completed_at,
                 )
             elif status in {"dispatched", "running"}:
                 snapshot.update(
                     status="unknown",
-                    error=_error("request_outcome_unknown"),
+                    error=ERROR_CATALOG.error("request_outcome_unknown"),
                     completed_at=completed_at,
                 )
             _insert_row(connection, "requests_v2", snapshot)
@@ -365,10 +367,6 @@ def _close(connection: sqlite3.Connection) -> None:
 
 def _json(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
-
-
-def _error(code: str) -> dict[str, object]:
-    return {"code": code, "message": code, "details": {}, "retryable": False}
 
 
 def _now() -> str:

@@ -1,0 +1,17 @@
+{
+  "pid": 22036,
+  "build": "2025.32050",
+  "source_sha256": "4430ec241dd37a1d5d3887a1ff4f3b9767bb9355f81bf24e58a7f98fd2b7dd1f",
+  "raw_type": "str",
+  "readable": {
+    "verbatim": true,
+    "errors_truncated": false,
+    "errors": "/project1/probe_script:  Error: Cannot find function named: onCook (/project1/probe_script)\n/project1/probe_callbacks:  Error:   File \"/project1/probe_callbacks\", line 2\n    raise ValueError('unterminated\n                     ^\nSyntaxError: unterminated string literal (detected at line 2)\n (/project1/probe_callbacks)\n/project1/probe_expression:  Error: NameError: name 'undefined_name_xyz' is not defined \n, line 1, in <module>\nContext:(Parameter: const0value) (/project1/probe_expression)"
+  },
+  "bounded": {
+    "raw_bytes": 36161,
+    "result_bytes": 16384,
+    "errors_truncated": true,
+    "is_prefix": true
+  }
+}

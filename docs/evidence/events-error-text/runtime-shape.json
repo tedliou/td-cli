@@ -1,0 +1,24 @@
+{
+  "build": "2025.32050",
+  "pid": 20012,
+  "type": "str",
+  "repr": "'/project1/bad_expr:  Error: NameError: name \\'undefined_name_xyz\\' is not defined \\n, line 1, in <module>\\nContext:(Parameter: const0value) (/project1/bad_expr)\\n/project1/bad_callbacks:  Error:   File \"/project1/bad_callbacks\", line 2\\n    raise ValueError(\\'probe failure first line\\n                     ^\\nSyntaxError: unterminated string literal (detected at line 2)\\n (/project1/bad_callbacks)\\n/project1/bad_scriptdat:  Error: Cannot find function named: onCook (/project1/bad_scriptdat)'",
+  "lines": [
+    "/project1/bad_expr:  Error: NameError: name 'undefined_name_xyz' is not defined ",
+    ", line 1, in <module>",
+    "Context:(Parameter: const0value) (/project1/bad_expr)",
+    "/project1/bad_callbacks:  Error:   File \"/project1/bad_callbacks\", line 2",
+    "    raise ValueError('probe failure first line",
+    "                     ^",
+    "SyntaxError: unterminated string literal (detected at line 2)",
+    " (/project1/bad_callbacks)",
+    "/project1/bad_scriptdat:  Error: Cannot find function named: onCook (/project1/bad_scriptdat)"
+  ],
+  "len": 483,
+  "per_op": {
+    "bad_expr": "\"  Error: NameError: name 'undefined_name_xyz' is not defined \\n, line 1, in <module>\\nContext:(Parameter: const0value) (/project1/bad_expr)\"",
+    "bad_select": "''",
+    "bad_scriptdat": "'  Error: Cannot find function named: onCook (/project1/bad_scriptdat)'"
+  },
+  "script_errors": "'  Error: Cannot find function named: onCook (/project1/bad_callbacks)'"
+}
