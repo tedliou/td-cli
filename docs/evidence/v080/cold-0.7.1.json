@@ -1,0 +1,55 @@
+{
+  "facts": {
+    "agent_path": "/project1/td_agent",
+    "agent_version": "0.8.0",
+    "connection_state": "waiting_for_daemon",
+    "socket_active": false,
+    "menu_capability": true
+  },
+  "sentinel": 42.0,
+  "menu_result": {
+    "operator_path": "/project1/menu_check",
+    "parameter": "Scene",
+    "preserve": "index",
+    "menu_names": [
+      "D01",
+      "D02",
+      "D03"
+    ],
+    "menu_labels": [
+      "01 A",
+      "02 B",
+      "03 C"
+    ],
+    "before": {
+      "value": "D05",
+      "index": 2,
+      "default": "D10"
+    },
+    "after": {
+      "value": "D03",
+      "index": 2,
+      "default": "D01"
+    }
+  },
+  "menu_readback": {
+    "names": [
+      "D01",
+      "D02",
+      "D03"
+    ],
+    "labels": [
+      "01 A",
+      "02 B",
+      "03 C"
+    ],
+    "value": "D03",
+    "default": "D01",
+    "index": 2
+  },
+  "validated": true,
+  "pid": 23928,
+  "build": "2025.32050",
+  "project": "E:/td-cli/.codex/release080/src071.toe",
+  "localappdata": "E:\\td-cli\\.codex\\release080\\localappdata"
+}
