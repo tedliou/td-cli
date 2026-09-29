@@ -137,10 +137,14 @@ Protocol v3 是唯一 runtime protocol，不提供 v1 alias 或 fallback。Reque
 `daemon_unavailable` 与所有 `unknown` 结果都是 `false`，因为 Request 可能已存在或仍在执行；
 请改用 `td requests get <request-id>` 查询。此 CLI 无法识别的错误码会报告为
 `protocol_incompatible`，并保留 Request ID 与状态。
-Command 或 `commands execute` 计划在提交前验证失败时，`invalid_arguments` 的 details
-列出最多八条 `validation_errors`，每条包含字段位置 `location`（在计划中以 `commands`
-与从 0 开始的 Command 索引开头）、错误类型 `type`，以及说明所违反限制的 `message`；
-`validation_errors_truncated` 表示是否还有更多错误。被拒绝的输入值不会返回。
+Command 或 `commands execute` 计划的字段在提交前验证失败时，`--json` envelope 中
+`invalid_arguments` 的 details 会列出最多八条 `validation_errors`，并以
+`validation_errors_truncated` 表示是否还有更多错误。每条包含 `location`、错误类型 `type`，
+以及说明所违反规则或限制的 `message`。位置相对于 Command，所以输入字段以 `input` 开头
+（例如 `["input","menu_names"]`）；在计划中则以 `commands` 与从 0 开始的 Command 索引开头。
+跨越多个字段的规则报告包含它们的对象，例如 `["input"]`。消息依 schema 生成，不会返回被拒绝的值；
+多余的字段名称会出现在位置中，最多 64 字符。文件无法读取、含 BOM、计划过大，或单一 Command
+文档、`--names-json`／`--labels-json` 不是有效 JSON 时，`details` 保持为空。
 
 <!-- doc-section: agent-component -->
 
@@ -257,7 +261,7 @@ td --json --instance <selector> parameters list /project1/controls
 {"operator_path":"/project1/controls","page":"Controls","parameters":[{"name":"Gyrox","label":"Gyro X","kind":"float","default":0,"minimum":-1,"maximum":1},{"name":"Manual","label":"Manual","kind":"toggle","default":true},{"name":"Source","label":"Source","kind":"menu","default":"manual","menu_names":["manual","device"],"menu_labels":["Manual","Device"]}]}
 ```
 
-使用 `parameters menu-set`（Command `parameters.menu.set`）替换已有自定义 `Menu` 参数的选项。输入 1–256 个唯一且非空的名称、等量的非空标签（每项最多 128 字符；名称与标签合计须在 65,536 bytes 的 JSON 预算内，非 ASCII 字符每个算 6 bytes，基本多文种平面以外的字符算 12 bytes），以及必填的 `--preserve`：`index` 保留当前选中的位置，`name` 保留当前选中的名称。菜单 default 按同一规则对应；原本就不对应任何选项的 default 保持不变。从未指定过的 default 会返回第一个选项；规则需要移动它时会明确写入，而 TouchDesigner 无法把它还原为未指定，所以只要已经尝试写入它（包括写入 default 本身被拒绝，因为 TouchDesigner 可能已应用），之后的失败即使读回与原来相同，也返回 `parameter_rollback_failed`。只接受自定义、constant mode、选项不由 `menuSource` 生成的 `Menu` 参数；内置、`menuSource` 与 expression／export／bind 参数返回 `parameter_menu_not_writable`，其他样式（含 StrMenu）返回 `parameter_type_unsupported`，当前值或 default 无法按规则对应时返回 `parameter_value_invalid`，以上都在修改前拒绝。结果返回新的名称与标签，以及修改前后的值、索引与 default。被拒绝的写入会回滚并验证（`parameter_write_rejected`）；`parameter_rollback_failed` 或 `parameter_outcome_unknown` 须先查询再执行下一次修改。此 Command 属于 mutation，可放入 `commands execute` 计划，不可放入 `batch execute`。
+使用 `parameters menu-set`（Command `parameters.menu.set`）替换已有自定义 `Menu` 参数的选项。输入 1–256 个唯一且非空的名称、等量的非空标签（每项最多 128 字符；`len(json.dumps(names + labels, ensure_ascii=True))` 不得超过 65,536，所以引号、分隔符与转义都计入，非 ASCII 字符每个算 6 bytes，基本多文种平面以外的字符算 12 bytes），以及必填的 `--preserve`：`index` 保留当前选中的位置，`name` 保留当前选中的名称。菜单 default 按同一规则对应；原本就不对应任何选项的 default 保持不变。从未指定过的 default 会返回第一个选项；规则需要移动它时会明确写入，而 TouchDesigner 无法把它还原为未指定，所以只要已经尝试写入它（包括写入 default 本身被拒绝，因为 TouchDesigner 可能已应用），之后的失败即使读回与原来相同，也返回 `parameter_rollback_failed`。只接受自定义、constant mode、选项不由 `menuSource` 生成的 `Menu` 参数；内置、`menuSource` 与 expression／export／bind 参数返回 `parameter_menu_not_writable`，其他样式（含 StrMenu）返回 `parameter_type_unsupported`，当前值或 default 无法按规则对应时返回 `parameter_value_invalid`，以上都在修改前拒绝。结果返回新的名称与标签，以及修改前后的值、索引与 default。被拒绝的写入会回滚并验证（`parameter_write_rejected`）；`parameter_rollback_failed` 或 `parameter_outcome_unknown` 须先查询再执行下一次修改。此 Command 属于 mutation，可放入 `commands execute` 计划，不可放入 `batch execute`。菜单较大时请用 `--input-file`，过长的 `--names-json`／`--labels-json` 可能超过 Windows 命令行长度上限。`parameters list` 会返回每个 menu 的全部选项，所以一个 Operator 若有数个接近预算的 menu，结果可能超过上限；这个读取会以 `result_too_large` 失败且不改变任何状态，`parameters get` 仍可读取单个值。
 
 ```powershell
 td --json --instance <selector> parameters menu-set /project1/controls Source --names-json '["manual","device","replay"]' --labels-json '["Manual","Device","Replay"]' --preserve index

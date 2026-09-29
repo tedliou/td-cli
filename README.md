@@ -155,12 +155,18 @@ side effect. `wait_timeout`, `daemon_unavailable` and every `unknown` outcome
 are `false` because the Request may exist or still be running; query it with
 `td requests get <request-id>` instead. A code this CLI does not recognize is
 reported as `protocol_incompatible` with the Request ID and status preserved.
-When a Command or `commands execute` plan fails validation before submission,
-`invalid_arguments` details list up to eight `validation_errors`, each with the
-field `location` (inside a plan it starts with `commands` and the zero-based
-Command index), the error `type`, and a `message` that states the violated
-limit; `validation_errors_truncated` reports whether more were found. Rejected
-input values are never echoed.
+When the fields of a Command or `commands execute` plan fail validation before
+submission, the `--json` envelope's `invalid_arguments` details list up to eight
+`validation_errors` and report `validation_errors_truncated`. Each error has a
+`location`, the error `type`, and a `message` that states the violated rule or
+limit. The location is relative to the Command, so input fields start with
+`input` (for example `["input","menu_names"]`); inside a plan it starts with
+`commands` and the zero-based Command index. A rule that spans several fields
+reports the object that contains them, such as `["input"]`. Messages are built
+from the schema and never echo rejected values; unexpected field names appear in
+the location, truncated to 64 characters. Unreadable files, a byte order mark,
+an oversized plan, or a single-Command document or `--names-json`/`--labels-json`
+option that is not valid JSON keep `details` empty.
 
 <!-- doc-section: agent-component -->
 
@@ -301,7 +307,7 @@ td --json --instance <selector> parameters list /project1/controls
 {"operator_path":"/project1/controls","page":"Controls","parameters":[{"name":"Gyrox","label":"Gyro X","kind":"float","default":0,"minimum":-1,"maximum":1},{"name":"Manual","label":"Manual","kind":"toggle","default":true},{"name":"Source","label":"Source","kind":"menu","default":"manual","menu_names":["manual","device"],"menu_labels":["Manual","Device"]}]}
 ```
 
-Replace the options of an existing custom `Menu` parameter with `parameters menu-set` (Command `parameters.menu.set`). It takes 1–256 unique non-empty names and the same number of non-empty labels (maximum 128 characters each; names and labels together must fit a 65,536-byte JSON budget in which a non-ASCII character counts 6 bytes, or 12 outside the Basic Multilingual Plane) and a required `--preserve` policy: `index` keeps the selected position, `name` keeps the selected name. The menu default follows the same policy; a default that names no current option is left unchanged. A default that was never assigned reports the first option; when the policy moves it, it is assigned explicitly, and because TouchDesigner cannot make it implicit again, any failure after the write of that default has been attempted (including a rejected write of the default itself, which TouchDesigner may have applied) reports `parameter_rollback_failed` even though the menu reads back as before. Only custom, constant-mode `Menu` parameters whose options are not driven by a `menuSource` are accepted; built-in, `menuSource`, and expression/export/bind parameters fail with `parameter_menu_not_writable`, other styles (including StrMenu) with `parameter_type_unsupported`, and a selection or default the policy cannot map with `parameter_value_invalid`, all before any change. The result reports the new names and labels plus the value, index, and default before and after. A rejected write is rolled back and verified (`parameter_write_rejected`); `parameter_rollback_failed` or `parameter_outcome_unknown` require inspection before the next mutation. The Command is a mutation, so it can appear in `commands execute` plans but not in `batch execute`.
+Replace the options of an existing custom `Menu` parameter with `parameters menu-set` (Command `parameters.menu.set`). It takes 1–256 unique non-empty names and the same number of non-empty labels (maximum 128 characters each; `len(json.dumps(names + labels, ensure_ascii=True))` must not exceed 65,536, so quotes, separators, and escapes count and a non-ASCII character counts 6 bytes, or 12 outside the Basic Multilingual Plane) and a required `--preserve` policy: `index` keeps the selected position, `name` keeps the selected name. The menu default follows the same policy; a default that names no current option is left unchanged. A default that was never assigned reports the first option; when the policy moves it, it is assigned explicitly, and because TouchDesigner cannot make it implicit again, any failure after the write of that default has been attempted (including a rejected write of the default itself, which TouchDesigner may have applied) reports `parameter_rollback_failed` even though the menu reads back as before. Only custom, constant-mode `Menu` parameters whose options are not driven by a `menuSource` are accepted; built-in, `menuSource`, and expression/export/bind parameters fail with `parameter_menu_not_writable`, other styles (including StrMenu) with `parameter_type_unsupported`, and a selection or default the policy cannot map with `parameter_value_invalid`, all before any change. The result reports the new names and labels plus the value, index, and default before and after. A rejected write is rolled back and verified (`parameter_write_rejected`); `parameter_rollback_failed` or `parameter_outcome_unknown` require inspection before the next mutation. The Command is a mutation, so it can appear in `commands execute` plans but not in `batch execute`. Pass large menus with `--input-file`, because long `--names-json`/`--labels-json` values can exceed the Windows command-line limit. `parameters list` returns every option of every menu, so an Operator with several menus near the budget can exceed the result limit; that read fails with `result_too_large` and changes nothing, and `parameters get` still reads one value.
 
 ```powershell
 td --json --instance <selector> parameters menu-set /project1/controls Source --names-json '["manual","device","replay"]' --labels-json '["Manual","Device","Replay"]' --preserve index

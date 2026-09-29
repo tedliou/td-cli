@@ -78,12 +78,16 @@ MAX_MENU_JSON_BYTES = 65_536
 
 
 def _valid_menu_items(names: list[str], labels: list[str]) -> None:
-    if (
-        len(names) != len(labels)
-        or len(set(names)) != len(names)
-        or any(not item or len(item) > MAX_MENU_ITEM_CHARACTERS for item in names + labels)
-    ):
-        raise ValueError("menu names must be unique and match non-empty bounded labels")
+    if len(names) != len(labels):
+        raise ValueError("menu names and labels must have the same number of items")
+    if len(set(names)) != len(names):
+        raise ValueError("menu names must be unique")
+    if any(not item for item in names + labels):
+        raise ValueError("menu names and labels must not be empty")
+    if any(len(item) > MAX_MENU_ITEM_CHARACTERS for item in names + labels):
+        raise ValueError(
+            f"menu names and labels must be at most {MAX_MENU_ITEM_CHARACTERS} characters"
+        )
     if len(json.dumps(names + labels, ensure_ascii=True)) > MAX_MENU_JSON_BYTES:
         raise ValueError(f"menu names and labels exceed the {MAX_MENU_JSON_BYTES}-byte JSON budget")
 

@@ -16,6 +16,50 @@ from td_cli.protocol import PROTOCOL_VERSION, RequestStatus
 _REQUEST_STATUSES = frozenset(RequestStatus)
 MAX_VALIDATION_ERRORS = 8
 MAX_VALIDATION_MESSAGE_CHARACTERS = 256
+MAX_VALIDATION_LOCATION_CHARACTERS = 64
+# Pydantic messages interpolate only their context; these context keys come from the schema,
+# never from the rejected input, so messages built from them are safe to report.
+_SCHEMA_CONTEXT_KEYS = frozenset(
+    {
+        "actual_length",
+        "class",
+        "class_name",
+        "discriminator",
+        "expected",
+        "expected_plural",
+        "expected_tags",
+        "field_type",
+        "ge",
+        "gt",
+        "le",
+        "lt",
+        "max_length",
+        "min_length",
+        "multiple_of",
+        "pattern",
+    }
+)
+
+
+def _validation_message(item: Any) -> str:
+    context = item.get("ctx") or {}
+    if set(context) <= _SCHEMA_CONTEXT_KEYS:
+        return str(item["msg"])
+    if item["type"] == "value_error" and type(context.get("error")) is ValueError:
+        return str(item["msg"])  # raised by a Command catalog validator with fixed text
+    if item["type"] == "union_tag_invalid":
+        return (
+            f"Input tag found using {context['discriminator']} does not match any of the "
+            f"expected tags: {context['expected_tags']}"
+        )
+    return f"Input failed {item['type']} validation"
+
+
+def _validation_location(location: tuple[int | str, ...]) -> list[int | str]:
+    return [
+        part[:MAX_VALIDATION_LOCATION_CHARACTERS] if isinstance(part, str) else part
+        for part in location
+    ]
 
 
 class ClientError(Exception):
@@ -27,13 +71,13 @@ class ClientError(Exception):
     @classmethod
     def invalid_arguments(cls, error: ValidationError) -> ClientError:
         """Name each violated field and its limit without echoing the rejected input."""
-        errors = error.errors(include_url=False, include_context=False, include_input=False)
+        errors = error.errors(include_url=False, include_input=False)
         details: dict[str, Any] = {
             "validation_errors": [
                 {
-                    "location": list(item["loc"]),
+                    "location": _validation_location(item["loc"]),
                     "type": item["type"],
-                    "message": item["msg"][:MAX_VALIDATION_MESSAGE_CHARACTERS],
+                    "message": _validation_message(item)[:MAX_VALIDATION_MESSAGE_CHARACTERS],
                 }
                 for item in errors[:MAX_VALIDATION_ERRORS]
             ],

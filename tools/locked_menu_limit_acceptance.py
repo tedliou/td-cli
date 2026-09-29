@@ -15,6 +15,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -117,9 +118,12 @@ class Harness:
         }
 
 
-def _cli_rejection(argv: list[str]) -> dict[str, Any]:
+def _cli_rejection(argv: list[str], env: dict[str, str]) -> dict[str, Any]:
+    # The checkout's own console script, with the scratch LOCALAPPDATA: even if validation
+    # unexpectedly passed, the scratch token cannot authorize a Request on another Daemon.
     completed = subprocess.run(
-        ["uv", "run", "td", "--json", *argv],
+        [str(Path(sys.executable).with_name("td.exe")), "--json", *argv],
+        env=env,
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -261,8 +265,12 @@ def main() -> None:
             encoding="utf-8",
         )
         evidence["cli_rejections"] = [
-            _cli_rejection(["parameters", "menu-set", "--input-file", str(work / "menu257.json")]),
-            _cli_rejection(["commands", "execute", "--input-file", str(work / "plan257.json")]),
+            _cli_rejection(
+                ["parameters", "menu-set", "--input-file", str(work / "menu257.json")], env
+            ),
+            _cli_rejection(
+                ["commands", "execute", "--input-file", str(work / "plan257.json")], env
+            ),
         ]
     except Exception as error:
         evidence["harness_error"] = repr(error)
