@@ -62,6 +62,12 @@ V070_HASHES = {
     **V060_HASHES,
     "agent_manifest": "1eb3a8af05ea4a1876d85e5a32154db8f8d784aed4627ddec98daca9ee8d3dcf",
 }
+V071_HASHES = {
+    **V060_HASHES,
+    "agent_extension": "e0da39da44d35570ac427f90e0744090536c24ed08d3794579efc37e9f77b3ce",
+    "agent_manifest": "20e20bc2a396ca66799b4480e5d398ae74339dc546f63500c6a55c7b2c946a46",
+}
+CONNECTION_STATE_VERSIONS = frozenset({"0.6.0", "0.7.0", "0.7.1"})
 
 
 class UpgradeError(ValueError):
@@ -163,6 +169,7 @@ def identify(root: Path, target: Path) -> tuple[Path, bool]:
             "0.4.0": V040_HASHES,
             "0.6.0": V060_HASHES,
             "0.7.0": V070_HASHES,
+            "0.7.1": V071_HASHES,
         }.get(version)
         if isinstance(version, str)
         else None
@@ -215,7 +222,7 @@ def identify(root: Path, target: Path) -> tuple[Path, bool]:
         raise UpgradeError("embedded Agent has modified root parameters or external linkage")
     custom = component.with_suffix(".cparm")
     target_custom = target.with_suffix(".cparm")
-    has_connection_state = same or version in {"0.6.0", "0.7.0"}
+    has_connection_state = same or version in CONNECTION_STATE_VERSIONS
     if has_connection_state and target_custom.exists() and not custom.exists():
         raise UpgradeError("embedded Agent is missing custom parameters")
     if custom.exists() and (

@@ -500,4 +500,4 @@ IDs before submission, followed by complete terminal snapshots. Save this
 output and query the recorded Request after interruption or unknown outcome;
 do not blindly rerun the plan. Nested `batch.execute` is unsupported.
 
-The 0.7.1 upgrade accepts the exact canonical 0.7.0 Agent in addition to the existing verified sources, preserving its Connectionstate definition. Constant CHOP sequence reads and replacements normalize repeated native parameter groups.
+The 0.8.0 upgrade accepts the exact canonical 0.7.1 Agent in addition to the existing verified sources (including 0.7.0), preserving its Connectionstate definition. It adds `parameters menu-set` for existing custom Menu options, and `events.read` returns TouchDesigner error text verbatim.
