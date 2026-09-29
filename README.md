@@ -512,4 +512,4 @@ IDs before submission, followed by complete terminal snapshots. Save this
 output and query the recorded Request after interruption or unknown outcome;
 do not blindly rerun the plan. Nested `batch.execute` is unsupported.
 
-The 0.8.0 upgrade accepts the exact canonical 0.7.1 Agent in addition to the existing verified sources (including 0.7.0), preserving its Connectionstate definition. It adds `parameters menu-set` for existing custom Menu options, and `events.read` returns TouchDesigner error text verbatim.
+The 0.9.0 upgrade accepts the exact canonical 0.8.0 Agent in addition to the existing verified sources (including 0.7.0 and 0.7.1), preserving its Connectionstate definition. Custom menus accept up to 256 items, `invalid_arguments` reports located `validation_errors`, and the Agent's `parameters menu-set` reports an explicitly pinned default honestly after a failure. An embedded 0.8.0 Agent already runs menus beyond 32 items; only the CLI and Daemon must be 0.9.0 for that.

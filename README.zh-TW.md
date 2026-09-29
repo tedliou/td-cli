@@ -418,4 +418,4 @@ read-only Command 使用。
 終態 snapshot。請保存輸出；中斷或 outcome unknown 後先查詢已記錄的 Request，
 不要盲目重跑整份計畫。不接受巢狀 `batch.execute`。
 
-0.8.0 離線升級除既有來源（含 0.7.0）外，新增精確 canonical 0.7.1 Agent 白名單，保留 Connectionstate 定義；新增修改既有自訂 Menu 選項的 `parameters menu-set`，`events.read` 改為逐字回傳 TouchDesigner 錯誤文字。
+0.9.0 離線升級除既有來源（含 0.7.0、0.7.1）外，新增精確 canonical 0.8.0 Agent 白名單，保留 Connectionstate 定義。自訂 menu 放寬到 256 項，`invalid_arguments` 回報含位置的 `validation_errors`；Agent 的 `parameters menu-set` 在失敗後會如實回報已被明確寫入的 default。內嵌 0.8.0 Agent 已能執行超過 32 項的 menu，只需把 CLI 與 Daemon 升級到 0.9.0。

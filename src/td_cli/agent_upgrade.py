@@ -67,7 +67,12 @@ V071_HASHES = {
     "agent_extension": "e0da39da44d35570ac427f90e0744090536c24ed08d3794579efc37e9f77b3ce",
     "agent_manifest": "20e20bc2a396ca66799b4480e5d398ae74339dc546f63500c6a55c7b2c946a46",
 }
-CONNECTION_STATE_VERSIONS = frozenset({"0.6.0", "0.7.0", "0.7.1"})
+V080_HASHES = {
+    **V060_HASHES,
+    "agent_extension": "32ed6f7053d57ab7425176e36031dbc10963f42cb6d9d59192c01d8620449a2c",
+    "agent_manifest": "181d2e88ceaf337314683aa30e8e70605b2c47b2d4cae4ed8e68b446d5d3c0bd",
+}
+CONNECTION_STATE_VERSIONS = frozenset({"0.6.0", "0.7.0", "0.7.1", "0.8.0"})
 
 
 class UpgradeError(ValueError):
@@ -170,6 +175,7 @@ def identify(root: Path, target: Path) -> tuple[Path, bool]:
             "0.6.0": V060_HASHES,
             "0.7.0": V070_HASHES,
             "0.7.1": V071_HASHES,
+            "0.8.0": V080_HASHES,
         }.get(version)
         if isinstance(version, str)
         else None
