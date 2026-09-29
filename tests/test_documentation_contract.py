@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
@@ -43,9 +44,22 @@ def test_runtime_reliability_skill_and_policy_owners_are_discoverable() -> None:
 
 
 def test_markdown_contains_no_control_characters() -> None:
-    """Escapes such as a Windows path's backslash-t must not reach the documents as TAB or BS."""
+    """Escapes such as a Windows path's backslash-t must not reach the documents as TAB or BS.
+
+    Covers every tracked Markdown file, including the packaged skill, except the verbatim
+    upstream license texts under LICENSES/.
+    """
+    listed = subprocess.run(
+        ["git", "ls-files", "-z", "--", "*.md"],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+        timeout=30,
+    ).stdout.decode("utf-8")
+    documents = [name for name in listed.split(chr(0)) if name and not name.startswith("LICENSES/")]
+    assert "src/td_cli/data/skill/td-cli/SKILL.md" in documents
     allowed = {chr(10), chr(13)}
-    for document in sorted(ROOT.glob("*.md")) + sorted((ROOT / "docs").rglob("*.md")):
-        text = document.read_text(encoding="utf-8")
+    for name in documents:
+        text = (ROOT / name).read_text(encoding="utf-8")
         found = sorted({f"U+{ord(c):04X}" for c in text if ord(c) < 32 and c not in allowed})
-        assert not found, f"{document.relative_to(ROOT)} contains {found}"
+        assert not found, f"{name} contains {found}"

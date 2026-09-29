@@ -393,6 +393,18 @@ def test_menu_set_cannot_return_a_pinned_implicit_default_to_implicit():
     assert menu_state(parameter) == (OLD_SCENES, OLD_LABELS, "D05", "D10")
 
 
+def test_menu_set_treats_a_rejected_attempt_to_pin_an_implicit_default_as_pinned():
+    # TD may have applied a default write that raised, so the attempt alone is reported.
+    parameter = FakeMenuParameter(OLD_SCENES, OLD_LABELS, "D05", None)
+    parameter.failures = {"default": 0}
+    with pytest.raises(module.AgentCommandError, match="parameter_rollback_failed"):
+        run_menu_set(
+            parameter, menu_names=["D05", "D10", "D02"], menu_labels=["a", "b", "c"], preserve="name"
+        )
+    assert menu_state(parameter) == (OLD_SCENES, OLD_LABELS, "D05", "D10")
+    assert parameter._default is None
+
+
 def test_menu_set_restores_an_untouched_implicit_default_exactly():
     parameter = FakeMenuParameter(OLD_SCENES, OLD_LABELS, "D05", None)
     parameter.failures = {"val": 0}

@@ -60,7 +60,7 @@ TD 2025.32050，以官方 Samples `Setup/Base/NewProject.toe` 經 `toeexpand`，
 
 發布後複核提出兩點，已在後續 PR 修正；0.8.0 的 Agent 仍是修正前的行為，會隨下一版發布：
 
-- **未指定的 default：** [default-shape.json](evidence/menu-options/default-shape.json) 顯示，從未指定的 default 會回報目前第一個選項，並跟著 names 移動；明確指定過的 default 不會移動。規則需要移動未指定的 default 時，handler 必須明確寫入，而 TouchDesigner 沒有介面能把它還原成未指定。修正後，寫入前在 names 寫完時讀 default，若它已經隨 names 移動，就代表它原本未指定。這種 default 一旦寫入，之後的任何失敗即使讀回完全等於原狀，也回報 `parameter_rollback_failed`，不再回報 `parameter_write_rejected`。不需要移動的未指定 default 不會被寫入，失敗時照常完整還原。成功的寫入本來就依規則回報新的 default，這時它變成明確指定，是預期結果。
+- **未指定的 default：** [default-shape.json](evidence/menu-options/default-shape.json) 顯示，從未指定的 default 會回報目前第一個選項，並跟著 names 移動；明確指定過的 default 不會移動。規則需要移動未指定的 default 時，handler 必須明確寫入，而 TouchDesigner 沒有介面能把它還原成未指定。修正後，寫入前在 names 寫完時讀 default，若它已經隨 names 移動，就代表它原本未指定。只要嘗試寫入過這種 default，之後的任何失敗即使讀回完全等於原狀，也回報 `parameter_rollback_failed`，不再回報 `parameter_write_rejected`。寫入 default 本身拋出例外時也一樣：無法確定 TD 是否已經套用，所以採保守回報。不需要移動的未指定 default 不會被寫入，失敗時照常完整還原。成功的寫入本來就依規則回報新的 default，這時它變成明確指定，是預期結果。
 - **回復時的目標身分：** 回復改用修改前記下的路徑與 `id`，不再從原 Operator 物件重新讀取。已刪除的 OP 包裝物件在讀取屬性時可能拋出例外，這時改為回報 `parameter_outcome_unknown`，而不是一般例外路徑。這一點只由替身測試證明，沒有原生注入證據。
 
 ## 限制
