@@ -33,9 +33,9 @@ Collective Dream Factory 需要把既有自訂 Menu `/project1/dream_controls` �
 
 TD 2025.32050，以官方 Samples `Setup/Base/NewProject.toe` 經 `toeexpand`，在 `/project1` 加入 Execute DAT（內嵌文字以 `runpy` 執行 `tools/locked_menu_options_probe.py`，TOC 以 LF 寫入），`toecollapse` exit 0、無警告、產物 954 bytes 後才啟動。不載入 Agent、不連 Daemon、不開啟或修改作品；作者的作品 TD（PID 23488）全程未觸碰。
 
-探針以 `runpy` 載入 `agent/extension.py`（review 修正後的 working copy，SHA-256 `a25dd504ee48501cfbb9daabb4bf5a8bc5fb38a30d2ee697f1bc1fa4aeca5fae`，與修正 commit 內容相同），對真實 TD objects 呼叫公開 handler `OperatorControl.execute`。第一版（`9df3302`，SHA-256 `28c69c68…`，PID 20704／24884）的結果相同，已由本輪取代。
+探針以 `runpy` 載入 `agent/extension.py`，對真實 TD objects 呼叫公開 handler `OperatorControl.execute`。最新一輪使用 0.8.0 後續修正（分支 `claude/menu-set-followups`）的 working copy，SHA-256 `26e95131f8e32d27fa19b4aabca2a9a27fcb905c8a938f4b75c9f4c64c957cfe`：mutate PID 24064、reload PID 19992，觀測值與前兩輪（第一版 `9df3302` PID 20704／24884；review 修正 `59e58c3` PID 27104／26588）完全相同。
 
-[acceptance.json](evidence/menu-options/acceptance.json)（mutate，PID 27104 自行退出）：
+[acceptance.json](evidence/menu-options/acceptance.json)（mutate，PID 24064 自行退出）：
 
 - 以 `parameters.page.create` 建立與作品相同的 30 項 `Scene`（names `D10,D02,…`，labels `01 D10 場景01` 形式），`parameters.set` 選到第 5 項 `D28`。
 - `preserve=index` 改為 `D01…D30`、labels `01 場景01`：before `D28`/4/default `D10`，after `D05`/4/default `D01`。直接讀 TD、`parameters.list`、`parameters.get` 三者一致。
@@ -44,9 +44,9 @@ TD 2025.32050，以官方 Samples `Setup/Base/NewProject.toe` 經 `toeexpand`，
 - 內建 Noise TOP `type`、`menuSource` menu、expression mode menu 回傳 `parameter_menu_not_writable`；StrMenu 回傳 `parameter_type_unsupported`；索引超出與名稱不存在回傳 `parameter_value_invalid`。六項皆確認狀態未變。
 - 孤兒 default：names 改名後 default 留在 `b`，再以 `preserve=index` 改為 `p,q,r`：值 `z`@2 → `r`@2，default 仍為 `b`，讀回一致。
 - 未明確設定的 default（回報 `a`）以 `preserve=name` 重排為 `c,a,b`：值 `b` 由索引 1 變 2，default 釘在 `a`，讀回一致。
-- 刪除暫時的負面案例參數後，`project.save` 另存為 disposable `menu-options-saved.toe`（SHA-256 `5f5591670c0d46138c86e4198eb72faf3397634e1a8f796bd630b717aaf59001`）。
+- 刪除暫時的負面案例參數後，`project.save` 另存為 disposable `menu-options-saved.toe`（SHA-256 `c2c9d07971b59ae26470925bdb540bd896856c99de410c2365d559278cf2c04e`）。
 
-[reload.json](evidence/menu-options/reload.json)（PID 26588 自行退出）：冷開另存的專案，`Scene`、`Reorder`、`Small`、`Orphan`、`Implicit` 的 names、labels、值、default、索引與存檔前完全一致。
+[reload.json](evidence/menu-options/reload.json)（PID 19992 自行退出）：冷開另存的專案，`Scene`、`Reorder`、`Small`、`Orphan`、`Implicit` 的 names、labels、值、default、索引與存檔前完全一致。
 
 寫入中途失敗、回復失敗與目標消失無法在原生 TD 安全注入，只由 `tests/test_custom_menu_options.py` 的替身測試涵蓋，沒有原生證據。替身依上述實測語意建模，涵蓋：3→3、3→30、3→2 在 labels 寫入後才失敗；寫入沒有拋例外但讀回不符；回復寫入失敗與回復讀回不符；寫入後與回復途中目標消失；Operator 被同路徑替換；Par 被刪除。
 
@@ -55,6 +55,13 @@ TD 2025.32050，以官方 Samples `Setup/Base/NewProject.toe` 經 `toeexpand`，
 `tests/test_custom_menu_options.py`（Command catalog、`CommandPlan`、Agent `OperatorControl`）的 17 項測試先全部失敗，實作後通過。review 後新增的孤兒 default（不寫入）、回復到被替換的 Operator、回復到被刪除的 Par 四項測試，在修正前的 handler 上失敗，修正後通過；其餘新增的失敗注入案例在修正前後都通過，用來補足涵蓋。`tests/test_control_cli.py` 的 CLI 組裝與拒收案例在 CLI 實作後補上。locked 驗收發現 `menuIndex` 為 `None` 的情況後，先補上會失敗的測試再修正。
 
 完整 local gate：pytest 637 passed，另有 `tests/test_installer_licenses.py::test_installer_verifies_nested_license_files_on_same_version` 在本機失敗：PowerShell 以系統 code page 輸出 stderr，測試用 UTF-8 解碼，所以失敗。乾淨的 `origin/develop`（`2b39224`）同樣失敗，與本變更無關。ruff check、ruff format --check、mypy src、uv lock --check、`agent_tool inspect-source agent`、git diff --check 全部通過。
+
+## 0.8.0 發布後的修正
+
+發布後複核提出兩點，已在後續 PR 修正；0.8.0 的 Agent 仍是修正前的行為，會隨下一版發布：
+
+- **未指定的 default：** [default-shape.json](evidence/menu-options/default-shape.json) 顯示，從未指定的 default 會回報目前第一個選項，並跟著 names 移動；明確指定過的 default 不會移動。規則需要移動未指定的 default 時，handler 必須明確寫入，而 TouchDesigner 沒有介面能把它還原成未指定。修正後，寫入前在 names 寫完時讀 default，若它已經隨 names 移動，就代表它原本未指定。只要嘗試寫入過這種 default，之後的任何失敗即使讀回完全等於原狀，也回報 `parameter_rollback_failed`，不再回報 `parameter_write_rejected`。寫入 default 本身拋出例外時也一樣：無法確定 TD 是否已經套用，所以採保守回報。不需要移動的未指定 default 不會被寫入，失敗時照常完整還原。成功的寫入本來就依規則回報新的 default，這時它變成明確指定，是預期結果。
+- **回復時的目標身分：** 回復改用修改前記下的路徑與 `id`，不再從原 Operator 物件重新讀取。已刪除的 OP 包裝物件在讀取屬性時可能拋出例外，這時改為回報 `parameter_outcome_unknown`，而不是一般例外路徑。這一點只由替身測試證明，沒有原生注入證據。
 
 ## 限制
 
