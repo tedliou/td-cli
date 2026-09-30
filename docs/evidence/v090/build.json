@@ -1,0 +1,21 @@
+{
+  "artifact": {
+    "source_revision": "a68b2c7f07cbee1c6a3798d8b269c811288673975353837511dbc5975d2eaf32",
+    "touchdesigner_version": "2025.32050",
+    "operators": [
+      "agent_extension",
+      "agent_manifest",
+      "auth_table",
+      "events_table",
+      "heartbeat_execute",
+      "operator_catalog",
+      "socket_callbacks",
+      "socketio1"
+    ],
+    "artifact_sha256": "7ee47449f23452275857d73de7bc100dc7bb36f9dfb48dae8fec79cd286cbc8f"
+  },
+  "pid": 20264,
+  "build": "2025.32050",
+  "project": "E:/td-cli/.codex/release090/build.toe",
+  "localappdata": "E:\\td-cli\\.codex\\release090\\localappdata"
+}

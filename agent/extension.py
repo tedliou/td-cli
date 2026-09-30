@@ -670,6 +670,7 @@ class OperatorControl:
     def _set_menu_options(self, payload):
         operator, parameter = self._parameter_for_payload(payload)
         path = str(operator.path)
+        operator_id = getattr(operator, "id", None)
         self._require_mutable_path(path)
         self._require_parameter_writable(parameter)
         if self._parameter_value_kind(parameter) != "menu":
@@ -694,12 +695,16 @@ class OperatorControl:
             "default": default,
             "index": names.index(value),
         }
+        trace = {"pinned_default": False}
         try:
-            self._write_menu_state(parameter, expected)
+            self._write_menu_state(parameter, expected, before["default"], trace)
             if self._menu_state(parameter) != expected:
                 raise RuntimeError("menu readback mismatch")
         except Exception as error:
-            self._rollback_menu_state(operator, payload["parameter"], before, error)
+            self._rollback_menu_state(path, operator_id, payload["parameter"], before, error)
+            if trace["pinned_default"]:
+                # The readback matches, but TD cannot return a pinned default to implicit.
+                raise AgentCommandError("parameter_rollback_failed") from error
             raise AgentCommandError("parameter_write_rejected") from error
         return {
             "operator_path": path,
@@ -735,22 +740,26 @@ class OperatorControl:
             "index": None if index is None else int(index),
         }
 
-    def _rollback_menu_state(self, operator, name, before, cause):
-        """Restore the prior menu on the same live Par, or report the outcome unknown."""
-        path = str(operator.path)
-        current = self.operator_lookup(path)
-        if (
-            current is None
-            or str(current.path) != path
-            or getattr(current, "id", None) != getattr(operator, "id", None)
-        ):
+    def _rollback_menu_state(self, path, operator_id, name, before, cause):
+        """Restore the prior menu on the same live Par, or report the outcome unknown.
+
+        Uses the path and id captured before mutation: a destroyed OP wrapper can raise
+        on attribute access, and a replacement at the same path must not be written.
+        """
+        try:
+            current = self.operator_lookup(path)
+            same = (
+                current is not None
+                and str(current.path) == path
+                and getattr(current, "id", None) == operator_id
+            )
+            parameter = self._parameter(current, name) if same else None
+        except Exception as error:
+            raise AgentCommandError("parameter_outcome_unknown") from error
+        if parameter is None:
             raise AgentCommandError("parameter_outcome_unknown") from cause
         try:
-            parameter = self._parameter(current, name)
-        except AgentCommandError as error:
-            raise AgentCommandError("parameter_outcome_unknown") from error
-        try:
-            self._write_menu_state(parameter, before)
+            self._write_menu_state(parameter, before, before["default"], {})
             if self._menu_state(parameter) != before:
                 raise RuntimeError("menu rollback verification failed")
         except Exception as rollback_error:
@@ -759,15 +768,19 @@ class OperatorControl:
             raise AgentCommandError("parameter_rollback_failed") from rollback_error
 
     @staticmethod
-    def _write_menu_state(parameter, state):
+    def _write_menu_state(parameter, state, previous_default, trace):
         # TD 2025.32050 pairs assigned names with the current labels, truncating to the
         # shorter list, and fills names added by longer labels from those labels. Writing
         # names again after the labels define the length yields the exact pairs.
         parameter.menuNames = state["names"]
         parameter.menuLabels = state["labels"]
         parameter.menuNames = state["names"]
-        # A default naming no option is kept as it is; only write one that differs.
-        if str(parameter.default) != state["default"]:
+        # A default naming no option is kept as it is; only write one that differs. An
+        # assigned default never moves with names, so one that moved was never assigned:
+        # writing it pins it, and TD offers no way to make it implicit again.
+        current = str(parameter.default)
+        if current != state["default"]:
+            trace["pinned_default"] = current != previous_default
             parameter.default = state["default"]
         parameter.val = state["value"]
 

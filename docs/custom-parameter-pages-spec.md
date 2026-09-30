@@ -11,7 +11,7 @@ Add `td parameters page-create --input-file FILE`, Command
 `parameters.page.create`. The input identifies one mutable COMP and a **new**
 page name, with 1–32 ordered scalar definitions: `float`, `toggle`, or `menu`.
 Float definitions include finite minimum/maximum/default, hard clamping and the
-same slider range. Toggle defaults are boolean. Menus contain 1–32 unique stable
+same slider range. Toggle defaults are boolean. Menus contain 1–256 (issue 151; originally 32) unique stable
 names and corresponding labels, and a default name. Parameter names use a capital
 ASCII letter followed by lowercase ASCII letters/digits (maximum 32 characters).
 Existing pages or parameter names are rejected before mutation; no overwrite.

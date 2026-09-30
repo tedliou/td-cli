@@ -33,7 +33,9 @@ def read_plan(path: Path) -> list[Command]:
         if len(data) > MAX_PLAN_BYTES or data.startswith(b"\xef\xbb\xbf"):
             raise ValueError("invalid plan size or encoding")
         return CommandPlan.model_validate_json(data).commands
-    except (OSError, ValueError, ValidationError) as error:
+    except ValidationError as error:
+        raise ClientError.invalid_arguments(error) from error
+    except (OSError, ValueError) as error:
         raise ClientError("invalid_arguments") from error
 
 

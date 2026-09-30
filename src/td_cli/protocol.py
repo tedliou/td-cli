@@ -6,7 +6,8 @@ import json
 from enum import StrEnum
 from typing import Any
 
-from pydantic import model_validator
+from pydantic import ValidationError, model_validator
+from pydantic_core import InitErrorDetails
 
 from td_cli.command_catalog import (
     COMMAND_CATALOG,
@@ -36,7 +37,19 @@ class Command(StrictModel):
         model = COMMAND_CATALOG.input_model(name)
         if model is None:
             raise ValueError("unsupported Command")
-        return {**value, "input": model.model_validate(value.get("input"))}
+        try:
+            return {**value, "input": model.model_validate(value.get("input"))}
+        except ValidationError as error:
+            # Report input errors under "input" so they cannot collide with Command fields.
+            details: list[InitErrorDetails] = []
+            for item in error.errors(include_url=False):
+                detail = InitErrorDetails(
+                    type=item["type"], loc=("input", *item["loc"]), input=item["input"]
+                )
+                if "ctx" in item:
+                    detail["ctx"] = item["ctx"]
+                details.append(detail)
+            raise ValidationError.from_exception_data(error.title, details) from error
 
     def canonical_json(self) -> str:
         return json.dumps(

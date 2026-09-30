@@ -1,0 +1,508 @@
+{
+  "artifact": "E:\\td-cli\\.codex\\release090\\candidate\\td-agent.tox",
+  "artifact_sha256": "7ee47449f23452275857d73de7bc100dc7bb36f9dfb48dae8fec79cd286cbc8f",
+  "project": "E:\\td-cli\\.codex\\menu-limit\\probe.toe",
+  "port": 19982,
+  "touchdesigner_pid": 28156,
+  "touchdesigner_ready": {
+    "before_redirect": {
+      "pid": 28156,
+      "build": "2025.32050",
+      "localappdata": "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\E--collective-dream-factory\\84fddf26-3e3b-4ea1-bdb2-d974cba6d121\\scratchpad\\tdcli\\menu-limit\\localappdata",
+      "agent_path": "/project1/td_agent",
+      "agent_version": "0.9.0",
+      "connection_state": "waiting_for_daemon",
+      "socket_active": false,
+      "socket_url": "http://127.0.0.1:9982"
+    },
+    "after_redirect": {
+      "pid": 28156,
+      "build": "2025.32050",
+      "localappdata": "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\E--collective-dream-factory\\84fddf26-3e3b-4ea1-bdb2-d974cba6d121\\scratchpad\\tdcli\\menu-limit\\localappdata",
+      "agent_path": "/project1/td_agent",
+      "agent_version": "0.9.0",
+      "connection_state": "waiting_for_daemon",
+      "socket_active": false,
+      "socket_url": "http://127.0.0.1:19982"
+    }
+  },
+  "instance": {
+    "instance_id": "c719e674-74f8-477b-adb1-ecfb9a759a0c",
+    "connection_id": "7515b739-7f2a-4d02-b6b5-aa27725f3d9c",
+    "selector": "c719",
+    "status": "online",
+    "agent_version": "0.9.0",
+    "protocol_version": 3,
+    "capabilities": [
+      "batch.execute",
+      "binary.export",
+      "dat.table.get",
+      "dat.table.patch",
+      "dat.table.replace",
+      "dat.text.get",
+      "dat.text.set",
+      "events.read",
+      "ops.children",
+      "ops.connect",
+      "ops.connections",
+      "ops.copy",
+      "ops.create",
+      "ops.destroy",
+      "ops.disconnect",
+      "ops.get",
+      "ops.hierarchy.connect",
+      "ops.hierarchy.connections",
+      "ops.hierarchy.disconnect",
+      "ops.inspect",
+      "ops.move",
+      "ops.rename",
+      "ops.state.get",
+      "ops.state.set",
+      "ops.tox.import",
+      "parameters.get",
+      "parameters.list",
+      "parameters.menu.set",
+      "parameters.page.create",
+      "parameters.pulse",
+      "parameters.sequence.get",
+      "parameters.sequence.replace",
+      "parameters.set",
+      "project.metadata",
+      "project.save",
+      "project.snapshot"
+    ],
+    "last_heartbeat_at": "2026-09-29T17:03:08.738Z",
+    "offline_expires_at": null
+  },
+  "menu_sets": {
+    "30_to_38_index": {
+      "item_count": 38,
+      "menu_json_bytes": 1441,
+      "before": {
+        "default": "D01",
+        "index": 4,
+        "value": "D05"
+      },
+      "after": {
+        "default": "D01",
+        "index": 4,
+        "value": "D05"
+      },
+      "result_matches_input": true,
+      "listed_options_match_input": true,
+      "value": "D05",
+      "value_matches_after": true
+    },
+    "38_to_256_name": {
+      "item_count": 256,
+      "menu_json_bytes": 10141,
+      "before": {
+        "default": "D01",
+        "index": 4,
+        "value": "D05"
+      },
+      "after": {
+        "default": "D01",
+        "index": 4,
+        "value": "D05"
+      },
+      "result_matches_input": true,
+      "listed_options_match_input": true,
+      "value": "D05",
+      "value_matches_after": true
+    },
+    "bmp_at_budget_index": {
+      "item_count": 256,
+      "menu_json_bytes": 65536,
+      "before": {
+        "default": "D01",
+        "index": 4,
+        "value": "D05"
+      },
+      "after": {
+        "default": "D01xxxxx",
+        "index": 4,
+        "value": "D05xxxxx"
+      },
+      "result_matches_input": true,
+      "listed_options_match_input": true,
+      "value": "D05xxxxx",
+      "value_matches_after": true
+    },
+    "astral_at_budget_index": {
+      "item_count": 256,
+      "menu_json_bytes": 65536,
+      "before": {
+        "default": "D01xxxxx",
+        "index": 4,
+        "value": "D05xxxxx"
+      },
+      "after": {
+        "default": "D01xxxxx",
+        "index": 4,
+        "value": "D05xxxxx"
+      },
+      "result_matches_input": true,
+      "listed_options_match_input": true,
+      "value": "D05xxxxx",
+      "value_matches_after": true
+    },
+    "256_to_38_index": {
+      "item_count": 38,
+      "menu_json_bytes": 1441,
+      "before": {
+        "default": "D01xxxxx",
+        "index": 4,
+        "value": "D05xxxxx"
+      },
+      "after": {
+        "default": "D01",
+        "index": 4,
+        "value": "D05"
+      },
+      "result_matches_input": true,
+      "listed_options_match_input": true,
+      "value": "D05",
+      "value_matches_after": true
+    }
+  },
+  "requests": [
+    {
+      "step": "create test COMP",
+      "command": "ops.create",
+      "request_id": "01a0ee1e-c481-72d3-baf5-24cd040b19b2",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 109.0,
+      "dispatch_command_bytes": 146,
+      "result_bytes": 117
+    },
+    {
+      "step": "create 30-item Scene menu",
+      "command": "parameters.page.create",
+      "request_id": "01a0ee1e-c4ea-762d-897a-0a2938819122",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 109.0,
+      "dispatch_command_bytes": 988,
+      "result_bytes": 1509
+    },
+    {
+      "step": "select D05",
+      "command": "parameters.set",
+      "request_id": "01a0ee1e-c554-7803-abf1-cae472ac2292",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 110.0,
+      "dispatch_command_bytes": 126,
+      "result_bytes": 154
+    },
+    {
+      "step": "30 to 38 items",
+      "command": "parameters.menu.set",
+      "request_id": "01a0ee1e-c5bd-789f-9734-f55387c61d39",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 93.0,
+      "dispatch_command_bytes": 1514,
+      "result_bytes": 1576
+    },
+    {
+      "step": "30 to 38 items value",
+      "command": "parameters.get",
+      "request_id": "01a0ee1e-c626-77b1-a250-0a5b92a12f9b",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 110.0,
+      "dispatch_command_bytes": 94,
+      "result_bytes": 154
+    },
+    {
+      "step": "30 to 38 items options",
+      "command": "parameters.list",
+      "request_id": "01a0ee1e-c68b-79ae-a852-b2e6b4cc7101",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 109.0,
+      "dispatch_command_bytes": 75,
+      "result_bytes": 16403
+    },
+    {
+      "step": "38 to 256 items",
+      "command": "parameters.menu.set",
+      "request_id": "01a0ee1e-c6f9-7d86-a471-7daa16b52fe8",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 94.0,
+      "dispatch_command_bytes": 9777,
+      "result_bytes": 9839
+    },
+    {
+      "step": "38 to 256 items value",
+      "command": "parameters.get",
+      "request_id": "01a0ee1e-c760-7529-b6be-5a9231d96825",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 109.0,
+      "dispatch_command_bytes": 94,
+      "result_bytes": 154
+    },
+    {
+      "step": "38 to 256 items options",
+      "command": "parameters.list",
+      "request_id": "01a0ee1e-c7c5-755d-8890-660e042f5594",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 110.0,
+      "dispatch_command_bytes": 75,
+      "result_bytes": 24667
+    },
+    {
+      "step": "256 CJK items at budget",
+      "command": "parameters.menu.set",
+      "request_id": "01a0ee1e-c833-738c-9504-3849b6a55057",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 109.0,
+      "dispatch_command_bytes": 65173,
+      "result_bytes": 65245
+    },
+    {
+      "step": "256 CJK items at budget value",
+      "command": "parameters.get",
+      "request_id": "01a0ee1e-c89b-7034-8b25-33405750a048",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 94.0,
+      "dispatch_command_bytes": 94,
+      "result_bytes": 159
+    },
+    {
+      "step": "256 CJK items at budget options",
+      "command": "parameters.list",
+      "request_id": "01a0ee1e-c904-74c3-8abc-4a30bbdf11fb",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 109.0,
+      "dispatch_command_bytes": 75,
+      "result_bytes": 80062
+    },
+    {
+      "step": "256 astral items at budget",
+      "command": "parameters.menu.set",
+      "request_id": "01a0ee1e-c96b-735d-9b99-5ecc069a5da8",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 110.0,
+      "dispatch_command_bytes": 65173,
+      "result_bytes": 65255
+    },
+    {
+      "step": "256 astral items at budget value",
+      "command": "parameters.get",
+      "request_id": "01a0ee1e-c9d4-7ccd-903b-92aeb6e7fb24",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 93.0,
+      "dispatch_command_bytes": 94,
+      "result_bytes": 159
+    },
+    {
+      "step": "256 astral items at budget options",
+      "command": "parameters.list",
+      "request_id": "01a0ee1e-ca3a-7255-b624-3ac5b0938fcb",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 110.0,
+      "dispatch_command_bytes": 75,
+      "result_bytes": 80062
+    },
+    {
+      "step": "256 back to 38 items",
+      "command": "parameters.menu.set",
+      "request_id": "01a0ee1e-caa0-7ac5-9698-b64c44300214",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 93.0,
+      "dispatch_command_bytes": 1514,
+      "result_bytes": 1586
+    },
+    {
+      "step": "256 back to 38 items value",
+      "command": "parameters.get",
+      "request_id": "01a0ee1e-cb06-76e2-991b-ca35983023b2",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 110.0,
+      "dispatch_command_bytes": 94,
+      "result_bytes": 154
+    },
+    {
+      "step": "256 back to 38 items options",
+      "command": "parameters.list",
+      "request_id": "01a0ee1e-cb6c-7dd1-bed8-eaf4954e373a",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 94.0,
+      "dispatch_command_bytes": 75,
+      "result_bytes": 16403
+    },
+    {
+      "step": "destroy test COMP",
+      "command": "ops.destroy",
+      "request_id": "01a0ee1e-cbd1-7cab-b403-3c3e6d198a17",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 109.0,
+      "dispatch_command_bytes": 132,
+      "result_bytes": 102
+    }
+  ],
+  "instance_after": {
+    "instance_id": "c719e674-74f8-477b-adb1-ecfb9a759a0c",
+    "connection_id": "7515b739-7f2a-4d02-b6b5-aa27725f3d9c",
+    "selector": "c719",
+    "status": "online",
+    "agent_version": "0.9.0",
+    "protocol_version": 3,
+    "capabilities": [
+      "batch.execute",
+      "binary.export",
+      "dat.table.get",
+      "dat.table.patch",
+      "dat.table.replace",
+      "dat.text.get",
+      "dat.text.set",
+      "events.read",
+      "ops.children",
+      "ops.connect",
+      "ops.connections",
+      "ops.copy",
+      "ops.create",
+      "ops.destroy",
+      "ops.disconnect",
+      "ops.get",
+      "ops.hierarchy.connect",
+      "ops.hierarchy.connections",
+      "ops.hierarchy.disconnect",
+      "ops.inspect",
+      "ops.move",
+      "ops.rename",
+      "ops.state.get",
+      "ops.state.set",
+      "ops.tox.import",
+      "parameters.get",
+      "parameters.list",
+      "parameters.menu.set",
+      "parameters.page.create",
+      "parameters.pulse",
+      "parameters.sequence.get",
+      "parameters.sequence.replace",
+      "parameters.set",
+      "project.metadata",
+      "project.save",
+      "project.snapshot"
+    ],
+    "last_heartbeat_at": "2026-09-29T17:03:10.736Z",
+    "offline_expires_at": null
+  },
+  "cli_rejections": [
+    {
+      "argv": [
+        "parameters",
+        "menu-set",
+        "--input-file",
+        "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\E--collective-dream-factory\\84fddf26-3e3b-4ea1-bdb2-d974cba6d121\\scratchpad\\tdcli\\menu-limit\\menu257.json"
+      ],
+      "exit_code": 2,
+      "stdout": [
+        {
+          "protocol_version": 3,
+          "error": {
+            "code": "invalid_arguments",
+            "message": "invalid_arguments",
+            "details": {
+              "validation_errors": [
+                {
+                  "location": [
+                    "input",
+                    "menu_names"
+                  ],
+                  "type": "too_long",
+                  "message": "List should have at most 256 items after validation, not 257"
+                },
+                {
+                  "location": [
+                    "input",
+                    "menu_labels"
+                  ],
+                  "type": "too_long",
+                  "message": "List should have at most 256 items after validation, not 257"
+                }
+              ],
+              "validation_errors_truncated": false
+            },
+            "retryable": false
+          }
+        }
+      ]
+    },
+    {
+      "argv": [
+        "commands",
+        "execute",
+        "--input-file",
+        "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\E--collective-dream-factory\\84fddf26-3e3b-4ea1-bdb2-d974cba6d121\\scratchpad\\tdcli\\menu-limit\\plan257.json"
+      ],
+      "exit_code": 2,
+      "stdout": [
+        {
+          "protocol_version": 3,
+          "error": {
+            "code": "invalid_arguments",
+            "message": "invalid_arguments",
+            "details": {
+              "validation_errors": [
+                {
+                  "location": [
+                    "commands",
+                    0,
+                    "input",
+                    "menu_names"
+                  ],
+                  "type": "too_long",
+                  "message": "List should have at most 256 items after validation, not 257"
+                },
+                {
+                  "location": [
+                    "commands",
+                    0,
+                    "input",
+                    "menu_labels"
+                  ],
+                  "type": "too_long",
+                  "message": "List should have at most 256 items after validation, not 257"
+                }
+              ],
+              "validation_errors_truncated": false
+            },
+            "retryable": false
+          }
+        }
+      ]
+    }
+  ],
+  "touchdesigner_exit_code": 0,
+  "td-final": {
+    "pid": 28156,
+    "build": "2025.32050",
+    "localappdata": "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\E--collective-dream-factory\\84fddf26-3e3b-4ea1-bdb2-d974cba6d121\\scratchpad\\tdcli\\menu-limit\\localappdata",
+    "agent_path": "/project1/td_agent",
+    "agent_version": "0.9.0",
+    "connection_state": "online",
+    "socket_active": true,
+    "socket_url": "http://127.0.0.1:19982",
+    "deadline_hit": false
+  },
+  "daemon_thread_stopped": true
+}

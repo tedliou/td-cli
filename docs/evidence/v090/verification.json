@@ -1,0 +1,88 @@
+{
+  "artifact_sha256": "7ee47449f23452275857d73de7bc100dc7bb36f9dfb48dae8fec79cd286cbc8f",
+  "build_evidence": {
+    "artifact_sha256": "7ee47449f23452275857d73de7bc100dc7bb36f9dfb48dae8fec79cd286cbc8f",
+    "operators": [
+      "agent_extension",
+      "agent_manifest",
+      "auth_table",
+      "events_table",
+      "heartbeat_execute",
+      "operator_catalog",
+      "socket_callbacks",
+      "socketio1"
+    ],
+    "source_revision": "a68b2c7f07cbee1c6a3798d8b269c811288673975353837511dbc5975d2eaf32",
+    "touchdesigner_version": "2025.32050"
+  },
+  "facts": {
+    "agent_path": "/project1/td_agent",
+    "agent_version": "0.9.0",
+    "connection_state": "waiting_for_daemon",
+    "socket_active": false,
+    "menu_capability": true
+  },
+  "command": {
+    "name": "parameters.menu.set",
+    "input": {
+      "operator_path": "/project1/menu_check",
+      "parameter": "Scene",
+      "menu_names": [
+        "D01",
+        "D02",
+        "D03"
+      ],
+      "menu_labels": [
+        "01 A",
+        "02 B",
+        "03 C"
+      ],
+      "preserve": "index"
+    }
+  },
+  "result": {
+    "operator_path": "/project1/menu_check",
+    "parameter": "Scene",
+    "preserve": "index",
+    "menu_names": [
+      "D01",
+      "D02",
+      "D03"
+    ],
+    "menu_labels": [
+      "01 A",
+      "02 B",
+      "03 C"
+    ],
+    "before": {
+      "value": "D05",
+      "index": 2,
+      "default": "D10"
+    },
+    "after": {
+      "value": "D03",
+      "index": 2,
+      "default": "D01"
+    }
+  },
+  "readback": {
+    "names": [
+      "D01",
+      "D02",
+      "D03"
+    ],
+    "labels": [
+      "01 A",
+      "02 B",
+      "03 C"
+    ],
+    "value": "D03",
+    "default": "D01",
+    "index": 2
+  },
+  "validated": true,
+  "pid": 21856,
+  "build": "2025.32050",
+  "project": "E:/td-cli/.codex/release090/validate.toe",
+  "localappdata": "E:\\td-cli\\.codex\\release090\\localappdata"
+}

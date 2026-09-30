@@ -137,6 +137,14 @@ Protocol v3 是唯一 runtime protocol，不提供 v1 alias 或 fallback。Reque
 `daemon_unavailable` 與所有 `unknown` 結果都是 `false`，因為 Request 可能已存在或仍在執行；
 請改用 `td requests get <request-id>` 查詢。此 CLI 無法辨識的錯誤碼會回報為
 `protocol_incompatible`，並保留 Request ID 與狀態。
+Command 或 `commands execute` 計畫的欄位在送出前驗證失敗時，`--json` envelope 中
+`invalid_arguments` 的 details 會列出最多八筆 `validation_errors`，並以
+`validation_errors_truncated` 表示是否還有更多錯誤。每筆包含 `location`、錯誤類型 `type`，
+以及說明所違反規則或限制的 `message`。位置相對於 Command，所以輸入欄位以 `input` 開頭
+（例如 `["input","menu_names"]`）；在計畫中則以 `commands` 與從 0 起算的 Command 索引開頭。
+跨越多個欄位的規則回報包含它們的物件，例如 `["input"]`。訊息依 schema 產生，不會回傳被拒絕的值；
+多出的欄位名稱會出現在位置中，最多 64 字元。檔案無法讀取、含 BOM、計畫過大，或單一 Command
+文件、`--names-json`／`--labels-json` 不是有效 JSON 時，`details` 保持空白。
 
 <!-- doc-section: agent-component -->
 
@@ -240,7 +248,7 @@ Operator／channel identity。Sequence replacement 最多 128 blocks、每 block
 
 Sequence 讀取會將每個實際 Parameter 列出一次，包括 Constant CHOP 的 name/value 複合群組；替換時沿用此有序形狀。
 
-使用 `parameters page-create` 在 COMP 建立新的原生自訂參數頁。每頁支援 1–32 個純量 `float`、`toggle` 或 `menu` 控制。名稱以大寫 ASCII 字母開頭，後接小寫字母或數字（最多 32 字元）。浮點控制需有限的最小值、最大值與預設值，並啟用硬性範圍限制；選單需 1–32 個唯一名稱與對應標籤。已存在的頁面或參數名稱會被拒絕，不覆蓋。結果回傳驗證過的描述與值，後續以 `parameters list/get/set` 檢查與修改。建立失敗只移除本次新頁面；回復失敗或結果未知時，須先查詢再執行下一次修改。
+使用 `parameters page-create` 在 COMP 建立新的原生自訂參數頁。每頁支援 1–32 個純量 `float`、`toggle` 或 `menu` 控制。名稱以大寫 ASCII 字母開頭，後接小寫字母或數字（最多 32 字元）。浮點控制需有限的最小值、最大值與預設值，並啟用硬性範圍限制；選單需 1–256 個唯一名稱與對應標籤。已存在的頁面或參數名稱會被拒絕，不覆蓋。結果回傳驗證過的描述與值，後續以 `parameters list/get/set` 檢查與修改。建立失敗只移除本次新頁面；回復失敗或結果未知時，須先查詢再執行下一次修改。
 
 ASCII 跳脫後的輸入 JSON，加上每個參數一份序列化目標路徑，合計限 16,384 bytes，以保留結果描述所需空間。
 
@@ -253,7 +261,7 @@ td --json --instance <selector> parameters list /project1/controls
 {"operator_path":"/project1/controls","page":"Controls","parameters":[{"name":"Gyrox","label":"Gyro X","kind":"float","default":0,"minimum":-1,"maximum":1},{"name":"Manual","label":"Manual","kind":"toggle","default":true},{"name":"Source","label":"Source","kind":"menu","default":"manual","menu_names":["manual","device"],"menu_labels":["Manual","Device"]}]}
 ```
 
-使用 `parameters menu-set`（Command `parameters.menu.set`）替換既有自訂 `Menu` 參數的選項。輸入 1–32 個唯一且非空的名稱、等量的非空標籤（每項最多 128 字元），以及必填的 `--preserve`：`index` 保留目前選取的位置，`name` 保留目前選取的名稱。選單 default 依同一規則對應；原本就不對應任何選項的 default 保持不變。只接受自訂、constant mode、選項不由 `menuSource` 產生的 `Menu` 參數；內建、`menuSource` 與 expression／export／bind 參數回傳 `parameter_menu_not_writable`，其他樣式（含 StrMenu）回傳 `parameter_type_unsupported`，目前值或 default 無法依規則對應時回傳 `parameter_value_invalid`，以上都在修改前拒絕。結果回傳新的名稱與標籤，以及修改前後的值、索引與 default。被拒絕的寫入會復原並驗證（`parameter_write_rejected`）；`parameter_rollback_failed` 或 `parameter_outcome_unknown` 須先查詢再執行下一次修改。此 Command 屬於 mutation，可放入 `commands execute` 計畫，不可放入 `batch execute`。
+使用 `parameters menu-set`（Command `parameters.menu.set`）替換既有自訂 `Menu` 參數的選項。輸入 1–256 個唯一且非空的名稱、等量的非空標籤（每項最多 128 字元；`len(json.dumps(names + labels, ensure_ascii=True))` 不得超過 65,536，所以引號、分隔符與跳脫都計入，非 ASCII 字元每個算 6 bytes，基本多文種平面以外的字元算 12 bytes），以及必填的 `--preserve`：`index` 保留目前選取的位置，`name` 保留目前選取的名稱。選單 default 依同一規則對應；原本就不對應任何選項的 default 保持不變。從未指定過的 default 會回報第一個選項；規則需要移動它時會明確寫入，而 TouchDesigner 無法把它還原成未指定，所以只要已經嘗試寫入它（包括寫入 default 本身被拒絕，因為 TouchDesigner 可能已套用），之後的失敗即使讀回與原本相同，也回報 `parameter_rollback_failed`。只接受自訂、constant mode、選項不由 `menuSource` 產生的 `Menu` 參數；內建、`menuSource` 與 expression／export／bind 參數回傳 `parameter_menu_not_writable`，其他樣式（含 StrMenu）回傳 `parameter_type_unsupported`，目前值或 default 無法依規則對應時回傳 `parameter_value_invalid`，以上都在修改前拒絕。結果回傳新的名稱與標籤，以及修改前後的值、索引與 default。被拒絕的寫入會復原並驗證（`parameter_write_rejected`）；`parameter_rollback_failed` 或 `parameter_outcome_unknown` 須先查詢再執行下一次修改。此 Command 屬於 mutation，可放入 `commands execute` 計畫，不可放入 `batch execute`。選單較大時請用 `--input-file`，過長的 `--names-json`／`--labels-json` 可能超過 Windows 命令列長度上限。`parameters list` 會回傳每個 menu 的全部選項，所以一個 Operator 若有數個接近預算的 menu，結果可能超過上限；這個讀取會以 `result_too_large` 失敗且不改變任何狀態，`parameters get` 仍可讀取單一值。
 
 ```powershell
 td --json --instance <selector> parameters menu-set /project1/controls Source --names-json '["manual","device","replay"]' --labels-json '["Manual","Device","Replay"]' --preserve index
@@ -410,4 +418,4 @@ read-only Command 使用。
 終態 snapshot。請保存輸出；中斷或 outcome unknown 後先查詢已記錄的 Request，
 不要盲目重跑整份計畫。不接受巢狀 `batch.execute`。
 
-0.8.0 離線升級除既有來源（含 0.7.0）外，新增精確 canonical 0.7.1 Agent 白名單，保留 Connectionstate 定義；新增修改既有自訂 Menu 選項的 `parameters menu-set`，`events.read` 改為逐字回傳 TouchDesigner 錯誤文字。
+0.9.0 離線升級除既有來源（含 0.7.0、0.7.1）外，新增精確 canonical 0.8.0 Agent 白名單，保留 Connectionstate 定義。自訂 menu 放寬到 256 項，`invalid_arguments` 回報含位置的 `validation_errors`；Agent 的 `parameters menu-set` 在失敗後會如實回報已被明確寫入的 default。內嵌 0.8.0 Agent 已能執行超過 32 項的 menu，只需把 CLI 與 Daemon 升級到 0.9.0。
