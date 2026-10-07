@@ -1,0 +1,909 @@
+{
+  "artifact": "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\E--collective-dream-factory\\0974350d-bca5-4790-a10a-84e80c120b13\\scratchpad\\build\\out\\td-agent.tox",
+  "artifact_sha256": "173a65da98f224f6ae0e7cc782f963dd8edd9aed409793f7c00a7efdd214efff",
+  "project": "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\E--collective-dream-factory\\0974350d-bca5-4790-a10a-84e80c120b13\\scratchpad\\accept\\proj.toe",
+  "port": 19982,
+  "touchdesigner_pid": 24180,
+  "touchdesigner_ready": {
+    "before_redirect": {
+      "pid": 24180,
+      "build": "2025.32050",
+      "localappdata": "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\E--collective-dream-factory\\0974350d-bca5-4790-a10a-84e80c120b13\\scratchpad\\accept\\work\\localappdata",
+      "agent_path": "/project1/td_agent",
+      "agent_version": "0.9.0",
+      "connection_state": "waiting_for_daemon",
+      "socket_active": false,
+      "socket_url": "http://127.0.0.1:9982"
+    },
+    "after_redirect": {
+      "pid": 24180,
+      "build": "2025.32050",
+      "localappdata": "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\E--collective-dream-factory\\0974350d-bca5-4790-a10a-84e80c120b13\\scratchpad\\accept\\work\\localappdata",
+      "agent_path": "/project1/td_agent",
+      "agent_version": "0.9.0",
+      "connection_state": "waiting_for_daemon",
+      "socket_active": false,
+      "socket_url": "http://127.0.0.1:19982"
+    }
+  },
+  "instance": {
+    "instance_id": "d594558a-872b-462f-80ef-403d26cdd633",
+    "connection_id": "8dda8aa9-9386-48b3-8e56-555dffdb3434",
+    "selector": "d594",
+    "status": "online",
+    "agent_version": "0.9.0",
+    "protocol_version": 3,
+    "capabilities": [
+      "batch.execute",
+      "binary.export",
+      "dat.table.get",
+      "dat.table.patch",
+      "dat.table.replace",
+      "dat.text.get",
+      "dat.text.set",
+      "events.read",
+      "ops.children",
+      "ops.connect",
+      "ops.connections",
+      "ops.copy",
+      "ops.create",
+      "ops.destroy",
+      "ops.disconnect",
+      "ops.get",
+      "ops.hierarchy.connect",
+      "ops.hierarchy.connections",
+      "ops.hierarchy.disconnect",
+      "ops.inspect",
+      "ops.move",
+      "ops.rename",
+      "ops.state.get",
+      "ops.state.set",
+      "ops.tox.import",
+      "ops.tox.import:inventory_summary",
+      "ops.tox.import:root_child",
+      "parameters.get",
+      "parameters.list",
+      "parameters.menu.set",
+      "parameters.page.create",
+      "parameters.pulse",
+      "parameters.sequence.get",
+      "parameters.sequence.replace",
+      "parameters.set",
+      "project.metadata",
+      "project.save",
+      "project.snapshot"
+    ],
+    "last_heartbeat_at": "2026-10-07T12:36:43.722Z",
+    "offline_expires_at": null
+  },
+  "rejected": {
+    "operator_limit": {
+      "code": "tox_verification_failed",
+      "details": {
+        "check": "operator_limit",
+        "limit": 10
+      },
+      "message": "tox_verification_failed",
+      "retryable": false
+    },
+    "root_child_missing": {
+      "code": "tox_verification_failed",
+      "details": {
+        "check": "root_child",
+        "relative_path": "missingChild"
+      },
+      "message": "tox_verification_failed",
+      "retryable": false
+    },
+    "full_inventory_over_outcome": {
+      "code": "tox_verification_failed",
+      "details": {
+        "check": "operator_limit",
+        "limit": 256
+      },
+      "message": "tox_verification_failed",
+      "retryable": false
+    },
+    "external_tox": {
+      "code": "tox_verification_failed",
+      "details": {
+        "check": "external_tox",
+        "op_type": "baseCOMP",
+        "parameter": "externaltox",
+        "relative_path": "linked"
+      },
+      "message": "tox_verification_failed",
+      "retryable": false
+    }
+  },
+  "children_after_rejections": [],
+  "projectorBlend": {
+    "path": "/project1/projection/projectorBlend",
+    "op_type": "baseCOMP",
+    "operator_count": 55,
+    "sha256": "d2715e6b5727a92ac47ae6d65d932f9a862b6671876dc0b4e2b94ca755b33235",
+    "root_child": "projectorBlend",
+    "inventory_matches_palette_listing": true,
+    "palette_listing_count": 55
+  },
+  "kantanMapper": {
+    "path": "/project1/projection/kantanMapper",
+    "op_type": "containerCOMP",
+    "operator_count": 4077,
+    "sha256": "c4fa5d6b544b5b847f431ec4dd84a7dbdb8ad7da118998489c28fda73a3f89b2",
+    "root_child": "kantanMapper",
+    "inventory_sha256": "95f15b0318644ade4727393eab1397ac5e022c20663b2d8dfb85005b45ff44c6",
+    "type_counts": {
+      "addSOP": 32,
+      "analyzeCHOP": 1,
+      "baseCOMP": 21,
+      "basisSOP": 2,
+      "buttonCOMP": 206,
+      "cacheTOP": 1,
+      "cameraCOMP": 4,
+      "carveSOP": 6,
+      "chopexecuteDAT": 3,
+      "choptoDAT": 10,
+      "choptoSOP": 6,
+      "choptoTOP": 6,
+      "circleTOP": 11,
+      "compositeTOP": 4,
+      "constantCHOP": 14,
+      "constantMAT": 18,
+      "constantTOP": 2,
+      "containerCOMP": 236,
+      "convertSOP": 28,
+      "copySOP": 2,
+      "creepSOP": 1,
+      "datexecuteDAT": 2,
+      "dattoCHOP": 27,
+      "dattoSOP": 8,
+      "deleteSOP": 21,
+      "divideSOP": 1,
+      "edgeTOP": 5,
+      "evaluateDAT": 12,
+      "executeDAT": 6,
+      "expressionCHOP": 287,
+      "extrudeSOP": 1,
+      "fanCHOP": 5,
+      "feedbackCHOP": 1,
+      "fieldCOMP": 69,
+      "fileinSOP": 7,
+      "flipTOP": 17,
+      "geometryCOMP": 61,
+      "glslMAT": 18,
+      "gridSOP": 7,
+      "holeSOP": 1,
+      "hsvadjustTOP": 30,
+      "inCHOP": 3,
+      "inDAT": 9,
+      "inSOP": 44,
+      "infoCHOP": 15,
+      "infoDAT": 2,
+      "insertDAT": 7,
+      "keyboardinDAT": 4,
+      "levelTOP": 20,
+      "limitCHOP": 8,
+      "materialSOP": 6,
+      "mathCHOP": 53,
+      "mergeCHOP": 7,
+      "mergeDAT": 14,
+      "mergeSOP": 10,
+      "moviefileinTOP": 5,
+      "nullCHOP": 77,
+      "nullCOMP": 3,
+      "nullDAT": 52,
+      "nullSOP": 68,
+      "nullTOP": 109,
+      "objectCHOP": 3,
+      "objectmergeSOP": 2,
+      "opfindDAT": 1,
+      "opviewerTOP": 2,
+      "outCHOP": 127,
+      "outDAT": 76,
+      "outSOP": 45,
+      "outTOP": 4,
+      "overTOP": 23,
+      "panelCHOP": 311,
+      "panelexecuteDAT": 127,
+      "parameterCHOP": 4,
+      "parameterexecuteDAT": 7,
+      "patternCHOP": 14,
+      "pointSOP": 4,
+      "pointspriteMAT": 2,
+      "primitiveSOP": 2,
+      "rectangleSOP": 17,
+      "rectangleTOP": 3,
+      "refineSOP": 2,
+      "renameCHOP": 10,
+      "renderTOP": 4,
+      "renderpassTOP": 1,
+      "renderpickDAT": 3,
+      "renderselectTOP": 1,
+      "reorderDAT": 1,
+      "reorderTOP": 2,
+      "replaceCHOP": 22,
+      "replicatorCOMP": 11,
+      "scriptCHOP": 18,
+      "scriptDAT": 11,
+      "scriptSOP": 66,
+      "scurveCHOP": 2,
+      "selectCHOP": 147,
+      "selectDAT": 40,
+      "selectSOP": 3,
+      "selectTOP": 52,
+      "shuffleCHOP": 3,
+      "skinSOP": 2,
+      "sliderCOMP": 11,
+      "soptoCHOP": 24,
+      "soptoDAT": 20,
+      "sortDAT": 1,
+      "sortSOP": 3,
+      "subdivideSOP": 1,
+      "switchCHOP": 5,
+      "switchSOP": 13,
+      "switchTOP": 7,
+      "tableCOMP": 1,
+      "tableDAT": 481,
+      "textDAT": 213,
+      "textTOP": 356,
+      "texture3dTOP": 7,
+      "textureSOP": 8,
+      "tileTOP": 2,
+      "transformSOP": 2,
+      "transformTOP": 14,
+      "vertexSOP": 4,
+      "windowCOMP": 3,
+      "wireframeMAT": 9,
+      "wireframeSOP": 1
+    },
+    "count_matches_palette_listing": false,
+    "palette_listing_count": 1647
+  },
+  "custom_parameters": {
+    "/project1/projection/projectorBlend": [
+      "Blankout1",
+      "Blankout2",
+      "Blankout3",
+      "Blankout4",
+      "Help",
+      "Projector1blankout1",
+      "Projector1blankout2",
+      "Projector1blankout3",
+      "Projector1blankout4",
+      "Projector1gamma1",
+      "Projector1gamma2",
+      "Projector1gamma3",
+      "Projector1gammas01",
+      "Projector1gammas02",
+      "Projector1gammas03",
+      "Projector1gammas11",
+      "Projector1gammas12",
+      "Projector1gammas13",
+      "Projector1gammas21",
+      "Projector1gammas22",
+      "Projector1gammas23",
+      "Projector1gammas31",
+      "Projector1gammas32",
+      "Projector1gammas33",
+      "Projector1hue1",
+      "Projector1hue2",
+      "Projector1hue3",
+      "Projector1luminance",
+      "Projector1luminances0",
+      "Projector1luminances1",
+      "Projector1luminances2",
+      "Projector1luminances3",
+      "Projector1overlap1",
+      "Projector1overlap2",
+      "Projector1overlap3",
+      "Projector1overlap4",
+      "Projector1perside",
+      "Projector1pos0c01",
+      "Projector1pos0c02",
+      "Projector1pos0c11",
+      "Projector1pos0c12",
+      "Projector1pos1c01",
+      "Projector1pos1c02",
+      "Projector1pos1c11",
+      "Projector1pos1c12",
+      "Projector1pos2c01",
+      "Projector1pos2c02",
+      "Projector1pos2c11",
+      "Projector1pos2c12",
+      "Projector1pos3c01",
+      "Projector1pos3c02",
+      "Projector1pos3c11",
+      "Projector1pos3c12",
+      "Projector1power",
+      "Projector1powers0",
+      "Projector1powers1",
+      "Projector1powers2",
+      "Projector1powers3",
+      "Projector1sat1",
+      "Projector1sat2",
+      "Projector1sat3",
+      "Projector1val1",
+      "Projector1val2",
+      "Projector1val3",
+      "Projector2blankout1",
+      "Projector2blankout2",
+      "Projector2blankout3",
+      "Projector2blankout4",
+      "Projector2gamma1",
+      "Projector2gamma2",
+      "Projector2gamma3",
+      "Projector2gammas01",
+      "Projector2gammas02",
+      "Projector2gammas03",
+      "Projector2gammas11",
+      "Projector2gammas12",
+      "Projector2gammas13",
+      "Projector2gammas21",
+      "Projector2gammas22",
+      "Projector2gammas23",
+      "Projector2gammas31",
+      "Projector2gammas32",
+      "Projector2gammas33",
+      "Projector2hue1",
+      "Projector2hue2",
+      "Projector2hue3",
+      "Projector2luminance",
+      "Projector2luminances0",
+      "Projector2luminances1",
+      "Projector2luminances2",
+      "Projector2luminances3",
+      "Projector2overlap1",
+      "Projector2overlap2",
+      "Projector2overlap3",
+      "Projector2overlap4",
+      "Projector2perside",
+      "Projector2pos0c01",
+      "Projector2pos0c02",
+      "Projector2pos0c11",
+      "Projector2pos0c12",
+      "Projector2pos1c01",
+      "Projector2pos1c02",
+      "Projector2pos1c11",
+      "Projector2pos1c12",
+      "Projector2pos2c01",
+      "Projector2pos2c02",
+      "Projector2pos2c11",
+      "Projector2pos2c12",
+      "Projector2pos3c01",
+      "Projector2pos3c02",
+      "Projector2pos3c11",
+      "Projector2pos3c12",
+      "Projector2power",
+      "Projector2powers0",
+      "Projector2powers1",
+      "Projector2powers2",
+      "Projector2powers3",
+      "Projector2sat1",
+      "Projector2sat2",
+      "Projector2sat3",
+      "Projector2val1",
+      "Projector2val2",
+      "Projector2val3",
+      "Projectorarray1",
+      "Projectorarray2",
+      "Projectorres1",
+      "Projectorres2",
+      "Solidedge",
+      "Solidedgecolorb",
+      "Solidedgecolorg",
+      "Solidedgecolorr",
+      "Toxsavebuild",
+      "Version"
+    ],
+    "/project1/projection/kantanMapper": [
+      "Close",
+      "Help",
+      "Loadproject",
+      "Open",
+      "Project",
+      "Saveproject",
+      "Toxsavebuild",
+      "Version"
+    ]
+  },
+  "parameter_round_trips": {
+    "/project1/projection/projectorBlend.Projector1overlap2": {
+      "mode": "constant",
+      "operator_path": "/project1/projection/projectorBlend",
+      "parameter": "Projector1overlap2",
+      "source": null,
+      "unsupported_reason": null,
+      "value": 240,
+      "value_type": "integer"
+    },
+    "/project1/projection/kantanMapper.w": {
+      "mode": "constant",
+      "operator_path": "/project1/projection/kantanMapper",
+      "parameter": "w",
+      "source": null,
+      "unsupported_reason": null,
+      "value": 1920,
+      "value_type": "integer"
+    },
+    "/project1/projection/kantanMapper.h": {
+      "mode": "constant",
+      "operator_path": "/project1/projection/kantanMapper",
+      "parameter": "h",
+      "source": null,
+      "unsupported_reason": null,
+      "value": 1080,
+      "value_type": "integer"
+    }
+  },
+  "children": {
+    "/project1/projection/projectorBlend": [
+      "out1"
+    ],
+    "/project1/projection/kantanMapper": [
+      "out1",
+      "out2"
+    ]
+  },
+  "connections": {
+    "connection_count": 2,
+    "inputs": [
+      {
+        "connection": {
+          "output_index": 0,
+          "source_path": "/project1/projection/source"
+        },
+        "description": "in1",
+        "input_index": 0
+      }
+    ],
+    "operator_path": "/project1/projection/projectorBlend",
+    "outputs": [
+      {
+        "connections": [
+          {
+            "input_index": 0,
+            "target_path": "/project1/projection/sink"
+          }
+        ],
+        "description": "out1",
+        "output_index": 0
+      }
+    ]
+  },
+  "blend_out_top": {
+    "cook": {
+      "cooked_previous_frame": false,
+      "cooked_this_frame": false,
+      "cpu_ms": 0.0,
+      "gpu_ms": 0.0
+    },
+    "details": {
+      "aspect": 1.0,
+      "aspect_height": 1.0,
+      "aspect_width": 1.0,
+      "current_pass": 0,
+      "newest_slice_w_offset": 0.0,
+      "pixel_format": "8-bit fixed (RGBA)",
+      "pixel_format_name": "rgba8fixed",
+      "resolution": {
+        "depth": 1,
+        "height": 128,
+        "width": 128
+      }
+    },
+    "family": "TOP",
+    "flags": {
+      "display": true,
+      "render": false
+    },
+    "memory": {
+      "cpu_bytes": 1840,
+      "gpu_bytes": 0
+    },
+    "op_type": "outTOP",
+    "operator_path": "/project1/projection/projectorBlend/out1",
+    "snapshot": "passive"
+  },
+  "kantan_out_top": {
+    "cook": {
+      "cooked_previous_frame": false,
+      "cooked_this_frame": false,
+      "cpu_ms": 0.0,
+      "gpu_ms": 0.0
+    },
+    "details": {
+      "aspect": 1.0,
+      "aspect_height": 1.0,
+      "aspect_width": 1.0,
+      "current_pass": 0,
+      "newest_slice_w_offset": 0.0,
+      "pixel_format": "8-bit fixed (RGBA)",
+      "pixel_format_name": "rgba8fixed",
+      "resolution": {
+        "depth": 1,
+        "height": 128,
+        "width": 128
+      }
+    },
+    "family": "TOP",
+    "flags": {
+      "display": false,
+      "render": false
+    },
+    "memory": {
+      "cpu_bytes": 1840,
+      "gpu_bytes": 0
+    },
+    "op_type": "outTOP",
+    "operator_path": "/project1/projection/kantanMapper/out1",
+    "snapshot": "passive"
+  },
+  "destroy_projectorBlend": "succeeded",
+  "destroy_kantanMapper": {
+    "code": "result_too_large",
+    "details": {},
+    "message": "result_too_large",
+    "retryable": false
+  },
+  "requests": [
+    {
+      "step": "create parent",
+      "command": "ops.create",
+      "request_id": "01a1165d-bbed-7f34-8402-fd3b1a1e881d",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 125.0,
+      "result_bytes": 117
+    },
+    {
+      "step": "projectorBlend over bound",
+      "command": "ops.tox.import",
+      "request_id": "01a1165d-bc68-7d15-a7a0-4660c1b45c3f",
+      "status": "failed",
+      "error": {
+        "code": "tox_verification_failed",
+        "details": {
+          "check": "operator_limit",
+          "limit": 10
+        },
+        "message": "tox_verification_failed",
+        "retryable": false
+      },
+      "elapsed_ms": 125.0,
+      "result_bytes": 4
+    },
+    {
+      "step": "missing root child",
+      "command": "ops.tox.import",
+      "request_id": "01a1165d-bce3-7fdf-9e43-bb5075e1a768",
+      "status": "failed",
+      "error": {
+        "code": "tox_verification_failed",
+        "details": {
+          "check": "root_child",
+          "relative_path": "missingChild"
+        },
+        "message": "tox_verification_failed",
+        "retryable": false
+      },
+      "elapsed_ms": 110.0,
+      "result_bytes": 4
+    },
+    {
+      "step": "linked source",
+      "command": "ops.create",
+      "request_id": "01a1165d-bd4f-7838-b13f-41f8fb6e470b",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 109.0,
+      "result_bytes": 129
+    },
+    {
+      "step": "linked child",
+      "command": "ops.create",
+      "request_id": "01a1165d-bdc3-7502-9fe6-acea7c274930",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 109.0,
+      "result_bytes": 126
+    },
+    {
+      "step": "set externaltox",
+      "command": "parameters.set",
+      "request_id": "01a1165d-be30-7f74-bfdb-312bb3395de3",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 110.0,
+      "result_bytes": 197
+    },
+    {
+      "step": "export linked",
+      "command": "binary.export",
+      "request_id": "01a1165d-be9d-7d6b-bdd8-ca83f5a5e331",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 109.0,
+      "result_bytes": 589
+    },
+    {
+      "step": "destroy linked source",
+      "command": "ops.destroy",
+      "request_id": "01a1165d-bf08-73e1-8d13-c6c8a78c3ed1",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 110.0,
+      "result_bytes": 108
+    },
+    {
+      "step": "external linkage",
+      "command": "ops.tox.import",
+      "request_id": "01a1165d-bf79-71aa-88f8-b3e32d0392fa",
+      "status": "failed",
+      "error": {
+        "code": "tox_verification_failed",
+        "details": {
+          "check": "external_tox",
+          "op_type": "baseCOMP",
+          "parameter": "externaltox",
+          "relative_path": "linked"
+        },
+        "message": "tox_verification_failed",
+        "retryable": false
+      },
+      "elapsed_ms": 125.0,
+      "result_bytes": 4
+    },
+    {
+      "step": "kantanMapper full inventory",
+      "command": "ops.tox.import",
+      "request_id": "01a1165d-bff0-752e-9ed0-25123339ba7d",
+      "status": "failed",
+      "error": {
+        "code": "tox_verification_failed",
+        "details": {
+          "check": "operator_limit",
+          "limit": 256
+        },
+        "message": "tox_verification_failed",
+        "retryable": false
+      },
+      "elapsed_ms": 593.0,
+      "result_bytes": 4
+    },
+    {
+      "step": "children after rejections",
+      "command": "ops.children",
+      "request_id": "01a1165d-c248-7b73-9a76-d0b3d7ddfc23",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 328.0,
+      "result_bytes": 2
+    },
+    {
+      "step": "import projectorBlend",
+      "command": "ops.tox.import",
+      "request_id": "01a1165d-c38c-73b0-9f37-8eed158c8672",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 110.0,
+      "result_bytes": 5296
+    },
+    {
+      "step": "import kantanMapper",
+      "command": "ops.tox.import",
+      "request_id": "01a1165d-c42a-7ff8-8fef-1666f72e41cc",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 953.0,
+      "result_bytes": 2405
+    },
+    {
+      "step": "list /project1/projection/projectorBlend",
+      "command": "parameters.list",
+      "request_id": "01a1165d-c816-781c-b56b-6f1ac1ab8e6d",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 406.0,
+      "result_bytes": 96367
+    },
+    {
+      "step": "list /project1/projection/kantanMapper",
+      "command": "parameters.list",
+      "request_id": "01a1165d-c9a7-795c-b99a-ea63ac95c9fd",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 109.0,
+      "result_bytes": 88761
+    },
+    {
+      "step": "set Projector1overlap2",
+      "command": "parameters.set",
+      "request_id": "01a1165d-ca18-790e-9dc5-923863ab7579",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 110.0,
+      "result_bytes": 181
+    },
+    {
+      "step": "get Projector1overlap2",
+      "command": "parameters.get",
+      "request_id": "01a1165d-ca88-7e98-a473-e7687ec19d5f",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 109.0,
+      "result_bytes": 181
+    },
+    {
+      "step": "set w",
+      "command": "parameters.set",
+      "request_id": "01a1165d-caf2-72c1-aa32-ac7860b6c85a",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 125.0,
+      "result_bytes": 163
+    },
+    {
+      "step": "get w",
+      "command": "parameters.get",
+      "request_id": "01a1165d-cb67-7aea-866b-1064113508e2",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 109.0,
+      "result_bytes": 163
+    },
+    {
+      "step": "set h",
+      "command": "parameters.set",
+      "request_id": "01a1165d-cbd6-7128-8305-819ce646e3d4",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 110.0,
+      "result_bytes": 163
+    },
+    {
+      "step": "get h",
+      "command": "parameters.get",
+      "request_id": "01a1165d-cc4e-729b-a4cb-41b2a099e8e5",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 109.0,
+      "result_bytes": 163
+    },
+    {
+      "step": "children /project1/projection/projectorBlend",
+      "command": "ops.children",
+      "request_id": "01a1165d-ccbd-7c23-b0da-b241860d04e7",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 125.0,
+      "result_bytes": 101
+    },
+    {
+      "step": "children /project1/projection/kantanMapper",
+      "command": "ops.children",
+      "request_id": "01a1165d-cd33-77fc-b6ba-94ccc6b3f9de",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 110.0,
+      "result_bytes": 197
+    },
+    {
+      "step": "create source",
+      "command": "ops.create",
+      "request_id": "01a1165d-cda3-7d7c-93db-e4cccae8eeeb",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 109.0,
+      "result_bytes": 122
+    },
+    {
+      "step": "create sink",
+      "command": "ops.create",
+      "request_id": "01a1165d-ce0f-7621-bd89-76c658c58a97",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 109.0,
+      "result_bytes": 114
+    },
+    {
+      "step": "kantan out1 -> blend",
+      "command": "ops.connect",
+      "request_id": "01a1165d-ce7e-7a81-8302-93dbc7d413d3",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 110.0,
+      "result_bytes": 197
+    },
+    {
+      "step": "blend -> sink",
+      "command": "ops.connect",
+      "request_id": "01a1165d-cef1-79fb-bb1e-ca1421e8d200",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 94.0,
+      "result_bytes": 189
+    },
+    {
+      "step": "disconnect kantan",
+      "command": "ops.disconnect",
+      "request_id": "01a1165d-cf5c-7e51-b574-6e0116cf2e44",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 125.0,
+      "result_bytes": 156
+    },
+    {
+      "step": "source -> blend",
+      "command": "ops.connect",
+      "request_id": "01a1165d-cfd5-7d03-a074-a9028e62ba4b",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 109.0,
+      "result_bytes": 191
+    },
+    {
+      "step": "connections",
+      "command": "ops.connections",
+      "request_id": "01a1165d-d043-76cc-960d-3fc969e7a96a",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 125.0,
+      "result_bytes": 329
+    },
+    {
+      "step": "inspect blend out1",
+      "command": "ops.inspect",
+      "request_id": "01a1165d-d0b6-78aa-a44a-f22ef0a49670",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 110.0,
+      "result_bytes": 516
+    },
+    {
+      "step": "inspect kantan out1",
+      "command": "ops.inspect",
+      "request_id": "01a1165d-d128-7d70-965a-5332a8701489",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 109.0,
+      "result_bytes": 515
+    },
+    {
+      "step": "destroy projectorBlend",
+      "command": "ops.destroy",
+      "request_id": "01a1165d-d192-7397-a18f-99e39254d7a0",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 110.0,
+      "result_bytes": 7217
+    },
+    {
+      "step": "destroy kantanMapper",
+      "command": "ops.destroy",
+      "request_id": "01a1165d-d207-7e8c-a71e-2f6dbf698de0",
+      "status": "failed",
+      "error": {
+        "code": "result_too_large",
+        "details": {},
+        "message": "result_too_large",
+        "retryable": false
+      },
+      "elapsed_ms": 109.0,
+      "result_bytes": 4
+    }
+  ],
+  "touchdesigner_exit_code": 0,
+  "td-final": {
+    "pid": 24180,
+    "build": "2025.32050",
+    "localappdata": "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\E--collective-dream-factory\\0974350d-bca5-4790-a10a-84e80c120b13\\scratchpad\\accept\\work\\localappdata",
+    "agent_path": "/project1/td_agent",
+    "agent_version": "0.9.0",
+    "connection_state": "online",
+    "socket_active": true,
+    "socket_url": "http://127.0.0.1:19982",
+    "deadline_hit": false
+  },
+  "daemon_thread_stopped": true
+}

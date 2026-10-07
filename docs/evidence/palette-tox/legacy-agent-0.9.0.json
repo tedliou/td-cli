@@ -1,0 +1,149 @@
+{
+  "artifact": "C:\\Users\\Ted\\AppData\\Local\\Programs\\touchdesigner-cli\\current\\td-agent.tox",
+  "artifact_sha256": "4f1bba67200463fdaaa55946d7b6e3a7862a8708f4ff76e0e13e16cad51543a8",
+  "project": "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\E--collective-dream-factory\\0974350d-bca5-4790-a10a-84e80c120b13\\scratchpad\\accept\\proj.toe",
+  "port": 19982,
+  "touchdesigner_pid": 7312,
+  "touchdesigner_ready": {
+    "before_redirect": {
+      "pid": 7312,
+      "build": "2025.32050",
+      "localappdata": "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\E--collective-dream-factory\\0974350d-bca5-4790-a10a-84e80c120b13\\scratchpad\\accept\\work-legacy\\localappdata",
+      "agent_path": "/project1/td_agent",
+      "agent_version": "0.9.0",
+      "connection_state": "waiting_for_daemon",
+      "socket_active": false,
+      "socket_url": "http://127.0.0.1:9982"
+    },
+    "after_redirect": {
+      "pid": 7312,
+      "build": "2025.32050",
+      "localappdata": "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\E--collective-dream-factory\\0974350d-bca5-4790-a10a-84e80c120b13\\scratchpad\\accept\\work-legacy\\localappdata",
+      "agent_path": "/project1/td_agent",
+      "agent_version": "0.9.0",
+      "connection_state": "waiting_for_daemon",
+      "socket_active": false,
+      "socket_url": "http://127.0.0.1:19982"
+    }
+  },
+  "instance": {
+    "instance_id": "79fcf187-88f0-44a9-8965-b1280a2716e9",
+    "connection_id": "dafef0af-04b9-433f-8709-bb413a694345",
+    "selector": "79fc",
+    "status": "online",
+    "agent_version": "0.9.0",
+    "protocol_version": 3,
+    "capabilities": [
+      "batch.execute",
+      "binary.export",
+      "dat.table.get",
+      "dat.table.patch",
+      "dat.table.replace",
+      "dat.text.get",
+      "dat.text.set",
+      "events.read",
+      "ops.children",
+      "ops.connect",
+      "ops.connections",
+      "ops.copy",
+      "ops.create",
+      "ops.destroy",
+      "ops.disconnect",
+      "ops.get",
+      "ops.hierarchy.connect",
+      "ops.hierarchy.connections",
+      "ops.hierarchy.disconnect",
+      "ops.inspect",
+      "ops.move",
+      "ops.rename",
+      "ops.state.get",
+      "ops.state.set",
+      "ops.tox.import",
+      "parameters.get",
+      "parameters.list",
+      "parameters.menu.set",
+      "parameters.page.create",
+      "parameters.pulse",
+      "parameters.sequence.get",
+      "parameters.sequence.replace",
+      "parameters.set",
+      "project.metadata",
+      "project.save",
+      "project.snapshot"
+    ],
+    "last_heartbeat_at": "2026-10-07T12:37:11.939Z",
+    "offline_expires_at": null
+  },
+  "legacy": {
+    "plain_import": {
+      "code": "tox_verification_failed",
+      "details": {},
+      "message": "tox_verification_failed",
+      "retryable": false
+    },
+    "root_child": "command_unsupported",
+    "children_after": []
+  },
+  "requests": [
+    {
+      "step": "create parent",
+      "command": "ops.create",
+      "request_id": "01a1165e-2a1f-7f06-9793-374cec472a8a",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 110.0,
+      "result_bytes": 117
+    },
+    {
+      "step": "legacy plain import",
+      "command": "ops.tox.import",
+      "request_id": "01a1165e-2a8b-774e-8d3e-54df51bf3a1e",
+      "status": "failed",
+      "error": {
+        "code": "tox_verification_failed",
+        "details": {},
+        "message": "tox_verification_failed",
+        "retryable": false
+      },
+      "elapsed_ms": 109.0,
+      "result_bytes": 4
+    },
+    {
+      "step": "legacy root_child",
+      "command": "ops.tox.import",
+      "request_id": "01a1165e-2af6-7197-9f3e-a536fcc3f166",
+      "admission_error": "command_unsupported"
+    },
+    {
+      "step": "children",
+      "command": "ops.children",
+      "request_id": "01a1165e-2b06-740c-a9ff-d1cd86db733a",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 109.0,
+      "result_bytes": 2
+    },
+    {
+      "step": "destroy parent",
+      "command": "ops.destroy",
+      "request_id": "01a1165e-2b73-7d16-9280-293f5a29aefb",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 110.0,
+      "result_bytes": 102
+    }
+  ],
+  "touchdesigner_exit_code": 0,
+  "td-final": {
+    "pid": 7312,
+    "build": "2025.32050",
+    "localappdata": "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\E--collective-dream-factory\\0974350d-bca5-4790-a10a-84e80c120b13\\scratchpad\\accept\\work-legacy\\localappdata",
+    "agent_path": "/project1/td_agent",
+    "agent_version": "0.9.0",
+    "connection_state": "online",
+    "socket_active": true,
+    "socket_url": "http://127.0.0.1:19982",
+    "deadline_hit": false
+  },
+  "daemon_thread_stopped": true
+}
