@@ -255,6 +255,11 @@ td --json --instance <selector> ops inspect /project1/source --max-items 100
 td --json --instance <selector> parameters get /project1/source colorr
 ```
 
+Wiring requires the connector families to match. A COMP's regular connector
+carries the family of the In or Out Operator behind it, so a TOP can feed a
+component whose input is an In TOP, and the component's Out TOP output can feed
+a TOP.
+
 `ops.inspect` is a passive, batchable Operator Family Inspection for CHOP, DAT,
 TOP, SOP, POP, and MAT. Its `family` discriminator selects a strict typed
 `details` object; common cached memory, cook timing, Display, and Render

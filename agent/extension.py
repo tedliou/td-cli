@@ -2323,15 +2323,30 @@ class OperatorControl:
         target = self.operator_lookup(payload["target_path"])
         if source is None or target is None:
             raise AgentCommandError("operator_not_found")
-        if str(source.family) != str(target.family):
-            raise AgentCommandError("operator_family_mismatch")
         output_index = payload["output_index"]
         input_index = payload["input_index"]
         if output_index >= len(source.outputConnectors) or input_index >= len(
             target.inputConnectors
         ):
             raise AgentCommandError("connector_not_found")
+        source_family = self._connector_family(source, source.outputConnectors[output_index])
+        target_family = self._connector_family(target, target.inputConnectors[input_index])
+        if source_family is None or source_family != target_family:
+            raise AgentCommandError("operator_family_mismatch")
         return source, target, output_index, input_index
+
+    @staticmethod
+    def _connector_family(operator, connector):
+        """Return the data family a regular connector carries.
+
+        A COMP's regular connector carries the family of the In or Out Operator inside it
+        (for example a Palette component's In TOP), not COMP.
+        """
+        family = str(operator.family)
+        if family != "COMP":
+            return family
+        inner = getattr(connector, "inOP" if connector.isInput else "outOP", None)
+        return None if inner is None else str(inner.family)
 
     @staticmethod
     def _connection_matches(connection, source, output_index):

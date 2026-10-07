@@ -4165,3 +4165,46 @@ def test_acknowledgment_keeps_records_and_aggregate_bytes_bounded_over_soak() ->
         )
         assert agent.acknowledge_outcome(request_id, outcome["execution_id"]) is True
         assert agent.retention_snapshot() == {"record_count": 0, "outcome_bytes": 0}
+
+
+def comp_with_connector_families(path: str, *, input_family=None, output_family=None):
+    """A COMP whose regular connectors are backed by In/Out Operators of the given families."""
+    comp = FakeOperator(
+        path,
+        family="COMP",
+        inputs=int(input_family is not None),
+        outputs=int(output_family is not None),
+    )
+    if input_family is not None:
+        comp.inputConnectors[0].inOP = FakeOperator(f"{path}/in1", family=input_family)
+    if output_family is not None:
+        comp.outputConnectors[0].outOP = FakeOperator(f"{path}/out1", family=output_family)
+    return comp
+
+
+def test_connect_uses_the_family_of_a_comp_connectors_in_and_out_operators() -> None:
+    video = FakeOperator("/project1/video", family="TOP", outputs=1)
+    blend = comp_with_connector_families("/project1/blend", input_family="TOP", output_family="TOP")
+    screen = FakeOperator("/project1/screen", family="TOP", inputs=1)
+    analysis = comp_with_connector_families("/project1/analysis", input_family="CHOP")
+    operators = {item.path: item for item in (video, blend, screen, analysis)}
+    control = make_control(operators.get)
+
+    def connect(source, target):
+        return control.execute(
+            {
+                "name": "ops.connect",
+                "input": {
+                    "source_path": source.path,
+                    "target_path": target.path,
+                    "output_index": 0,
+                    "input_index": 0,
+                },
+            }
+        )
+
+    assert connect(video, blend)["connected"] is True
+    assert connect(blend, screen)["connected"] is True
+    with pytest.raises(module.AgentCommandError, match="operator_family_mismatch"):
+        connect(video, analysis)
+    assert analysis.inputConnectors[0].connections == []

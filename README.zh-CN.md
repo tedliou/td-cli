@@ -218,6 +218,9 @@ td --json --instance <selector> ops children /project1 --op-type constantTOP
 td --json --instance <selector> ops inspect /project1/source --max-items 100
 ```
 
+配线要求两端 connector 的 family 相同。COMP 的一般 connector 采用其内部 In／Out Operator 的
+family，所以 TOP 可以接进输入为 In TOP 的组件，组件的 Out TOP 输出也可以接到 TOP。
+
 `ops.inspect` 是 CHOP、DAT、TOP、SOP、POP、MAT 的被动有界读取。它不下载 pixels、geometry、
 POP buffers、DAT content 或 Python objects，也不主动 cook。可变长度数据受 `--max-items`
 限制（默认 100、最高 1000），溢位会失败而不截断。
