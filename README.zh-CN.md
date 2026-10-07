@@ -218,6 +218,11 @@ td --json --instance <selector> ops children /project1 --op-type constantTOP
 td --json --instance <selector> ops inspect /project1/source --max-items 100
 ```
 
+配线要求两端 connector 的 family 相同。COMP 的一般 connector 采用其内部 In／Out Operator 的
+family，所以 TOP 可以接进输入为 In TOP 的组件，组件的 Out TOP 输出也可以接到 TOP。COMP 对
+COMP 也依同一规则：Out TOP connector 不能接 In CHOP connector，没有 In／Out Operator 的 COMP
+connector 以 `operator_family_mismatch` 拒绝（0.10 之前两端都是 COMP 时一律接受）。
+
 `ops.inspect` 是 CHOP、DAT、TOP、SOP、POP、MAT 的被动有界读取。它不下载 pixels、geometry、
 POP buffers、DAT content 或 Python objects，也不主动 cook。可变长度数据受 `--max-items`
 限制（默认 100、最高 1000），溢位会失败而不截断。
@@ -334,6 +339,36 @@ td --json --instance <selector> ops tox import /project1/imports C:\approved\ass
 先创建、独立还原并比对 in-memory backup，再移除原目的。失败时恢复并验证；cleanup、identity 或
 rollback 无法证明时回传明确 uncertain outcome。文件默认限制 64 MiB，inventory 默认 256、最高
 1000 Operators，所有限制都以失败而非截断处理。
+
+External TOX linkage 指 COMP 的 `externaltox` 或 `subcompname` 非空、由 expression／export／bind
+驱动，或留有 expression／bind 来源；这些都可能在之后载入其他文件。`enableexternaltox` 单独为 on
+是 TouchDesigner 的默认值，没有路径时不起作用，因此接受；导入不会清除或改写任何参数。Linkage 与
+VFS 检查涵盖整个载入的 TOX，包括 `--root-child` 舍弃的外层。`tox_verification_failed` 的
+`details.check` 指出失败的检查（`operator_limit`、`operator_type`、`operator_name`、
+`external_tox`、`vfs`、`load_shape`、`root_child` 或 `inspection`），`details.subject` 指出检查对象：
+`source`（TOX 本身；`relative_path` 相对于载入的 root，`.` 为 root）、`destination`（`--replace` 的既有
+目的地）或 `installed`（刚安装的副本）。视情况另附 `op_type`、出问题的 `parameter` 与其 `mode`，或
+`limit`。不回传参数值或 expression 内容。
+
+官方 Palette TOX 把组件与 `icon` Operator 包在一起。`--root-child NAME` 只安装载入 root 下同名
+的直属 COMP，与 Palette 拖拽相同。`--max-operators` 限制整个载入的 TOX，包括 `--root-child` 舍弃的
+外层与兄弟节点（kantanMapper 为 4080，安装后的组件为 4077），`operator_limit` 回报的就是这个上限。
+超过 1000 个 Operator 的组件需要 `--inventory summary`（最高
+10000），结果以 `type_counts` 与 `inventory_sha256` 取代完整 `inventory`。后者是 `full` 会回传的
+各行（`relative_path`、`name`、`op_type`、`family`，依 `relative_path` 排序，root 名称为目标名称）
+以 canonical JSON（排序 key、无空白、ASCII）计算的 SHA-256。导入仍以完整 inventory 验证。只有当
+Instance 的 Agent 声明 `ops.tox.import:root_child` 或 `ops.tox.import:inventory_summary` 时，Daemon
+才接受对应选项；否则在派送前回传 `command_unsupported`，排队中的 Request 遇到 Agent 重连后不再声明
+该 capability 时也一样：
+
+```powershell
+$palette = "C:\Program Files\Derivative\TouchDesigner\Samples\Palette"
+td --json --instance <selector> ops tox import /project1/projection "$palette\Mapping\kantanMapper.tox" $palette kantanMapper --trusted --root-child kantanMapper --inventory summary --max-operators 5000
+```
+
+一次导入会多次实例化 TOX 内容：先载入暂存区，再把验证过的组件复制到目的地（`--replace` 另外会还原
+旧目的地的备份）。因此 callback 可能执行多次。会读写文件的组件（例如 kantanMapper 在项目文件夹的
+`Project` 文件）可能重复这些副作用，td-cli 不会回滚。
 
 <!-- doc-section: operator-state -->
 

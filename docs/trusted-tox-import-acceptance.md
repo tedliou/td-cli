@@ -100,3 +100,9 @@ Local acceptance archive SHA-256 values (not immutable Release assets):
   `70b17ef5d110d463435827e6342995df7e62ac23d3742b352f5282da9559f2ba`
 - `td-agent-component-v0.1.2-td2025.32050.zip`:
   `c4298331b0b9f4889de79daac8886439d20b0e96b258e6632cf5af27039c6909`
+
+## Palette components (issue 157)
+
+Inert `enableexternaltox`, diagnostic `details`, `root_child`, summary
+inventories, and COMP connector families were accepted separately; see
+[palette-tox-import-acceptance.md](palette-tox-import-acceptance.md).

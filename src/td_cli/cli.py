@@ -905,6 +905,8 @@ def ops_tox_import(
     replace: Annotated[bool, typer.Option("--replace")] = False,
     max_file_bytes: Annotated[int | None, typer.Option("--max-file-bytes")] = None,
     max_operators: Annotated[int | None, typer.Option("--max-operators")] = None,
+    root_child: Annotated[str | None, typer.Option("--root-child")] = None,
+    inventory: Annotated[str | None, typer.Option("--inventory")] = None,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
@@ -916,7 +918,12 @@ def ops_tox_import(
     ):
         _fail(ctx, ClientError("invalid_arguments"))
     if (
-        trusted or replace or max_file_bytes is not None or max_operators is not None
+        trusted
+        or replace
+        or max_file_bytes is not None
+        or max_operators is not None
+        or root_child is not None
+        or inventory is not None
     ) and parent_path is None:
         _fail(ctx, ClientError("invalid_arguments"))
     dedicated = None
@@ -930,6 +937,8 @@ def ops_tox_import(
             "replace": replace,
             "max_file_bytes": max_file_bytes if max_file_bytes is not None else MAX_TOX_FILE_BYTES,
             "max_operators": max_operators if max_operators is not None else 256,
+            "root_child": root_child,
+            "inventory": inventory if inventory is not None else "full",
         }
     _command(ctx, "ops.tox.import", dedicated, input, input_file, no_wait, request_id)
 
