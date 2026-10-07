@@ -381,9 +381,9 @@ class RequestLifecycle:
             raise AdmissionRejected("instance_offline")
         if connection.draining:
             raise AdmissionRejected("instance_draining")
-        command = snapshot.get("command")
-        name = command.get("name") if isinstance(command, dict) else None
-        if name not in connection.capabilities:
+        if not COMMAND_CATALOG.required_capabilities(snapshot.get("command")) <= (
+            connection.capabilities
+        ):
             raise AdmissionRejected("command_unsupported")
         if (
             len(self._lanes[instance_id]) + int(instance_id in self._in_flight)
@@ -414,9 +414,9 @@ class RequestLifecycle:
         ):
             return
         queued = self._lanes[instance_id].popleft()
-        command = queued.get("command")
-        name = command.get("name") if isinstance(command, dict) else None
-        if name not in connection.capabilities:
+        if not COMMAND_CATALOG.required_capabilities(queued.get("command")) <= (
+            connection.capabilities
+        ):
             await self._store.compare_and_set(
                 str(queued["request_id"]),
                 expected_statuses={"queued"},

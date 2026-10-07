@@ -255,6 +255,14 @@ td --json --instance <selector> ops inspect /project1/source --max-items 100
 td --json --instance <selector> parameters get /project1/source colorr
 ```
 
+Wiring requires the connector families to match. A COMP's regular connector
+carries the family of the In or Out Operator behind it, so a TOP can feed a
+component whose input is an In TOP, and the component's Out TOP output can feed
+a TOP. COMP-to-COMP wiring follows the same rule: an Out TOP connector cannot
+feed an In CHOP connector, and a COMP connector without an In or Out Operator
+is rejected with `operator_family_mismatch` (before 0.10 such COMP pairs were
+accepted because both ends were COMPs).
+
 `ops.inspect` is a passive, batchable Operator Family Inspection for CHOP, DAT,
 TOP, SOP, POP, and MAT. Its `family` discriminator selects a strict typed
 `details` object; common cached memory, cook timing, Display, and Render
@@ -393,6 +401,50 @@ unprovable identity failures use distinct rollback or uncertain-outcome
 errors. Files default to a 64 MiB maximum and inventories to 256 Operators
 (maximum 1000); every bound fails rather than truncates.
 
+External TOX linkage means a COMP whose `externaltox` or `subcompname` is
+non-empty, is driven by an expression, export, or bind, or keeps an expression
+or bind source; any of these could load another file later. `enableexternaltox`
+alone is TouchDesigner's default and has no effect without a path, so it is
+accepted; imported parameters are never cleared or rewritten. Linkage and VFS
+are checked across the whole loaded TOX, including a wrapper discarded by
+`--root-child`. A `tox_verification_failed` error names the failed check in
+`details.check` (`operator_limit`, `operator_type`, `operator_name`,
+`external_tox`, `vfs`, `load_shape`, `root_child`, or `inspection`) and what
+was checked in `details.subject`: `source` (the TOX; `relative_path` is
+relative to its loaded root, `.` for the root), `destination` (the existing
+target of `--replace`), or `installed` (the new copy). It adds the Operator's
+`op_type`, the offending `parameter` and its `mode`, or the `limit`, when they
+apply. Parameter values and expressions are never returned.
+
+Official Palette TOX files wrap the component together with an `icon`
+Operator. `--root-child NAME` installs only the named direct child COMP of the
+loaded root, as a Palette drag does. `--max-operators` bounds the whole loaded
+TOX, including the wrapper and siblings that `--root-child` discards (4080 for
+kantanMapper, whose installed component has 4077), and an `operator_limit`
+failure reports that bound. Components above 1000 Operators need
+`--inventory summary` (maximum 10000 Operators). It returns `type_counts` and
+`inventory_sha256` in place of the full `inventory`: the SHA-256 of the
+canonical JSON (sorted keys, no whitespace, ASCII) of the rows that `full`
+would return, each with `relative_path`, `name`, `op_type`, and `family`,
+sorted by `relative_path`, with the root named by the target name. The import
+is still verified against the complete inventory. The Daemon admits either
+option only when the Instance's Agent advertises `ops.tox.import:root_child`
+or `ops.tox.import:inventory_summary`; otherwise it returns
+`command_unsupported` before dispatch, including for a queued Request whose
+Agent reconnects without the capability:
+
+```powershell
+$palette = "C:\Program Files\Derivative\TouchDesigner\Samples\Palette"
+td --json --instance <selector> ops tox import /project1/projection "$palette\Mapping\kantanMapper.tox" $palette kantanMapper --trusted --root-child kantanMapper --inventory summary --max-operators 5000
+```
+
+One import instantiates TOX content more than once: it loads the file into a
+staging namespace and then copies the verified component to the destination
+(and `--replace` also restores a backup of the old target). Callbacks can
+therefore run more than once. Components that read or write files, such as
+kantanMapper's `Project` file in the project folder, may repeat those effects,
+and td-cli does not roll them back.
+
 <!-- doc-section: operator-state -->
 
 Common Operator state has its own read and atomic partial-update Commands. The
@@ -512,4 +564,4 @@ IDs before submission, followed by complete terminal snapshots. Save this
 output and query the recorded Request after interruption or unknown outcome;
 do not blindly rerun the plan. Nested `batch.execute` is unsupported.
 
-The 0.9.0 upgrade accepts the exact canonical 0.8.0 Agent in addition to the existing verified sources (including 0.7.0 and 0.7.1), preserving its Connectionstate definition. Custom menus accept up to 256 items, `invalid_arguments` reports located `validation_errors`, and the Agent's `parameters menu-set` reports an explicitly pinned default honestly after a failure. An embedded 0.8.0 Agent already runs menus beyond 32 items; only the CLI and Daemon must be 0.9.0 for that.
+The 0.10.0 upgrade accepts the exact canonical 0.9.0 Agent in addition to the existing verified sources (including 0.7.0, 0.7.1, and 0.8.0), preserving its Connectionstate definition. Trusted TOX Import accepts official Palette components (`--root-child`, `--inventory summary`, diagnosable `details`), and `ops connect` wires TOPs to and from components by their In/Out Operator family. These need a 0.10.0 Agent; the CLI and Daemon reject the new options with `command_unsupported` for an older embedded Agent.

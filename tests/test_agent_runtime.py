@@ -1,4 +1,5 @@
 import builtins
+import hashlib
 import importlib.util
 import json
 import uuid
@@ -528,6 +529,16 @@ class FakeToxGraphOperator:
             operator = FakeToxGraphOperator(
                 payload["name"], parent, op_type=payload["op_type"], family=payload["family"]
             )
+            for name, value in payload.get("par", {}).items():
+                if isinstance(value, dict):
+                    parameter = FakeDatParameter(value["value"])
+                    for attribute in ("mode", "expr", "bindExpr"):
+                        if attribute in value:
+                            setattr(parameter, attribute, value[attribute])
+                else:
+                    parameter = FakeDatParameter(value)
+                setattr(operator.par, name, parameter)
+            operator.vfs = list(payload.get("vfs", []))
             for child in payload["children"]:
                 restore(child, operator)
             return operator
@@ -834,8 +845,8 @@ def test_tox_import_reports_unknown_when_final_snapshot_replaces_destination(
     control = make_control(lookup)
     original = control._require_tox_snapshot
 
-    def replace_after_snapshot(operator):
-        original(operator)
+    def replace_after_snapshot(operator, maximum, subject="source"):
+        original(operator, maximum, subject)
         if str(operator.path) == "/project1/imports/asset":
             operator.destroy()
             FakeToxGraphOperator("asset", imports)
@@ -860,6 +871,388 @@ def test_tox_import_reports_unknown_when_final_snapshot_replaces_destination(
                 },
             }
         )
+
+
+def tox_tree(name, *children, op_type="baseCOMP", family="COMP", par=None, vfs=()):
+    return {
+        "name": name,
+        "op_type": op_type,
+        "family": family,
+        "children": list(children),
+        "par": par or {},
+        "vfs": list(vfs),
+    }
+
+
+def tox_import_fixture(tmp_path: Path, tree):
+    project = FakeToxGraphOperator("project1")
+    imports = FakeToxGraphOperator("imports", project)
+
+    def lookup(path):
+        queue = [project]
+        while queue:
+            operator = queue.pop(0)
+            if str(operator.path) == path:
+                return operator
+            queue.extend(operator.children)
+        return None
+
+    tox = tmp_path / "asset.tox"
+    tox.write_bytes(json.dumps(tree).encode("utf-8"))
+    payload = {
+        "parent_path": "/project1/imports",
+        "tox_path": str(tox),
+        "allowlist_root": str(tmp_path),
+        "target_name": "asset",
+        "trusted": True,
+        "replace": False,
+        "max_file_bytes": 1 << 20,
+        "max_operators": 1000,
+        "inventory": "full",
+    }
+    return make_control(lookup), imports, payload
+
+
+def palette_tree():
+    """Shape of an official Palette TOX: a wrapper with an icon and a same-named component."""
+    inactive_linkage = {"externaltox": "", "enableexternaltox": True, "subcompname": ""}
+    inner = tox_tree(
+        "projectorBlend",
+        tox_tree(
+            "docsHelper",
+            tox_tree("parexec1", op_type="parameterexecuteDAT", family="DAT"),
+            op_type="containerCOMP",
+            par=inactive_linkage,
+        ),
+        tox_tree("out1", op_type="outTOP", family="TOP"),
+        par=inactive_linkage,
+    )
+    return tox_tree(
+        "projectorBlend",
+        tox_tree("icon", op_type="opviewerTOP", family="TOP"),
+        inner,
+        par={"externaltox": "", "enableexternaltox": False, "subcompname": ""},
+    )
+
+
+def test_tox_import_accepts_default_enableexternaltox_without_an_external_path(
+    tmp_path: Path,
+) -> None:
+    control, imports, payload = tox_import_fixture(tmp_path, palette_tree())
+
+    result = control.execute({"name": "ops.tox.import", "input": payload})
+
+    assert result["operator_count"] == 6
+    assert [child.name for child in imports.children] == ["asset"]
+
+
+@pytest.mark.parametrize(
+    "tree,details",
+    [
+        (
+            tox_tree("root", tox_tree("linked", par={"externaltox": "C:/assets/linked.tox"})),
+            {
+                "check": "external_tox",
+                "relative_path": "linked",
+                "op_type": "baseCOMP",
+                "parameter": "externaltox",
+                "mode": "constant",
+            },
+        ),
+        (
+            tox_tree("root", tox_tree("linked", par={"subcompname": "inside"})),
+            {
+                "check": "external_tox",
+                "relative_path": "linked",
+                "op_type": "baseCOMP",
+                "parameter": "subcompname",
+                "mode": "constant",
+            },
+        ),
+        (
+            tox_tree(
+                "root",
+                tox_tree(
+                    "linked",
+                    par={
+                        "externaltox": {
+                            "value": "",
+                            "mode": "ParMode.EXPRESSION",
+                            "expr": "op('x').par.file",
+                        }
+                    },
+                ),
+            ),
+            {
+                "check": "external_tox",
+                "relative_path": "linked",
+                "op_type": "baseCOMP",
+                "parameter": "externaltox",
+                "mode": "expression",
+            },
+        ),
+        (
+            tox_tree(
+                "root",
+                tox_tree("linked", par={"subcompname": {"value": "", "mode": "ParMode.BIND"}}),
+            ),
+            {
+                "check": "external_tox",
+                "relative_path": "linked",
+                "op_type": "baseCOMP",
+                "parameter": "subcompname",
+                "mode": "bind",
+            },
+        ),
+        (
+            tox_tree(
+                "root",
+                tox_tree(
+                    "linked",
+                    par={
+                        "externaltox": {
+                            "value": "",
+                            "mode": "ParMode.CONSTANT",
+                            "expr": "project.folder + '/x.tox'",
+                        }
+                    },
+                ),
+            ),
+            {
+                "check": "external_tox",
+                "relative_path": "linked",
+                "op_type": "baseCOMP",
+                "parameter": "externaltox",
+                "mode": "constant",
+            },
+        ),
+        (
+            tox_tree("root", tox_tree("packed", vfs=["font.ttf"])),
+            {"check": "vfs", "relative_path": "packed", "op_type": "baseCOMP"},
+        ),
+        (
+            tox_tree("root", tox_tree("web", op_type="webDAT", family="DAT")),
+            {"check": "operator_type", "relative_path": "web", "op_type": "webDAT"},
+        ),
+        (
+            tox_tree("root", tox_tree("bad-name", op_type="nullTOP", family="TOP")),
+            {"check": "operator_name", "relative_path": "bad-name", "op_type": "nullTOP"},
+        ),
+    ],
+)
+def test_tox_verification_failure_names_the_check_and_operator(
+    tmp_path: Path, tree, details
+) -> None:
+    control, imports, payload = tox_import_fixture(tmp_path, tree)
+
+    with pytest.raises(module.AgentCommandError, match="tox_verification_failed") as raised:
+        control.execute({"name": "ops.tox.import", "input": payload})
+
+    assert raised.value.details == {"subject": "source", **details}
+    assert imports.children == []
+
+
+def test_tox_operator_limit_failure_reports_the_bound(tmp_path: Path) -> None:
+    control, imports, payload = tox_import_fixture(tmp_path, palette_tree())
+    payload["max_operators"] = 3
+
+    with pytest.raises(module.AgentCommandError, match="tox_verification_failed") as raised:
+        control.execute({"name": "ops.tox.import", "input": payload})
+
+    assert raised.value.details == {"check": "operator_limit", "subject": "source", "limit": 3}
+    assert imports.children == []
+
+
+def test_tox_snapshot_uses_the_callers_operator_bound(tmp_path: Path) -> None:
+    nulls = [tox_tree(f"n{index}", op_type="nullTOP", family="TOP") for index in range(1200)]
+    control, imports, payload = tox_import_fixture(tmp_path, tox_tree("root", *nulls))
+    payload["max_operators"] = 1201
+    payload["inventory"] = "summary"
+
+    result = control.execute({"name": "ops.tox.import", "input": payload})
+
+    assert result["operator_count"] == 1201
+    assert [child.name for child in imports.children] == ["asset"]
+
+
+def test_tox_import_root_child_installs_the_component_like_a_palette_drag(
+    tmp_path: Path,
+) -> None:
+    control, imports, payload = tox_import_fixture(tmp_path, palette_tree())
+    payload["root_child"] = "projectorBlend"
+    payload["target_name"] = "projectorBlend"
+
+    result = control.execute({"name": "ops.tox.import", "input": payload})
+
+    assert result["path"] == "/project1/imports/projectorBlend"
+    assert result["root_child"] == "projectorBlend"
+    assert result["operator_count"] == 4
+    assert [row["relative_path"] for row in result["inventory"]] == [
+        ".",
+        "docsHelper",
+        "docsHelper/parexec1",
+        "out1",
+    ]
+    [installed] = imports.children
+    assert [child.name for child in installed.children] == ["docsHelper", "out1"]
+
+
+@pytest.mark.parametrize("child", ["missing", "icon"])
+def test_tox_import_root_child_must_name_a_direct_child_comp(tmp_path: Path, child: str) -> None:
+    control, imports, payload = tox_import_fixture(tmp_path, palette_tree())
+    payload["root_child"] = child
+
+    with pytest.raises(module.AgentCommandError, match="tox_verification_failed") as raised:
+        control.execute({"name": "ops.tox.import", "input": payload})
+
+    assert raised.value.details == {
+        "check": "root_child",
+        "subject": "source",
+        "relative_path": child,
+    }
+    assert imports.children == []
+
+
+def test_tox_import_summary_inventory_reports_digest_and_type_counts(tmp_path: Path) -> None:
+    control, _imports, payload = tox_import_fixture(tmp_path, palette_tree())
+    full = control.execute({"name": "ops.tox.import", "input": payload})
+    control, _imports, payload = tox_import_fixture(tmp_path, palette_tree())
+    payload["inventory"] = "summary"
+
+    summary = control.execute({"name": "ops.tox.import", "input": payload})
+
+    assert "inventory" not in summary
+    assert summary["operator_count"] == full["operator_count"] == 6
+    canonical = json.dumps(
+        full["inventory"], ensure_ascii=True, separators=(",", ":"), sort_keys=True
+    )
+    assert summary["inventory_sha256"] == hashlib.sha256(canonical.encode("ascii")).hexdigest()
+    assert summary["type_counts"] == {
+        "baseCOMP": 2,
+        "containerCOMP": 1,
+        "opviewerTOP": 1,
+        "outTOP": 1,
+        "parameterexecuteDAT": 1,
+    }
+
+
+def test_root_child_import_still_rejects_linkage_on_the_discarded_wrapper(tmp_path: Path) -> None:
+    tree = palette_tree()
+    tree["par"]["externaltox"] = "C:/elsewhere/wrapper.tox"
+    control, imports, payload = tox_import_fixture(tmp_path, tree)
+    payload["root_child"] = "projectorBlend"
+
+    with pytest.raises(module.AgentCommandError, match="tox_verification_failed") as raised:
+        control.execute({"name": "ops.tox.import", "input": payload})
+
+    assert raised.value.details == {
+        "check": "external_tox",
+        "subject": "source",
+        "relative_path": ".",
+        "op_type": "baseCOMP",
+        "parameter": "externaltox",
+        "mode": "constant",
+    }
+    assert imports.children == []
+
+
+def test_root_child_failures_are_reported_relative_to_the_tox_root(tmp_path: Path) -> None:
+    tree = palette_tree()
+    tree["children"][1]["children"].append(tox_tree("web", op_type="webDAT", family="DAT"))
+    control, imports, payload = tox_import_fixture(tmp_path, tree)
+    payload["root_child"] = "projectorBlend"
+
+    with pytest.raises(module.AgentCommandError, match="tox_verification_failed") as raised:
+        control.execute({"name": "ops.tox.import", "input": payload})
+
+    assert raised.value.details == {
+        "check": "operator_type",
+        "subject": "source",
+        "relative_path": "projectorBlend/web",
+        "op_type": "webDAT",
+    }
+    assert imports.children == []
+
+
+def test_snapshot_traversal_errors_are_verification_failures(tmp_path: Path, monkeypatch) -> None:
+    control, imports, payload = tox_import_fixture(tmp_path, palette_tree())
+    original = control._bounded_subtree
+    calls = []
+
+    def fail_second_traversal(root, maximum):
+        calls.append(root)
+        if len(calls) == 2:
+            raise RuntimeError("traversal failed")
+        return original(root, maximum)
+
+    monkeypatch.setattr(control, "_bounded_subtree", fail_second_traversal)
+
+    with pytest.raises(module.AgentCommandError, match="tox_verification_failed") as raised:
+        control.execute({"name": "ops.tox.import", "input": payload})
+
+    assert raised.value.details == {"check": "inspection", "subject": "source"}
+    assert imports.children == []
+
+
+def test_replacing_an_unverifiable_destination_names_the_destination(tmp_path: Path) -> None:
+    control, imports, payload = tox_import_fixture(tmp_path, palette_tree())
+    old = FakeToxGraphOperator("asset", imports)
+    FakeToxGraphOperator("web", old, op_type="webDAT", family="DAT")
+    payload["replace"] = True
+
+    with pytest.raises(module.AgentCommandError, match="tox_verification_failed") as raised:
+        control.execute({"name": "ops.tox.import", "input": payload})
+
+    assert raised.value.details == {
+        "check": "operator_type",
+        "subject": "destination",
+        "relative_path": "web",
+        "op_type": "webDAT",
+    }
+    assert [child.name for child in imports.children] == ["asset"]
+    assert [child.name for child in old.children] == ["web"]
+
+
+def test_root_child_replacement_installs_the_component_over_the_old_one(tmp_path: Path) -> None:
+    control, imports, payload = tox_import_fixture(tmp_path, palette_tree())
+    old = FakeToxGraphOperator("projectorBlend", imports)
+    FakeToxGraphOperator("old_child", old)
+    payload.update(root_child="projectorBlend", target_name="projectorBlend", replace=True)
+
+    result = control.execute({"name": "ops.tox.import", "input": payload})
+
+    assert result["replaced"] is True
+    assert result["root_child"] == "projectorBlend"
+    [installed] = imports.children
+    assert [child.name for child in installed.children] == ["docsHelper", "out1"]
+
+
+def test_root_child_replacement_restores_the_old_component_when_commit_fails(
+    tmp_path: Path,
+) -> None:
+    control, imports, payload = tox_import_fixture(tmp_path, palette_tree())
+    old = FakeToxGraphOperator("projectorBlend", imports)
+    FakeToxGraphOperator("old_child", old)
+    imports.fail_copy_name = "projectorBlend"
+    payload.update(root_child="projectorBlend", target_name="projectorBlend", replace=True)
+
+    with pytest.raises(module.AgentCommandError, match="tox_commit_failed"):
+        control.execute({"name": "ops.tox.import", "input": payload})
+
+    [restored] = imports.children
+    assert restored.name == "projectorBlend"
+    assert [child.name for child in restored.children] == ["old_child"]
+
+
+def test_agent_outcome_carries_tox_verification_details() -> None:
+    error = module.AgentCommandError("tox_verification_failed", {"check": "vfs"})
+
+    assert AgentExt._outcome_error(error.code, error.details) == {
+        "code": "tox_verification_failed",
+        "message": "tox_verification_failed",
+        "details": {"check": "vfs"},
+        "retryable": False,
+    }
 
 
 class FakeAttribute:
@@ -2599,7 +2992,7 @@ def test_agent_advertises_and_executes_all_typed_commands() -> None:
     agent = AgentExt(FakeOwner(), operator_lookup=operators.get)
 
     assert agent.registration_payload()["td_build"] == "2025.32050"
-    assert set(agent.registration_payload()["capabilities"]) == set(COMMAND_CATALOG.names)
+    assert set(agent.registration_payload()["capabilities"]) == set(COMMAND_CATALOG.capabilities)
     assert agent.execute_command({"name": "ops.get", "input": {"operator_path": "/project1"}}) == {
         "path": "/project1",
         "name": "project1",
@@ -3950,3 +4343,99 @@ def test_acknowledgment_keeps_records_and_aggregate_bytes_bounded_over_soak() ->
         )
         assert agent.acknowledge_outcome(request_id, outcome["execution_id"]) is True
         assert agent.retention_snapshot() == {"record_count": 0, "outcome_bytes": 0}
+
+
+def comp_with_connector_families(path: str, *, input_family=None, output_family=None):
+    """A COMP whose regular connectors are backed by In/Out Operators of the given families."""
+    comp = FakeOperator(
+        path,
+        family="COMP",
+        inputs=int(input_family is not None),
+        outputs=int(output_family is not None),
+    )
+    if input_family is not None:
+        comp.inputConnectors[0].inOP = FakeOperator(f"{path}/in1", family=input_family)
+    if output_family is not None:
+        comp.outputConnectors[0].outOP = FakeOperator(f"{path}/out1", family=output_family)
+    return comp
+
+
+def test_connect_uses_the_family_of_a_comp_connectors_in_and_out_operators() -> None:
+    video = FakeOperator("/project1/video", family="TOP", outputs=1)
+    blend = comp_with_connector_families("/project1/blend", input_family="TOP", output_family="TOP")
+    screen = FakeOperator("/project1/screen", family="TOP", inputs=1)
+    analysis = comp_with_connector_families("/project1/analysis", input_family="CHOP")
+    operators = {item.path: item for item in (video, blend, screen, analysis)}
+    control = make_control(operators.get)
+
+    def connect(source, target):
+        return control.execute(
+            {
+                "name": "ops.connect",
+                "input": {
+                    "source_path": source.path,
+                    "target_path": target.path,
+                    "output_index": 0,
+                    "input_index": 0,
+                },
+            }
+        )
+
+    assert connect(video, blend)["connected"] is True
+    assert connect(blend, screen)["connected"] is True
+    with pytest.raises(module.AgentCommandError, match="operator_family_mismatch"):
+        connect(video, analysis)
+    assert analysis.inputConnectors[0].connections == []
+
+
+def test_comp_to_comp_wiring_requires_matching_in_and_out_operator_families() -> None:
+    image_out = comp_with_connector_families("/project1/image", output_family="TOP")
+    signal_in = comp_with_connector_families("/project1/signal", input_family="CHOP")
+    image_in = comp_with_connector_families("/project1/blend", input_family="TOP")
+    bare = FakeOperator("/project1/bare", family="COMP", inputs=1)
+    operators = {item.path: item for item in (image_out, signal_in, image_in, bare)}
+    control = make_control(operators.get)
+
+    def connect(source, target):
+        return control.execute(
+            {
+                "name": "ops.connect",
+                "input": {
+                    "source_path": source.path,
+                    "target_path": target.path,
+                    "output_index": 0,
+                    "input_index": 0,
+                },
+            }
+        )
+
+    with pytest.raises(module.AgentCommandError, match="operator_family_mismatch"):
+        connect(image_out, signal_in)
+    with pytest.raises(module.AgentCommandError, match="operator_family_mismatch"):
+        connect(image_out, bare)
+    assert signal_in.inputConnectors[0].connections == []
+    assert bare.inputConnectors[0].connections == []
+    assert connect(image_out, image_in)["connected"] is True
+
+
+def test_disconnect_accepts_a_top_feeding_a_comp_in_top() -> None:
+    video = FakeOperator("/project1/video", family="TOP", outputs=1)
+    blend = comp_with_connector_families("/project1/blend", input_family="TOP")
+    operators = {item.path: item for item in (video, blend)}
+    control = make_control(operators.get)
+    video.outputConnectors[0].connect(blend.inputConnectors[0])
+
+    result = control.execute(
+        {
+            "name": "ops.disconnect",
+            "input": {
+                "source_path": video.path,
+                "target_path": blend.path,
+                "output_index": 0,
+                "input_index": 0,
+            },
+        }
+    )
+
+    assert result["disconnected"] is True
+    assert blend.inputConnectors[0].connections == []
