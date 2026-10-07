@@ -453,4 +453,4 @@ read-only Command 使用。
 终态 snapshot。请保存输出；中断或 outcome unknown 后先查询已记录的 Request，
 不要盲目重跑整份计划。不接受嵌套 `batch.execute`。
 
-0.9.0 离线升级除现有来源（含 0.7.0、0.7.1）外，新增精确 canonical 0.8.0 Agent 白名单，保留 Connectionstate 定义。自定义 menu 放宽到 256 项，`invalid_arguments` 返回含位置的 `validation_errors`；Agent 的 `parameters menu-set` 在失败后会如实报告已被明确写入的 default。内嵌 0.8.0 Agent 已能执行超过 32 项的 menu，只需把 CLI 与 Daemon 升级到 0.9.0。
+0.10.0 离线升级除现有来源（含 0.7.0、0.7.1、0.8.0）外，新增精确 canonical 0.9.0 Agent 白名单，保留 Connectionstate 定义。Trusted TOX Import 可导入官方 Palette 组件（`--root-child`、`--inventory summary`、可诊断的 `details`），`ops connect` 依 In／Out Operator 的 family 把 TOP 接进或接出组件。这些需要 0.10.0 Agent；内嵌较旧 Agent 时，CLI 与 Daemon 会以 `command_unsupported` 拒绝新选项。
