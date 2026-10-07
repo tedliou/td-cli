@@ -133,6 +133,8 @@ class ConnectionsInput(OperatorInput):
 MAX_INSPECTION_ITEMS = 100
 MAX_INSPECTION_STRING_BYTES = 4096
 MAX_TOX_FILE_BYTES = 67_108_864
+MAX_TOX_FULL_INVENTORY_OPERATORS = 1000
+MAX_TOX_OPERATORS = 10_000
 
 
 class InspectOperatorInput(OperatorInput):
@@ -353,7 +355,9 @@ class ImportToxInput(StrictModel):
     trusted: Literal[True]
     replace: bool = False
     max_file_bytes: int = Field(default=MAX_TOX_FILE_BYTES, ge=1, le=MAX_TOX_FILE_BYTES)
-    max_operators: int = Field(default=256, ge=1, le=1000)
+    max_operators: int = Field(default=256, ge=1, le=MAX_TOX_OPERATORS)
+    root_child: str | None = None
+    inventory: Literal["full", "summary"] = "full"
 
     _parent_path = field_validator("parent_path")(_valid_operator_path)
     _tox_path = field_validator("tox_path")(_valid_local_windows_path)
@@ -366,6 +370,20 @@ class ImportToxInput(StrictModel):
         if PureWindowsPath(value).suffix.lower() != ".tox":
             raise ValueError("tox_path must have a .tox extension")
         return value
+
+    @field_validator("root_child")
+    @classmethod
+    def root_child_is_an_operator_name(cls, value: str | None) -> str | None:
+        return None if value is None else _valid_operator_name(value)
+
+    @model_validator(mode="after")
+    def full_inventory_fits_one_outcome(self) -> ImportToxInput:
+        if self.inventory == "full" and self.max_operators > MAX_TOX_FULL_INVENTORY_OPERATORS:
+            raise ValueError(
+                f"max_operators above {MAX_TOX_FULL_INVENTORY_OPERATORS} requires "
+                "inventory 'summary'"
+            )
+        return self
 
 
 class ConnectOperatorsInput(StrictModel):
@@ -683,6 +701,8 @@ def _sequence_result(result: dict[str, Any]) -> dict[str, Any]:
 
 
 ResultNormalizer = Callable[[dict[str, Any]], dict[str, Any]]
+# An optional input feature that only Agents advertising the named capability execute.
+CapabilityFeature = tuple[str, Callable[[dict[str, Any]], bool]]
 
 
 @dataclass(frozen=True)
@@ -692,6 +712,7 @@ class CommandDefinition:
     effect: CommandEffect
     execution_class: ExecutionClass
     result_normalizer: ResultNormalizer = _identity_result
+    features: tuple[CapabilityFeature, ...] = ()
 
     @property
     def batchable(self) -> bool:
@@ -722,6 +743,33 @@ class CommandCatalog:
     @property
     def names(self) -> tuple[str, ...]:
         return tuple(definition.name for definition in self._definitions)
+
+    @property
+    def capabilities(self) -> tuple[str, ...]:
+        """Every Command name and optional feature capability an Agent may advertise."""
+        return self.names + tuple(
+            capability
+            for definition in self._definitions
+            for capability, _requested in definition.features
+        )
+
+    def required_capabilities(self, command: object) -> frozenset[str]:
+        """Return the Agent capabilities a validated Command needs to execute faithfully."""
+        name = command.get("name") if isinstance(command, dict) else None
+        definition = self._by_name.get(name) if isinstance(name, str) else None
+        if definition is None:
+            return frozenset({str(name)})
+        command_input = command.get("input") if isinstance(command, dict) else None
+        if not isinstance(command_input, dict):
+            command_input = {}
+        required = {definition.name}
+        required.update(
+            capability for capability, requested in definition.features if requested(command_input)
+        )
+        if definition.name == "batch.execute":
+            for nested in command_input.get("commands") or ():
+                required.update(self.required_capabilities(nested))
+        return frozenset(required)
 
     @property
     def batch_names(self) -> tuple[str, ...]:
@@ -937,6 +985,13 @@ COMMAND_CATALOG = CommandCatalog(
             CommandEffect.MUTATION,
             ExecutionClass.TRUSTED_ASSET_MUTATION,
             _import_result,
+            (
+                ("ops.tox.import:root_child", lambda value: value.get("root_child") is not None),
+                (
+                    "ops.tox.import:inventory_summary",
+                    lambda value: value.get("inventory") == "summary",
+                ),
+            ),
         ),
         CommandDefinition(
             "ops.connect",

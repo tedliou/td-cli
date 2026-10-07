@@ -335,6 +335,24 @@ td --json --instance <selector> ops tox import /project1/imports C:\approved\ass
 rollback 無法證明時回傳明確 uncertain outcome。檔案預設上限 64 MiB，inventory 預設 256、最高
 1000 Operators，所有上限都以失敗而非截斷處理。
 
+External TOX linkage 指 COMP 的 `externaltox` 或 `subcompname` 非空。`enableexternaltox` 單獨為 on
+是 TouchDesigner 的預設值，沒有路徑時不起作用，因此接受；匯入不會清除或改寫任何參數。
+`tox_verification_failed` 的 `details.check` 指出失敗的檢查（`operator_limit`、`operator_type`、
+`operator_name`、`external_tox`、`vfs`、`load_shape`、`root_child` 或 `inspection`），並視情況附上
+Operator 的 `relative_path`（相對於受驗證元件，`.` 為其 root）、`op_type`、出問題的 `parameter`
+或 `limit`。
+
+官方 Palette TOX 把元件與 `icon` Operator 包在一起。`--root-child NAME` 只安裝載入 root 底下同名
+的直屬 COMP，與 Palette 拖曳相同。超過 1000 個 Operator 的元件需要 `--inventory summary`（最高
+10000），結果以 `inventory_sha256` 與 `type_counts` 取代完整 `inventory`，但匯入仍以完整
+inventory 驗證。兩個選項都需要 Agent 宣告 `ops.tox.import:root_child` 或
+`ops.tox.import:inventory_summary`；舊版 Agent 會在派送前以 `command_unsupported` 拒絕：
+
+```powershell
+$palette = "C:\Program Files\Derivative\TouchDesigner\Samples\Palette"
+td --json --instance <selector> ops tox import /project1/projection "$palette\Mapping\kantanMapper.tox" $palette kantanMapper --trusted --root-child kantanMapper --inventory summary --max-operators 5000
+```
+
 <!-- doc-section: operator-state -->
 
 ## Common Operator state

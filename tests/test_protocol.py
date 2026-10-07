@@ -845,6 +845,8 @@ def test_trusted_tox_import_has_a_strict_bounded_non_batchable_contract() -> Non
         "replace": True,
         "max_file_bytes": 1024,
         "max_operators": 20,
+        "root_child": None,
+        "inventory": "full",
     }
     assert "ops.tox.import" not in COMMAND_CATALOG.batch_names
 
@@ -858,6 +860,8 @@ def test_trusted_tox_import_has_a_strict_bounded_non_batchable_contract() -> Non
         ("allowlist_root", r"\\server\share"),
         ("max_file_bytes", 67_108_865),
         ("max_operators", 1001),
+        ("root_child", "not-a-name"),
+        ("inventory", "partial"),
     ],
 )
 def test_trusted_tox_import_rejects_untrusted_or_unbounded_input(field: str, value: object) -> None:
@@ -872,6 +876,63 @@ def test_trusted_tox_import_rejects_untrusted_or_unbounded_input(field: str, val
 
     with pytest.raises(ValidationError):
         Command.model_validate({"name": "ops.tox.import", "input": payload})
+
+
+def tox_import_input(**changes: object) -> dict[str, object]:
+    return {
+        "parent_path": "/project1/imports",
+        "tox_path": r"C:\approved\asset.tox",
+        "allowlist_root": r"C:\approved",
+        "target_name": "asset",
+        "trusted": True,
+        **changes,
+    }
+
+
+def test_summary_tox_inventory_allows_large_components_within_its_own_bound() -> None:
+    command = Command.model_validate(
+        {
+            "name": "ops.tox.import",
+            "input": tox_import_input(
+                inventory="summary", max_operators=10_000, root_child="kantanMapper"
+            ),
+        }
+    )
+
+    assert command.input.max_operators == 10_000
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {
+                "name": "ops.tox.import",
+                "input": tox_import_input(inventory="summary", max_operators=10_001),
+            }
+        )
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {"name": "ops.tox.import", "input": tox_import_input(max_operators=1001)}
+        )
+
+
+@pytest.mark.parametrize(
+    "changes,required",
+    [
+        ({}, {"ops.tox.import"}),
+        ({"root_child": "asset"}, {"ops.tox.import", "ops.tox.import:root_child"}),
+        (
+            {"inventory": "summary"},
+            {"ops.tox.import", "ops.tox.import:inventory_summary"},
+        ),
+    ],
+)
+def test_tox_import_features_require_advertised_agent_capabilities(
+    changes: dict[str, object], required: set[str]
+) -> None:
+    command = Command.model_validate(
+        {"name": "ops.tox.import", "input": tox_import_input(**changes)}
+    ).model_dump(mode="json")
+
+    assert COMMAND_CATALOG.required_capabilities(command) == required
+    assert required <= set(COMMAND_CATALOG.capabilities)
 
 
 @pytest.mark.parametrize("name", ["ops.rename", "ops.disconnect", "ops.connect"])

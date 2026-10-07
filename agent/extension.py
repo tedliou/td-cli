@@ -22,9 +22,10 @@ if not hasattr(builtins, "_td_cli_runtime_session_id"):
 
 
 class AgentCommandError(Exception):
-    def __init__(self, code):
+    def __init__(self, code, details=None):
         super().__init__(code)
         self.code = code
+        self.details = dict(details or {})
 
 
 class OperatorCatalog:
@@ -1156,10 +1157,11 @@ class OperatorControl:
         installed = None
         try:
             stage = self._create_tox_stage(parent, "stage")
-            staged_root = self._load_one_tox_root(stage, source["bytes"])
+            loaded_root = self._load_one_tox_root(stage, source["bytes"])
+            staged_root = self._select_tox_root(loaded_root, payload.get("root_child"))
             staged_manifest = self._tox_manifest(staged_root, payload["max_operators"])
-            self._require_tox_snapshot(staged_root)
-            self._require_exact_stage_root(stage, staged_root)
+            self._require_tox_snapshot(staged_root, payload["max_operators"])
+            self._require_exact_stage_root(stage, loaded_root)
             current = self.operator_lookup(destination_path)
             if previous is None:
                 if current is not None:
@@ -1201,7 +1203,7 @@ class OperatorControl:
                 staged_manifest, payload["target_name"]
             ):
                 raise RuntimeError("installed manifest mismatch")
-            self._require_tox_snapshot(installed)
+            self._require_tox_snapshot(installed, payload["max_operators"])
             if self.operator_lookup(destination_path) is not installed:
                 raise AgentCommandError("tox_import_outcome_unknown")
             if self._tox_manifest(installed, payload["max_operators"]) != installed_manifest:
@@ -1210,14 +1212,14 @@ class OperatorControl:
                 raise AgentCommandError("tox_import_outcome_unknown")
             if not self._destroy_exact(stage):
                 raise AgentCommandError("tox_import_outcome_unknown")
-            return {
+            result = {
                 "parent_path": str(parent.path),
                 "path": str(installed.path),
                 "name": str(installed.name),
                 "op_type": str(installed.OPType),
                 "family": str(installed.family),
                 "operator_count": len(installed_manifest),
-                "inventory": installed_manifest,
+                **self._tox_inventory_result(installed_manifest, payload.get("inventory", "full")),
                 "source_path": source["path"],
                 "file_bytes": source["size"],
                 "sha256": source["sha256"],
@@ -1225,6 +1227,9 @@ class OperatorControl:
                 "replaced": previous is not None,
                 "rollback_performed": False,
             }
+            if payload.get("root_child") is not None:
+                result["root_child"] = payload["root_child"]
+            return result
         except Exception as error:
             if old_destroyed:
                 try:
@@ -1381,7 +1386,44 @@ class OperatorControl:
     def _require_exact_stage_root(self, stage, root):
         children = list(stage.children)
         if len(children) != 1 or children[0] is not root:
-            raise AgentCommandError("tox_verification_failed")
+            raise AgentCommandError("tox_verification_failed", {"check": "load_shape"})
+
+    @staticmethod
+    def _select_tox_root(loaded_root, root_child):
+        """Return the loaded root, or its named direct child COMP as a Palette drag does."""
+        if root_child is None:
+            return loaded_root
+        matches = [child for child in loaded_root.children if str(child.name) == root_child]
+        if len(matches) != 1 or str(matches[0].family) != "COMP":
+            raise AgentCommandError(
+                "tox_verification_failed", {"check": "root_child", "relative_path": root_child}
+            )
+        return matches[0]
+
+    @staticmethod
+    def _tox_failure(check, root, operator=None, **facts):
+        details = {"check": check}
+        if operator is not None:
+            prefix = str(root.path).rstrip("/")
+            path = str(operator.path)
+            relative = "." if operator is root else path[len(prefix) + 1 :]
+            details["relative_path"] = relative[:512]
+            details["op_type"] = str(operator.OPType)[:128]
+        details.update(facts)
+        return AgentCommandError("tox_verification_failed", details)
+
+    @staticmethod
+    def _tox_inventory_result(manifest, mode):
+        if mode == "full":
+            return {"inventory": manifest}
+        canonical = json.dumps(manifest, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+        counts = {}
+        for row in manifest:
+            counts[row["op_type"]] = counts.get(row["op_type"], 0) + 1
+        return {
+            "inventory_sha256": hashlib.sha256(canonical.encode("ascii")).hexdigest(),
+            "type_counts": dict(sorted(counts.items())),
+        }
 
     def _tox_manifest(self, root, maximum, include_linkage=False):
         try:
@@ -1391,14 +1433,14 @@ class OperatorControl:
             for operator in operators:
                 path = str(operator.path)
                 if operator is not root and not path.startswith(prefix + "/"):
-                    raise RuntimeError("subtree escaped root")
+                    raise AgentCommandError("tox_verification_failed", {"check": "load_shape"})
                 op_type = str(operator.OPType)
                 entry = self.operator_catalog.entries.get(op_type)
                 if entry is None or entry.get("status") not in {"supported", "conditional"}:
-                    raise RuntimeError("unsupported Operator type")
+                    raise self._tox_failure("operator_type", root, operator)
                 relative = "." if operator is root else path[len(prefix) + 1 :]
                 if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", str(operator.name)) is None:
-                    raise RuntimeError("unsafe Operator name")
+                    raise self._tox_failure("operator_name", root, operator)
                 row = {
                     "relative_path": relative,
                     "name": str(operator.name),
@@ -1425,10 +1467,10 @@ class OperatorControl:
             return rows
         except AgentCommandError as error:
             if error.code == "result_too_large":
-                raise AgentCommandError("tox_verification_failed") from error
+                raise self._tox_failure("operator_limit", root, limit=maximum) from error
             raise
         except Exception as error:
-            raise AgentCommandError("tox_verification_failed") from error
+            raise self._tox_failure("inspection", root) from error
 
     @staticmethod
     def _tox_parameter(parameters, name, default):
@@ -1441,26 +1483,38 @@ class OperatorControl:
             {**row, "name": name} if row["relative_path"] == "." else dict(row) for row in manifest
         ]
 
-    def _require_tox_snapshot(self, root):
+    def _require_tox_snapshot(self, root, maximum):
+        """Reject external TOX linkage and packed files.
+
+        A COMP links an external file only through a non-empty ``externaltox`` (and
+        ``subcompname`` selects inside it). ``enableexternaltox`` defaults to on in
+        TouchDesigner 2025 and is inert without a path, so it is not linkage.
+        """
         try:
-            for operator in self._bounded_subtree(root, 1000):
+            operators = self._bounded_subtree(root, maximum)
+        except AgentCommandError as error:
+            if error.code == "result_too_large":
+                raise self._tox_failure("operator_limit", root, limit=maximum) from error
+            raise
+        for operator in operators:
+            try:
                 if str(operator.family) != "COMP":
                     continue
                 parameters = getattr(operator, "par", None)
+                linked = None
                 for parameter_name in ("externaltox", "subcompname"):
                     parameter = getattr(parameters, parameter_name, None)
                     if parameter is not None and str(parameter.eval() or ""):
-                        raise RuntimeError("external TOX linkage")
-                enabled = getattr(parameters, "enableexternaltox", None)
-                if enabled is not None and bool(enabled.eval()):
-                    raise RuntimeError("external TOX linkage enabled")
+                        linked = parameter_name
+                        break
                 vfs = getattr(operator, "vfs", None)
-                if vfs is not None and len(vfs) != 0:
-                    raise RuntimeError("nonempty VFS")
-        except Exception as error:
-            if isinstance(error, AgentCommandError):
-                raise
-            raise AgentCommandError("tox_verification_failed") from error
+                packed = vfs is not None and len(vfs) != 0
+            except Exception as error:
+                raise self._tox_failure("inspection", root, operator) from error
+            if linked is not None:
+                raise self._tox_failure("external_tox", root, operator, parameter=linked)
+            if packed:
+                raise self._tox_failure("vfs", root, operator)
 
     def _destroy_exact(self, operator):
         path = str(operator.path)
@@ -2605,6 +2659,8 @@ class AgentExt:
         "project.metadata",
         "project.snapshot",
         "project.save",
+        "ops.tox.import:root_child",
+        "ops.tox.import:inventory_summary",
     )
 
     def __init__(self, owner_comp, operator_lookup=None, project_info=None, app_info=None):
@@ -2882,7 +2938,7 @@ class AgentExt:
             result = self._wire_value(self.execute_command(command))
         except AgentCommandError as error:
             status = "unknown" if error.code.endswith("_outcome_unknown") else "failed"
-            error_payload = self._outcome_error(error.code)
+            error_payload = self._outcome_error(error.code, error.details)
         except Exception:  # noqa: BLE001 - generic TD exceptions require effect classification
             if command["name"] in self.read_only_commands:
                 status = "failed"
@@ -2995,8 +3051,8 @@ class AgentExt:
         }
 
     @staticmethod
-    def _outcome_error(code):
-        return {"code": code, "message": code, "details": {}, "retryable": False}
+    def _outcome_error(code, details=None):
+        return {"code": code, "message": code, "details": dict(details or {}), "retryable": False}
 
     @classmethod
     def _wire_value(cls, value):

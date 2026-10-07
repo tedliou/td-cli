@@ -3,7 +3,12 @@ from typing import Any
 
 import pytest
 
-from td_cli.daemon.lifecycle import LifecycleBusy, LifecycleEffect, RequestLifecycle
+from td_cli.daemon.lifecycle import (
+    AdmissionRejected,
+    LifecycleBusy,
+    LifecycleEffect,
+    RequestLifecycle,
+)
 from td_cli.protocol import Command, RequestSnapshot
 
 INSTANCE_ID = "8cf81688-b9a4-4c39-9f92-31c77319c761"
@@ -428,5 +433,37 @@ async def test_synchronization_refines_unknown_from_matching_retained_outcome() 
         await effect(lifecycle, "outcome_recorded")
         persisted = await store.get(str(item["request_id"]))
         assert persisted is not None and persisted["status"] == "succeeded"
+    finally:
+        await lifecycle.close()
+
+
+@pytest.mark.asyncio
+async def test_optional_command_features_require_the_agent_to_advertise_them() -> None:
+    store = MemoryStore()
+    lifecycle = RequestLifecycle(store)
+    await lifecycle.start()
+    try:
+        await lifecycle.register(INSTANCE_ID, CONNECTION_ID, {"ops.tox.import"})
+        await effect(lifecycle, "registered")
+        snapshot = RequestSnapshot.pending(
+            request_id="018f47ec-7f3b-7a34-8f31-2ad70b6f6e01",
+            instance_id=INSTANCE_ID,
+            command=Command(
+                name="ops.tox.import",
+                input={
+                    "parent_path": "/project1/imports",
+                    "tox_path": r"C:\approved\asset.tox",
+                    "allowlist_root": r"C:\approved",
+                    "target_name": "asset",
+                    "trusted": True,
+                    "root_child": "asset",
+                },
+            ),
+            submitted_at="2026-09-01T00:00:01.000Z",
+        ).model_dump(mode="json")
+        with pytest.raises(AdmissionRejected) as rejected:
+            await lifecycle.submit(snapshot)
+        assert rejected.value.code == "command_unsupported"
+        assert store.requests == {}
     finally:
         await lifecycle.close()
