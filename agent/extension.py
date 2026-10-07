@@ -1159,8 +1159,10 @@ class OperatorControl:
             stage = self._create_tox_stage(parent, "stage")
             loaded_root = self._load_one_tox_root(stage, source["bytes"])
             staged_root = self._select_tox_root(loaded_root, payload.get("root_child"))
-            staged_manifest = self._tox_manifest(staged_root, payload["max_operators"])
-            self._require_tox_snapshot(staged_root, payload["max_operators"])
+            staged_manifest = self._tox_manifest(
+                staged_root, payload["max_operators"], base=loaded_root
+            )
+            self._require_tox_snapshot(loaded_root, payload["max_operators"])
             self._require_exact_stage_root(stage, loaded_root)
             current = self.operator_lookup(destination_path)
             if previous is None:
@@ -1170,7 +1172,7 @@ class OperatorControl:
                 raise AgentCommandError("tox_import_outcome_unknown")
             if previous is not None:
                 previous_manifest = self._tox_manifest(
-                    previous, payload["max_operators"], include_linkage=True
+                    previous, payload["max_operators"], include_linkage=True, subject="destination"
                 )
                 try:
                     backup = bytearray(previous.saveByteArray())
@@ -1198,15 +1200,20 @@ class OperatorControl:
             installed = parent.copy(staged_root, name=payload["target_name"], includeDocked=False)
             if self.operator_lookup(destination_path) is not installed:
                 raise RuntimeError("installed identity mismatch")
-            installed_manifest = self._tox_manifest(installed, payload["max_operators"])
+            installed_manifest = self._tox_manifest(
+                installed, payload["max_operators"], subject="installed"
+            )
             if installed_manifest != self._manifest_with_root_name(
                 staged_manifest, payload["target_name"]
             ):
                 raise RuntimeError("installed manifest mismatch")
-            self._require_tox_snapshot(installed, payload["max_operators"])
+            self._require_tox_snapshot(installed, payload["max_operators"], subject="installed")
             if self.operator_lookup(destination_path) is not installed:
                 raise AgentCommandError("tox_import_outcome_unknown")
-            if self._tox_manifest(installed, payload["max_operators"]) != installed_manifest:
+            if (
+                self._tox_manifest(installed, payload["max_operators"], subject="installed")
+                != installed_manifest
+            ):
                 raise AgentCommandError("tox_import_outcome_unknown")
             if self.operator_lookup(destination_path) is not installed:
                 raise AgentCommandError("tox_import_outcome_unknown")
@@ -1386,7 +1393,9 @@ class OperatorControl:
     def _require_exact_stage_root(self, stage, root):
         children = list(stage.children)
         if len(children) != 1 or children[0] is not root:
-            raise AgentCommandError("tox_verification_failed", {"check": "load_shape"})
+            raise AgentCommandError(
+                "tox_verification_failed", {"check": "load_shape", "subject": "source"}
+            )
 
     @staticmethod
     def _select_tox_root(loaded_root, root_child):
@@ -1396,17 +1405,23 @@ class OperatorControl:
         matches = [child for child in loaded_root.children if str(child.name) == root_child]
         if len(matches) != 1 or str(matches[0].family) != "COMP":
             raise AgentCommandError(
-                "tox_verification_failed", {"check": "root_child", "relative_path": root_child}
+                "tox_verification_failed",
+                {"check": "root_child", "subject": "source", "relative_path": root_child},
             )
         return matches[0]
 
     @staticmethod
-    def _tox_failure(check, root, operator=None, **facts):
-        details = {"check": check}
+    def _tox_failure(check, base, operator=None, *, subject="source", **facts):
+        """Describe a failed check; ``relative_path`` is relative to ``base``.
+
+        ``subject`` is ``source`` (the loaded TOX, relative to its root), ``destination``
+        (the existing target being replaced), or ``installed`` (the copy just made).
+        """
+        details = {"check": check, "subject": subject}
         if operator is not None:
-            prefix = str(root.path).rstrip("/")
+            prefix = str(base.path).rstrip("/")
             path = str(operator.path)
-            relative = "." if operator is root else path[len(prefix) + 1 :]
+            relative = "." if operator is base else path[len(prefix) + 1 :]
             details["relative_path"] = relative[:512]
             details["op_type"] = str(operator.OPType)[:128]
         details.update(facts)
@@ -1425,7 +1440,8 @@ class OperatorControl:
             "type_counts": dict(sorted(counts.items())),
         }
 
-    def _tox_manifest(self, root, maximum, include_linkage=False):
+    def _tox_manifest(self, root, maximum, include_linkage=False, subject="source", base=None):
+        base = root if base is None else base
         try:
             operators = self._bounded_subtree(root, maximum)
             prefix = str(root.path).rstrip("/")
@@ -1433,14 +1449,14 @@ class OperatorControl:
             for operator in operators:
                 path = str(operator.path)
                 if operator is not root and not path.startswith(prefix + "/"):
-                    raise AgentCommandError("tox_verification_failed", {"check": "load_shape"})
+                    raise self._tox_failure("load_shape", base, subject=subject)
                 op_type = str(operator.OPType)
                 entry = self.operator_catalog.entries.get(op_type)
                 if entry is None or entry.get("status") not in {"supported", "conditional"}:
-                    raise self._tox_failure("operator_type", root, operator)
+                    raise self._tox_failure("operator_type", base, operator, subject=subject)
                 relative = "." if operator is root else path[len(prefix) + 1 :]
                 if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", str(operator.name)) is None:
-                    raise self._tox_failure("operator_name", root, operator)
+                    raise self._tox_failure("operator_name", base, operator, subject=subject)
                 row = {
                     "relative_path": relative,
                     "name": str(operator.name),
@@ -1467,10 +1483,12 @@ class OperatorControl:
             return rows
         except AgentCommandError as error:
             if error.code == "result_too_large":
-                raise self._tox_failure("operator_limit", root, limit=maximum) from error
+                raise self._tox_failure(
+                    "operator_limit", base, subject=subject, limit=maximum
+                ) from error
             raise
         except Exception as error:
-            raise self._tox_failure("inspection", root) from error
+            raise self._tox_failure("inspection", base, subject=subject) from error
 
     @staticmethod
     def _tox_parameter(parameters, name, default):
@@ -1483,19 +1501,25 @@ class OperatorControl:
             {**row, "name": name} if row["relative_path"] == "." else dict(row) for row in manifest
         ]
 
-    def _require_tox_snapshot(self, root, maximum):
-        """Reject external TOX linkage and packed files.
+    def _require_tox_snapshot(self, root, maximum, subject="source"):
+        """Reject external TOX linkage and packed files anywhere beneath ``root``.
 
-        A COMP links an external file only through a non-empty ``externaltox`` (and
-        ``subcompname`` selects inside it). ``enableexternaltox`` defaults to on in
-        TouchDesigner 2025 and is inert without a path, so it is not linkage.
+        A COMP links an external file only through ``externaltox`` (and ``subcompname``
+        selects inside it). Either is linkage when its value is non-empty, or when it is
+        driven by an expression, export, or bind (or keeps one), since it can become
+        non-empty later. ``enableexternaltox`` defaults to on in TouchDesigner 2025 and is
+        inert without a path, so it is not linkage.
         """
         try:
             operators = self._bounded_subtree(root, maximum)
         except AgentCommandError as error:
             if error.code == "result_too_large":
-                raise self._tox_failure("operator_limit", root, limit=maximum) from error
+                raise self._tox_failure(
+                    "operator_limit", root, subject=subject, limit=maximum
+                ) from error
             raise
+        except Exception as error:
+            raise self._tox_failure("inspection", root, subject=subject) from error
         for operator in operators:
             try:
                 if str(operator.family) != "COMP":
@@ -1504,17 +1528,36 @@ class OperatorControl:
                 linked = None
                 for parameter_name in ("externaltox", "subcompname"):
                     parameter = getattr(parameters, parameter_name, None)
-                    if parameter is not None and str(parameter.eval() or ""):
-                        linked = parameter_name
+                    if parameter is None:
+                        continue
+                    mode = (
+                        self._parameter_mode(parameter)
+                        if hasattr(parameter, "mode")
+                        else "constant"
+                    )
+                    if (
+                        mode != "constant"
+                        or str(getattr(parameter, "expr", "") or "")
+                        or str(getattr(parameter, "bindExpr", "") or "")
+                        or str(parameter.eval() or "")
+                    ):
+                        linked = (parameter_name, mode)
                         break
                 vfs = getattr(operator, "vfs", None)
                 packed = vfs is not None and len(vfs) != 0
             except Exception as error:
-                raise self._tox_failure("inspection", root, operator) from error
+                raise self._tox_failure("inspection", root, operator, subject=subject) from error
             if linked is not None:
-                raise self._tox_failure("external_tox", root, operator, parameter=linked)
+                raise self._tox_failure(
+                    "external_tox",
+                    root,
+                    operator,
+                    subject=subject,
+                    parameter=linked[0],
+                    mode=linked[1],
+                )
             if packed:
-                raise self._tox_failure("vfs", root, operator)
+                raise self._tox_failure("vfs", root, operator, subject=subject)
 
     def _destroy_exact(self, operator):
         path = str(operator.path)

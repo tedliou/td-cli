@@ -442,8 +442,6 @@ def test_typed_parameter_cli_commands_reach_submission_seam(monkeypatch, argv, e
                     "replace": True,
                     "max_file_bytes": 1024,
                     "max_operators": 20,
-                    "root_child": None,
-                    "inventory": "full",
                 },
             },
         ),

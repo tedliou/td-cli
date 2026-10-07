@@ -356,8 +356,11 @@ class ImportToxInput(StrictModel):
     replace: bool = False
     max_file_bytes: int = Field(default=MAX_TOX_FILE_BYTES, ge=1, le=MAX_TOX_FILE_BYTES)
     max_operators: int = Field(default=256, ge=1, le=MAX_TOX_OPERATORS)
-    root_child: str | None = None
-    inventory: Literal["full", "summary"] = "full"
+    # Defaults are omitted from the wire so a newer CLI still talks to an older Daemon.
+    root_child: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    inventory: Literal["full", "summary"] = Field(
+        default="full", exclude_if=lambda value: value == "full"
+    )
 
     _parent_path = field_validator("parent_path")(_valid_operator_path)
     _tox_path = field_validator("tox_path")(_valid_local_windows_path)

@@ -437,33 +437,68 @@ async def test_synchronization_refines_unknown_from_matching_retained_outcome() 
         await lifecycle.close()
 
 
+def tox_import_request(**options: object) -> dict[str, Any]:
+    return RequestSnapshot.pending(
+        request_id="018f47ec-7f3b-7a34-8f31-2ad70b6f6e01",
+        instance_id=INSTANCE_ID,
+        command=Command(
+            name="ops.tox.import",
+            input={
+                "parent_path": "/project1/imports",
+                "tox_path": r"C:\approved\asset.tox",
+                "allowlist_root": r"C:\approved",
+                "target_name": "asset",
+                "trusted": True,
+                **options,
+            },
+        ),
+        submitted_at="2026-09-01T00:00:01.000Z",
+    ).model_dump(mode="json")
+
+
+TOX_FEATURES = {"ops.tox.import:root_child", "ops.tox.import:inventory_summary"}
+
+
 @pytest.mark.asyncio
-async def test_optional_command_features_require_the_agent_to_advertise_them() -> None:
+@pytest.mark.parametrize(
+    "options",
+    [{"root_child": "asset"}, {"inventory": "summary", "max_operators": 5000}],
+)
+async def test_optional_command_features_require_the_agent_to_advertise_them(
+    options: dict[str, object],
+) -> None:
     store = MemoryStore()
     lifecycle = RequestLifecycle(store)
     await lifecycle.start()
     try:
         await lifecycle.register(INSTANCE_ID, CONNECTION_ID, {"ops.tox.import"})
         await effect(lifecycle, "registered")
-        snapshot = RequestSnapshot.pending(
-            request_id="018f47ec-7f3b-7a34-8f31-2ad70b6f6e01",
-            instance_id=INSTANCE_ID,
-            command=Command(
-                name="ops.tox.import",
-                input={
-                    "parent_path": "/project1/imports",
-                    "tox_path": r"C:\approved\asset.tox",
-                    "allowlist_root": r"C:\approved",
-                    "target_name": "asset",
-                    "trusted": True,
-                    "root_child": "asset",
-                },
-            ),
-            submitted_at="2026-09-01T00:00:01.000Z",
-        ).model_dump(mode="json")
         with pytest.raises(AdmissionRejected) as rejected:
-            await lifecycle.submit(snapshot)
+            await lifecycle.submit(tox_import_request(**options))
         assert rejected.value.code == "command_unsupported"
         assert store.requests == {}
+    finally:
+        await lifecycle.close()
+
+
+@pytest.mark.asyncio
+async def test_queued_feature_request_fails_when_the_agent_returns_without_the_feature() -> None:
+    store = MemoryStore()
+    lifecycle = RequestLifecycle(store)
+    await lifecycle.start()
+    item = tox_import_request(root_child="asset")
+    try:
+        await lifecycle.register(INSTANCE_ID, CONNECTION_ID, {"ops.tox.import", *TOX_FEATURES})
+        await effect(lifecycle, "registered")
+        await lifecycle.submit(item)
+        await lifecycle.disconnect(INSTANCE_ID, CONNECTION_ID)
+        downgraded = "5c6e1f0a-3b7d-4e2a-9c41-0d8f2b6a7e15"
+        await lifecycle.register(INSTANCE_ID, downgraded, {"ops.tox.import"})
+        await effect(lifecycle, "registered")
+        await lifecycle.synchronized(INSTANCE_ID, downgraded)
+        persisted = await store.get(str(item["request_id"]))
+        assert persisted is not None and persisted["status"] == "failed"
+        assert persisted["error"]["code"] == "command_unsupported"
+        assert persisted.get("dispatched_at") is None
     finally:
         await lifecycle.close()

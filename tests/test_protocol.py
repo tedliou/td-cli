@@ -845,8 +845,6 @@ def test_trusted_tox_import_has_a_strict_bounded_non_batchable_contract() -> Non
         "replace": True,
         "max_file_bytes": 1024,
         "max_operators": 20,
-        "root_child": None,
-        "inventory": "full",
     }
     assert "ops.tox.import" not in COMMAND_CATALOG.batch_names
 
@@ -981,3 +979,20 @@ def test_parameters_list_is_batchable() -> None:
 def test_v011_commands_reject_unsafe_names_bounds_and_coercion(payload) -> None:
     with pytest.raises(ValidationError):
         Command.model_validate(payload)
+
+
+def test_default_tox_import_options_stay_off_the_wire_for_older_daemons() -> None:
+    plain = Command.model_validate(
+        {"name": "ops.tox.import", "input": tox_import_input()}
+    ).model_dump(mode="json")
+    featured = Command.model_validate(
+        {
+            "name": "ops.tox.import",
+            "input": tox_import_input(root_child="asset", inventory="summary"),
+        }
+    ).model_dump(mode="json")
+
+    assert "root_child" not in plain["input"] and "inventory" not in plain["input"]
+    assert featured["input"]["root_child"] == "asset"
+    assert featured["input"]["inventory"] == "summary"
+    assert Command.model_validate(plain).model_dump(mode="json") == plain
