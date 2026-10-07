@@ -6,7 +6,7 @@ license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "LICENSES/*"]
 requires-python = ">=3.11,<3.12"
 dependencies = [
   "fastapi>=0.116,<1",
-  "pydantic>=2.11,<3",
+  "pydantic>=2.12,<3",
   "python-socketio>=5.13,<6",
   "typer>=0.16,<1",
   "uvicorn>=0.35,<1",

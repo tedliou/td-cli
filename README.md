@@ -418,7 +418,10 @@ apply. Parameter values and expressions are never returned.
 
 Official Palette TOX files wrap the component together with an `icon`
 Operator. `--root-child NAME` installs only the named direct child COMP of the
-loaded root, as a Palette drag does. Components above 1000 Operators need
+loaded root, as a Palette drag does. `--max-operators` bounds the whole loaded
+TOX, including the wrapper and siblings that `--root-child` discards (4080 for
+kantanMapper, whose installed component has 4077), and an `operator_limit`
+failure reports that bound. Components above 1000 Operators need
 `--inventory summary` (maximum 10000 Operators). It returns `type_counts` and
 `inventory_sha256` in place of the full `inventory`: the SHA-256 of the
 canonical JSON (sorted keys, no whitespace, ASCII) of the rows that `full`

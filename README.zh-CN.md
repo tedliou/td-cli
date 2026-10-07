@@ -351,7 +351,9 @@ VFS 检查涵盖整个载入的 TOX，包括 `--root-child` 舍弃的外层。`t
 `limit`。不回传参数值或 expression 内容。
 
 官方 Palette TOX 把组件与 `icon` Operator 包在一起。`--root-child NAME` 只安装载入 root 下同名
-的直属 COMP，与 Palette 拖拽相同。超过 1000 个 Operator 的组件需要 `--inventory summary`（最高
+的直属 COMP，与 Palette 拖拽相同。`--max-operators` 限制整个载入的 TOX，包括 `--root-child` 舍弃的
+外层与兄弟节点（kantanMapper 为 4080，安装后的组件为 4077），`operator_limit` 回报的就是这个上限。
+超过 1000 个 Operator 的组件需要 `--inventory summary`（最高
 10000），结果以 `type_counts` 与 `inventory_sha256` 取代完整 `inventory`。后者是 `full` 会回传的
 各行（`relative_path`、`name`、`op_type`、`family`，依 `relative_path` 排序，root 名称为目标名称）
 以 canonical JSON（排序 key、无空白、ASCII）计算的 SHA-256。导入仍以完整 inventory 验证。只有当
