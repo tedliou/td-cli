@@ -1,12 +1,12 @@
 {
   "artifact": "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\E--collective-dream-factory\\0974350d-bca5-4790-a10a-84e80c120b13\\scratchpad\\build\\out\\td-agent.tox",
-  "artifact_sha256": "173a65da98f224f6ae0e7cc782f963dd8edd9aed409793f7c00a7efdd214efff",
+  "artifact_sha256": "fb07649262ed1a91875a2c04a8829751384a7acddaa6f801177fb13b26bf3811",
   "project": "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\E--collective-dream-factory\\0974350d-bca5-4790-a10a-84e80c120b13\\scratchpad\\accept\\proj.toe",
   "port": 19982,
-  "touchdesigner_pid": 24180,
+  "touchdesigner_pid": 13640,
   "touchdesigner_ready": {
     "before_redirect": {
-      "pid": 24180,
+      "pid": 13640,
       "build": "2025.32050",
       "localappdata": "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\E--collective-dream-factory\\0974350d-bca5-4790-a10a-84e80c120b13\\scratchpad\\accept\\work\\localappdata",
       "agent_path": "/project1/td_agent",
@@ -16,7 +16,7 @@
       "socket_url": "http://127.0.0.1:9982"
     },
     "after_redirect": {
-      "pid": 24180,
+      "pid": 13640,
       "build": "2025.32050",
       "localappdata": "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\E--collective-dream-factory\\0974350d-bca5-4790-a10a-84e80c120b13\\scratchpad\\accept\\work\\localappdata",
       "agent_path": "/project1/td_agent",
@@ -27,9 +27,9 @@
     }
   },
   "instance": {
-    "instance_id": "d594558a-872b-462f-80ef-403d26cdd633",
-    "connection_id": "8dda8aa9-9386-48b3-8e56-555dffdb3434",
-    "selector": "d594",
+    "instance_id": "b2d749bd-13ad-4f32-96ea-b059593c6ab6",
+    "connection_id": "dcecd21d-c24c-4a2b-90e5-75a7c984ff08",
+    "selector": "b2d7",
     "status": "online",
     "agent_version": "0.9.0",
     "protocol_version": 3,
@@ -73,7 +73,7 @@
       "project.save",
       "project.snapshot"
     ],
-    "last_heartbeat_at": "2026-10-07T12:36:43.722Z",
+    "last_heartbeat_at": "2026-10-07T12:57:02.555Z",
     "offline_expires_at": null
   },
   "rejected": {
@@ -81,7 +81,8 @@
       "code": "tox_verification_failed",
       "details": {
         "check": "operator_limit",
-        "limit": 10
+        "limit": 10,
+        "subject": "source"
       },
       "message": "tox_verification_failed",
       "retryable": false
@@ -90,7 +91,8 @@
       "code": "tox_verification_failed",
       "details": {
         "check": "root_child",
-        "relative_path": "missingChild"
+        "relative_path": "missingChild",
+        "subject": "source"
       },
       "message": "tox_verification_failed",
       "retryable": false
@@ -99,7 +101,8 @@
       "code": "tox_verification_failed",
       "details": {
         "check": "operator_limit",
-        "limit": 256
+        "limit": 256,
+        "subject": "source"
       },
       "message": "tox_verification_failed",
       "retryable": false
@@ -108,9 +111,24 @@
       "code": "tox_verification_failed",
       "details": {
         "check": "external_tox",
+        "mode": "constant",
         "op_type": "baseCOMP",
         "parameter": "externaltox",
-        "relative_path": "linked"
+        "relative_path": "linked",
+        "subject": "source"
+      },
+      "message": "tox_verification_failed",
+      "retryable": false
+    },
+    "wrapper_expression_linkage": {
+      "code": "tox_verification_failed",
+      "details": {
+        "check": "external_tox",
+        "mode": "expression",
+        "op_type": "baseCOMP",
+        "parameter": "externaltox",
+        "relative_path": "sibling",
+        "subject": "source"
       },
       "message": "tox_verification_failed",
       "retryable": false
@@ -257,8 +275,8 @@
       "wireframeMAT": 9,
       "wireframeSOP": 1
     },
-    "count_matches_palette_listing": false,
-    "palette_listing_count": 1647
+    "count_matches_palette_listing": true,
+    "palette_listing_count": 4077
   },
   "custom_parameters": {
     "/project1/projection/projectorBlend": [
@@ -550,22 +568,23 @@
     {
       "step": "create parent",
       "command": "ops.create",
-      "request_id": "01a1165d-bbed-7f34-8402-fd3b1a1e881d",
+      "request_id": "01a11670-5533-76b5-82df-8e0276fd3198",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 125.0,
+      "elapsed_ms": 94.0,
       "result_bytes": 117
     },
     {
       "step": "projectorBlend over bound",
       "command": "ops.tox.import",
-      "request_id": "01a1165d-bc68-7d15-a7a0-4660c1b45c3f",
+      "request_id": "01a11670-559d-7409-9f6e-6c5ba7d3028f",
       "status": "failed",
       "error": {
         "code": "tox_verification_failed",
         "details": {
           "check": "operator_limit",
-          "limit": 10
+          "limit": 10,
+          "subject": "source"
         },
         "message": "tox_verification_failed",
         "retryable": false
@@ -576,105 +595,184 @@
     {
       "step": "missing root child",
       "command": "ops.tox.import",
-      "request_id": "01a1165d-bce3-7fdf-9e43-bb5075e1a768",
+      "request_id": "01a11670-560f-7005-bdc3-e4c2ebb5ee13",
       "status": "failed",
       "error": {
         "code": "tox_verification_failed",
         "details": {
           "check": "root_child",
-          "relative_path": "missingChild"
+          "relative_path": "missingChild",
+          "subject": "source"
         },
         "message": "tox_verification_failed",
         "retryable": false
       },
-      "elapsed_ms": 110.0,
+      "elapsed_ms": 109.0,
       "result_bytes": 4
     },
     {
       "step": "linked source",
       "command": "ops.create",
-      "request_id": "01a1165d-bd4f-7838-b13f-41f8fb6e470b",
+      "request_id": "01a11670-5683-7a4a-a275-f0531a29d08d",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 129
     },
     {
       "step": "linked child",
       "command": "ops.create",
-      "request_id": "01a1165d-bdc3-7502-9fe6-acea7c274930",
+      "request_id": "01a11670-56f8-7601-a677-925419ffa2eb",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 94.0,
       "result_bytes": 126
     },
     {
       "step": "set externaltox",
       "command": "parameters.set",
-      "request_id": "01a1165d-be30-7f74-bfdb-312bb3395de3",
+      "request_id": "01a11670-5762-7eae-a071-4ae105af84e2",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 110.0,
+      "elapsed_ms": 109.0,
       "result_bytes": 197
     },
     {
       "step": "export linked",
       "command": "binary.export",
-      "request_id": "01a1165d-be9d-7d6b-bdd8-ca83f5a5e331",
+      "request_id": "01a11670-57cc-73f5-a580-57f2e351070a",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 110.0,
       "result_bytes": 589
     },
     {
       "step": "destroy linked source",
       "command": "ops.destroy",
-      "request_id": "01a1165d-bf08-73e1-8d13-c6c8a78c3ed1",
+      "request_id": "01a11670-5834-7578-9938-a6ca4afd0a5a",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 110.0,
+      "elapsed_ms": 109.0,
       "result_bytes": 108
     },
     {
       "step": "external linkage",
       "command": "ops.tox.import",
-      "request_id": "01a1165d-bf79-71aa-88f8-b3e32d0392fa",
+      "request_id": "01a11670-589f-7763-92d6-ec789fce9f34",
       "status": "failed",
       "error": {
         "code": "tox_verification_failed",
         "details": {
           "check": "external_tox",
+          "mode": "constant",
           "op_type": "baseCOMP",
           "parameter": "externaltox",
-          "relative_path": "linked"
+          "relative_path": "linked",
+          "subject": "source"
         },
         "message": "tox_verification_failed",
         "retryable": false
       },
+      "elapsed_ms": 109.0,
+      "result_bytes": 4
+    },
+    {
+      "step": "wrapper source",
+      "command": "ops.create",
+      "request_id": "01a11670-590a-77b8-9ecc-5fb2ab82ad36",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 110.0,
+      "result_bytes": 123
+    },
+    {
+      "step": "wrapper inner",
+      "command": "ops.create",
+      "request_id": "01a11670-5977-70d1-878a-e4946984ad30",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 93.0,
+      "result_bytes": 121
+    },
+    {
+      "step": "wrapper sibling",
+      "command": "ops.create",
+      "request_id": "01a11670-59db-7eae-83f2-1254dff8839f",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 110.0,
+      "result_bytes": 125
+    },
+    {
+      "step": "wrapper externaltox expression",
+      "command": "parameters.set",
+      "request_id": "01a11670-5a4f-7802-af81-e6c2b0626922",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 140.0,
+      "result_bytes": 172
+    },
+    {
+      "step": "export wrapper",
+      "command": "binary.export",
+      "request_id": "01a11670-5ad3-7794-87f4-7dcbb095397e",
+      "status": "succeeded",
+      "error": null,
       "elapsed_ms": 125.0,
+      "result_bytes": 586
+    },
+    {
+      "step": "destroy wrapper source",
+      "command": "ops.destroy",
+      "request_id": "01a11670-5b4d-725f-9a91-97a400225e31",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 125.0,
+      "result_bytes": 105
+    },
+    {
+      "step": "wrapper expression linkage",
+      "command": "ops.tox.import",
+      "request_id": "01a11670-5bca-7f27-8517-53239104b6ff",
+      "status": "failed",
+      "error": {
+        "code": "tox_verification_failed",
+        "details": {
+          "check": "external_tox",
+          "mode": "expression",
+          "op_type": "baseCOMP",
+          "parameter": "externaltox",
+          "relative_path": "sibling",
+          "subject": "source"
+        },
+        "message": "tox_verification_failed",
+        "retryable": false
+      },
+      "elapsed_ms": 110.0,
       "result_bytes": 4
     },
     {
       "step": "kantanMapper full inventory",
       "command": "ops.tox.import",
-      "request_id": "01a1165d-bff0-752e-9ed0-25123339ba7d",
+      "request_id": "01a11670-5c3d-7348-8af2-d81b3832113e",
       "status": "failed",
       "error": {
         "code": "tox_verification_failed",
         "details": {
           "check": "operator_limit",
-          "limit": 256
+          "limit": 256,
+          "subject": "source"
         },
         "message": "tox_verification_failed",
         "retryable": false
       },
-      "elapsed_ms": 593.0,
+      "elapsed_ms": 687.0,
       "result_bytes": 4
     },
     {
       "step": "children after rejections",
       "command": "ops.children",
-      "request_id": "01a1165d-c248-7b73-9a76-d0b3d7ddfc23",
+      "request_id": "01a11670-5ef2-7ed5-971a-678359a79f29",
       "status": "succeeded",
       "error": null,
       "elapsed_ms": 328.0,
@@ -683,43 +781,43 @@
     {
       "step": "import projectorBlend",
       "command": "ops.tox.import",
-      "request_id": "01a1165d-c38c-73b0-9f37-8eed158c8672",
+      "request_id": "01a11670-603a-72c9-a8fd-e2bdab5c9c17",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 110.0,
+      "elapsed_ms": 188.0,
       "result_bytes": 5296
     },
     {
       "step": "import kantanMapper",
       "command": "ops.tox.import",
-      "request_id": "01a1165d-c42a-7ff8-8fef-1666f72e41cc",
+      "request_id": "01a11670-617b-74b4-be96-9959c8c3dcd4",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 953.0,
+      "elapsed_ms": 875.0,
       "result_bytes": 2405
     },
     {
       "step": "list /project1/projection/projectorBlend",
       "command": "parameters.list",
-      "request_id": "01a1165d-c816-781c-b56b-6f1ac1ab8e6d",
+      "request_id": "01a11670-89a6-7ad5-9114-a36efe1b9897",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 406.0,
+      "elapsed_ms": 109.0,
       "result_bytes": 96367
     },
     {
       "step": "list /project1/projection/kantanMapper",
       "command": "parameters.list",
-      "request_id": "01a1165d-c9a7-795c-b99a-ea63ac95c9fd",
+      "request_id": "01a11670-8a1a-71ad-81dd-a4d406ba6c2f",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 88761
     },
     {
       "step": "set Projector1overlap2",
       "command": "parameters.set",
-      "request_id": "01a1165d-ca18-790e-9dc5-923863ab7579",
+      "request_id": "01a11670-8a8d-74b5-978a-b81d6eba4369",
       "status": "succeeded",
       "error": null,
       "elapsed_ms": 110.0,
@@ -728,7 +826,7 @@
     {
       "step": "get Projector1overlap2",
       "command": "parameters.get",
-      "request_id": "01a1165d-ca88-7e98-a473-e7687ec19d5f",
+      "request_id": "01a11670-8afb-7cd2-b3a5-8bfd6e52629d",
       "status": "succeeded",
       "error": null,
       "elapsed_ms": 109.0,
@@ -737,25 +835,25 @@
     {
       "step": "set w",
       "command": "parameters.set",
-      "request_id": "01a1165d-caf2-72c1-aa32-ac7860b6c85a",
-      "status": "succeeded",
-      "error": null,
-      "elapsed_ms": 125.0,
-      "result_bytes": 163
-    },
-    {
-      "step": "get w",
-      "command": "parameters.get",
-      "request_id": "01a1165d-cb67-7aea-866b-1064113508e2",
+      "request_id": "01a11670-8b69-74ab-936d-ac7a0418534a",
       "status": "succeeded",
       "error": null,
       "elapsed_ms": 109.0,
       "result_bytes": 163
     },
     {
+      "step": "get w",
+      "command": "parameters.get",
+      "request_id": "01a11670-8bd7-7ee8-8b47-d60230f2350c",
+      "status": "succeeded",
+      "error": null,
+      "elapsed_ms": 125.0,
+      "result_bytes": 163
+    },
+    {
       "step": "set h",
       "command": "parameters.set",
-      "request_id": "01a1165d-cbd6-7128-8305-819ce646e3d4",
+      "request_id": "01a11670-8c53-75ce-86b2-cc8f75c03d60",
       "status": "succeeded",
       "error": null,
       "elapsed_ms": 110.0,
@@ -764,7 +862,7 @@
     {
       "step": "get h",
       "command": "parameters.get",
-      "request_id": "01a1165d-cc4e-729b-a4cb-41b2a099e8e5",
+      "request_id": "01a11670-8cc0-78e7-b8b0-ded3cacb98dc",
       "status": "succeeded",
       "error": null,
       "elapsed_ms": 109.0,
@@ -773,16 +871,16 @@
     {
       "step": "children /project1/projection/projectorBlend",
       "command": "ops.children",
-      "request_id": "01a1165d-ccbd-7c23-b0da-b241860d04e7",
+      "request_id": "01a11670-8d32-7374-bf97-8ce3f67f64f0",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 125.0,
+      "elapsed_ms": 109.0,
       "result_bytes": 101
     },
     {
       "step": "children /project1/projection/kantanMapper",
       "command": "ops.children",
-      "request_id": "01a1165d-cd33-77fc-b6ba-94ccc6b3f9de",
+      "request_id": "01a11670-8d9d-7d34-aabe-81f79f3ef8be",
       "status": "succeeded",
       "error": null,
       "elapsed_ms": 110.0,
@@ -791,7 +889,7 @@
     {
       "step": "create source",
       "command": "ops.create",
-      "request_id": "01a1165d-cda3-7d7c-93db-e4cccae8eeeb",
+      "request_id": "01a11670-8e0c-732a-8c70-3d08e9730801",
       "status": "succeeded",
       "error": null,
       "elapsed_ms": 109.0,
@@ -800,34 +898,34 @@
     {
       "step": "create sink",
       "command": "ops.create",
-      "request_id": "01a1165d-ce0f-7621-bd89-76c658c58a97",
+      "request_id": "01a11670-8e7f-735a-bca7-7179f3448ae7",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 110.0,
       "result_bytes": 114
     },
     {
       "step": "kantan out1 -> blend",
       "command": "ops.connect",
-      "request_id": "01a1165d-ce7e-7a81-8302-93dbc7d413d3",
+      "request_id": "01a11670-8eea-7829-8572-c121ecfb5016",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 110.0,
+      "elapsed_ms": 109.0,
       "result_bytes": 197
     },
     {
       "step": "blend -> sink",
       "command": "ops.connect",
-      "request_id": "01a1165d-cef1-79fb-bb1e-ca1421e8d200",
+      "request_id": "01a11670-8f57-716b-a2af-2a7b7e18744e",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 109.0,
       "result_bytes": 189
     },
     {
       "step": "disconnect kantan",
       "command": "ops.disconnect",
-      "request_id": "01a1165d-cf5c-7e51-b574-6e0116cf2e44",
+      "request_id": "01a11670-8fc8-7cdf-ba20-b8c46ff0aa03",
       "status": "succeeded",
       "error": null,
       "elapsed_ms": 125.0,
@@ -836,34 +934,34 @@
     {
       "step": "source -> blend",
       "command": "ops.connect",
-      "request_id": "01a1165d-cfd5-7d03-a074-a9028e62ba4b",
+      "request_id": "01a11670-9039-70eb-aede-8b496830ec0e",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 110.0,
       "result_bytes": 191
     },
     {
       "step": "connections",
       "command": "ops.connections",
-      "request_id": "01a1165d-d043-76cc-960d-3fc969e7a96a",
+      "request_id": "01a11670-90a7-71d2-8ed9-71fa3f0cf9a7",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 125.0,
+      "elapsed_ms": 109.0,
       "result_bytes": 329
     },
     {
       "step": "inspect blend out1",
       "command": "ops.inspect",
-      "request_id": "01a1165d-d0b6-78aa-a44a-f22ef0a49670",
+      "request_id": "01a11670-9116-7c4c-9dad-3bfda6eae25b",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 110.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 516
     },
     {
       "step": "inspect kantan out1",
       "command": "ops.inspect",
-      "request_id": "01a1165d-d128-7d70-965a-5332a8701489",
+      "request_id": "01a11670-918f-79a0-aa53-7e249af6ca2f",
       "status": "succeeded",
       "error": null,
       "elapsed_ms": 109.0,
@@ -872,7 +970,7 @@
     {
       "step": "destroy projectorBlend",
       "command": "ops.destroy",
-      "request_id": "01a1165d-d192-7397-a18f-99e39254d7a0",
+      "request_id": "01a11670-9206-7039-857e-ea6bdf296c09",
       "status": "succeeded",
       "error": null,
       "elapsed_ms": 110.0,
@@ -881,7 +979,7 @@
     {
       "step": "destroy kantanMapper",
       "command": "ops.destroy",
-      "request_id": "01a1165d-d207-7e8c-a71e-2f6dbf698de0",
+      "request_id": "01a11670-926f-7298-847c-e28d465f5b21",
       "status": "failed",
       "error": {
         "code": "result_too_large",
@@ -895,7 +993,7 @@
   ],
   "touchdesigner_exit_code": 0,
   "td-final": {
-    "pid": 24180,
+    "pid": 13640,
     "build": "2025.32050",
     "localappdata": "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\E--collective-dream-factory\\0974350d-bca5-4790-a10a-84e80c120b13\\scratchpad\\accept\\work\\localappdata",
     "agent_path": "/project1/td_agent",

@@ -21,6 +21,7 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -51,16 +52,30 @@ def _wait_for(predicate, seconds: float, what: str) -> Any:
     raise TimeoutError(f"timed out waiting for {what}")
 
 
-def _palette_listing(work: Path, name: str) -> list[str]:
-    """Relative paths of the same-named inner component, from the vendor TOX expansion."""
-    expanded = work / "expanded"
-    expanded.mkdir(parents=True, exist_ok=True)
-    copy = expanded / f"{name}.tox"
-    shutil.copyfile(PALETTE / "Mapping" / f"{name}.tox", copy)
-    subprocess.run(
-        [str(TOEEXPAND), copy.name], cwd=expanded, capture_output=True, timeout=120, check=False
-    )
-    toc = (expanded / f"{name}.tox.toc").read_text(encoding="utf-8").split()
+def _palette_listing(name: str) -> list[str]:
+    """Relative paths of the same-named inner component, from the vendor TOX expansion.
+
+    Expands in a short temporary directory: kantanMapper nests deeply enough for
+    ``toeexpand`` to silently skip files beneath a long base path (MAX_PATH).
+    """
+    with tempfile.TemporaryDirectory(prefix="tdx") as directory:
+        expanded = Path(directory)
+        shutil.copyfile(PALETTE / "Mapping" / f"{name}.tox", expanded / f"{name}.tox")
+        subprocess.run(
+            [str(TOEEXPAND), f"{name}.tox"],
+            cwd=expanded,
+            capture_output=True,
+            timeout=120,
+            check=False,
+        )
+        toc = (expanded / f"{name}.tox.toc").read_text(encoding="utf-8").split()
+        missing = [
+            entry
+            for entry in toc
+            if entry.endswith(".n") and not (expanded / f"{name}.tox.dir" / entry).is_file()
+        ]
+        if missing:
+            raise RuntimeError(f"incomplete toeexpand output: {len(missing)} missing files")
     prefix = f"{name}/{name}/"
     return sorted(
         ["."]
@@ -178,10 +193,60 @@ def _palette_steps(harness: Harness, work: Path) -> dict[str, Any]:
         {"operator_path": "/project1/tdcli_linked_src", "recursive": True},
     )
     rejected["external_tox"] = harness.tox("external linkage", linked_tox, "linked")
+    # A wrapper discarded by root_child is still checked, including expression-driven linkage.
+    harness.run(
+        "wrapper source",
+        "ops.create",
+        {"parent_path": "/project1", "op_type": "baseCOMP", "name": "tdcli_wrapped"},
+    )
+    harness.run(
+        "wrapper inner",
+        "ops.create",
+        {"parent_path": "/project1/tdcli_wrapped", "op_type": "baseCOMP", "name": "inner"},
+    )
+    harness.run(
+        "wrapper sibling",
+        "ops.create",
+        {"parent_path": "/project1/tdcli_wrapped", "op_type": "baseCOMP", "name": "sibling"},
+    )
+    # The root's own externaltox does not survive saveByteArray, so link a wrapper child.
+    harness.run(
+        "wrapper externaltox expression",
+        "parameters.set",
+        {
+            "operator_path": "/project1/tdcli_wrapped/sibling",
+            "parameter": "externaltox",
+            "mode": "expression",
+            "value": "''",
+        },
+    )
+    wrapped = harness.run(
+        "export wrapper",
+        "binary.export",
+        {"operator_path": "/project1/tdcli_wrapped", "format": "tox"},
+    )
+    wrapped_tox = work / "linked" / "wrapped.tox"
+    wrapped_tox.write_bytes(base64.b64decode(wrapped["data_base64"]))
+    harness.run(
+        "destroy wrapper source",
+        "ops.destroy",
+        {"operator_path": "/project1/tdcli_wrapped", "recursive": True},
+    )
+    rejected["wrapper_expression_linkage"] = harness.tox(
+        "wrapper expression linkage", wrapped_tox, "inner", root_child="inner"
+    )
+    if rejected["wrapper_expression_linkage"].get("status") == "succeeded":
+        harness.run(
+            "destroy unexpected inner",
+            "ops.destroy",
+            {"operator_path": f"{PARENT}/inner", "recursive": True},
+        )
     rejected["full_inventory_over_outcome"] = harness.tox(
         "kantanMapper full inventory", kantan_tox, "kantanMapper", root_child="kantanMapper"
     )
-    evidence["rejected"] = {key: value.get("error") for key, value in rejected.items()}
+    evidence["rejected"] = {
+        key: value.get("error") or value.get("status") for key, value in rejected.items()
+    }
     evidence["children_after_rejections"] = harness.run(
         "children after rejections", "ops.children", {"operator_path": PARENT}
     )
@@ -190,7 +255,7 @@ def _palette_steps(harness: Harness, work: Path) -> dict[str, Any]:
     blend = harness.tox(
         "import projectorBlend", blend_tox, "projectorBlend", root_child="projectorBlend"
     )["result"]
-    expected_blend = _palette_listing(work, "projectorBlend")
+    expected_blend = _palette_listing("projectorBlend")
     kantan = harness.tox(
         "import kantanMapper",
         kantan_tox,
@@ -199,7 +264,7 @@ def _palette_steps(harness: Harness, work: Path) -> dict[str, Any]:
         inventory="summary",
         max_operators=5000,
     )["result"]
-    expected_kantan = _palette_listing(work, "kantanMapper")
+    expected_kantan = _palette_listing("kantanMapper")
     evidence["projectorBlend"] = {
         **{
             key: blend[key] for key in ("path", "op_type", "operator_count", "sha256", "root_child")
