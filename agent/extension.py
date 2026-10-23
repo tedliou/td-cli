@@ -371,7 +371,11 @@ class OperatorControl:
         return number
 
     def _get_text_dat(self, payload):
-        operator = self._require_dat(payload, "textDAT")
+        # Any text-content DAT is readable, including Execute-family callbacks; writes stay
+        # limited to Text DATs.
+        operator = self._operator(payload)
+        if str(operator.family) != "DAT" or not getattr(operator, "isText", False):
+            raise AgentCommandError("dat_type_mismatch")
         try:
             text = str(operator.text)
             byte_count = len(text.encode("utf-8"))
@@ -381,6 +385,7 @@ class OperatorControl:
             raise AgentCommandError("result_too_large")
         return {
             "operator_path": str(operator.path),
+            "op_type": str(operator.OPType),
             "dat_kind": "text",
             "text": text,
             "utf8_bytes": byte_count,

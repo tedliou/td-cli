@@ -507,7 +507,9 @@ td --json --instance <selector> dat table replace /project1/grid '[["name","valu
 td --json --instance <selector> dat table patch /project1/grid '[["updated"]]' --row-offset 1 --column-offset 1
 ```
 
-Text access requires `textDAT`; table writes require `tableDAT`. Bounded table
+Text reads accept any DAT with text content (`isText`), including the callbacks
+of Execute-family and Script DATs, and report its `op_type`; text writes require
+`textDAT`, and table writes require `tableDAT`. Bounded table
 reads accept any DAT with table-formatted data (`isTable`), including CHOP to DAT
 for reading actual CHOP output values. Reads use normal dependency cooking, without
 forcing cooks. Mutation rejects a

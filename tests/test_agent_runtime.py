@@ -419,6 +419,7 @@ class FakeTextDat(FakeOperator):
     def __init__(self, path: str, text: str = "", *, file="", syncfile=False) -> None:
         super().__init__(path, op_type="textDAT", family="DAT")
         self.isTable = False
+        self.isText = True
         self.text = text
         self.par = SimpleNamespace(file=FakeDatParameter(file), syncfile=FakeDatParameter(syncfile))
 
@@ -427,6 +428,7 @@ class FakeTableDat(FakeOperator):
     def __init__(self, path: str, rows=None, *, file="", syncfile=False) -> None:
         super().__init__(path, op_type="tableDAT", family="DAT")
         self.isTable = True
+        self.isText = False
         self._rows = [list(row) for row in (rows or [])]
         self.par = SimpleNamespace(file=FakeDatParameter(file), syncfile=FakeDatParameter(syncfile))
 
@@ -1693,6 +1695,7 @@ def test_text_dat_get_is_lossless_bounded_and_exactly_typed() -> None:
 
     assert result == {
         "operator_path": text_dat.path,
+        "op_type": "textDAT",
         "dat_kind": "text",
         "text": "繁體\n",
         "utf8_bytes": 7,
@@ -1702,10 +1705,26 @@ def test_text_dat_get_is_lossless_bounded_and_exactly_typed() -> None:
         make_control({text_dat.path: text_dat}.get).execute(
             {"name": "dat.text.get", "input": {"operator_path": text_dat.path, "max_bytes": 6}}
         )
-    wrong = FakeOperator("/project1/not_text", op_type="executeDAT", family="DAT")
+    wrong = FakeTableDat("/project1/not_text", [["a"]])
     with pytest.raises(module.AgentCommandError, match="dat_type_mismatch"):
         make_control({wrong.path: wrong}.get).execute(
             {"name": "dat.text.get", "input": {"operator_path": wrong.path, "max_bytes": 32}}
+        )
+
+
+def test_text_get_reads_callbacks_of_execute_family_dats_but_set_stays_text_dat_only() -> None:
+    callbacks = FakeTextDat("/project1/active1/chopexec1", "def onOffToOn(channel):\n")
+    callbacks.OPType = "chopexecuteDAT"
+    control = make_control({callbacks.path: callbacks}.get)
+
+    result = control.execute(
+        {"name": "dat.text.get", "input": {"operator_path": callbacks.path, "max_bytes": 64}}
+    )
+    assert result["op_type"] == "chopexecuteDAT"
+    assert result["text"] == "def onOffToOn(channel):\n"
+    with pytest.raises(module.AgentCommandError, match="dat_type_mismatch"):
+        control.execute(
+            {"name": "dat.text.set", "input": {"operator_path": callbacks.path, "text": "x"}}
         )
 
 
