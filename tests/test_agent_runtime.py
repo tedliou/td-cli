@@ -3587,6 +3587,74 @@ def test_parameter_list_reports_runtime_names_types_and_expression_capabilities(
     batch.preflight({"name": "parameters.list", "input": {"operator_path": root.path}})
 
 
+def _listed_parameters_root():
+    root = FakeOperator("/project1")
+    gain = FakeParameter(0.5)
+    gain.name, gain.label, gain.isDefault = "gain", "Gain", False
+    gain.page = SimpleNamespace(name="Test")
+    width = FakeParameter(8)
+    width.name, width.label, width.isDefault = "width", "Width", True
+    width.page = SimpleNamespace(name="Test")
+    operation = FakeParameter("add")
+    operation.name, operation.label, operation.isDefault = "operation", "Operation", True
+    operation.page = SimpleNamespace(name="Test")
+    operation.isMenu, operation.isString = True, False
+    operation.menuNames, operation.menuLabels = ["add", "multiply"], ["Add", "Multiply"]
+    root.builtinPars = [gain, width, operation]
+    root.customPars = []
+    return root
+
+
+def test_parameter_list_attaches_values_selects_names_and_omits_menu_options() -> None:
+    root = _listed_parameters_root()
+    result = make_control(lambda _: root).execute(
+        {
+            "name": "parameters.list",
+            "input": {
+                "operator_path": root.path,
+                "names": ["operation", "gain"],
+                "include_values": True,
+                "include_menu_options": False,
+            },
+        }
+    )
+    items = {item["name"]: item for item in result["parameters"]}
+    assert sorted(items) == ["gain", "operation"]
+    assert items["gain"]["value"] == {
+        "mode": "constant",
+        "value": 0.5,
+        "value_type": "number",
+        "source": None,
+        "unsupported_reason": None,
+    }
+    assert items["operation"]["value"]["value"] == "add"
+    assert items["operation"]["menu_names"] is None
+    assert items["operation"]["menu_labels"] is None
+
+
+def test_parameter_list_reports_only_non_default_parameters_with_values() -> None:
+    root = _listed_parameters_root()
+    result = make_control(lambda _: root).execute(
+        {
+            "name": "parameters.list",
+            "input": {"operator_path": root.path, "non_default_only": True},
+        }
+    )
+    assert [item["name"] for item in result["parameters"]] == ["gain"]
+    assert result["parameters"][0]["value"]["value"] == 0.5
+
+
+def test_parameter_list_rejects_unknown_selected_names() -> None:
+    root = _listed_parameters_root()
+    with pytest.raises(module.AgentCommandError, match="parameter_not_found"):
+        make_control(lambda _: root).execute(
+            {
+                "name": "parameters.list",
+                "input": {"operator_path": root.path, "names": ["gain", "missing"]},
+            }
+        )
+
+
 @pytest.mark.parametrize("mode", ["export", "bind"])
 def test_parameter_get_reports_non_constant_runtime_modes(mode: str) -> None:
     root = FakeOperator("/project1")

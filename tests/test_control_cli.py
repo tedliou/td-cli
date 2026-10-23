@@ -1102,3 +1102,32 @@ def test_chop_values_get_submits_channels_and_sample_range(monkeypatch) -> None:
             "sample_count": 8,
         },
     }
+
+
+def test_parameters_list_submits_value_name_and_menu_options(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "--json",
+            "parameters",
+            "list",
+            "/project1/select1",
+            "--names",
+            "channames,renamefrom",
+            "--include-values",
+            "--non-default-only",
+            "--no-menu-options",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert FakeDaemonClient.submitted == {
+        "name": "parameters.list",
+        "input": {
+            "operator_path": "/project1/select1",
+            "names": ["channames", "renamefrom"],
+            "include_values": True,
+            "non_default_only": True,
+            "include_menu_options": False,
+        },
+    }

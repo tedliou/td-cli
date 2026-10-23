@@ -1830,18 +1830,55 @@ class OperatorControl:
         custom = list(getattr(operator, "customPars", []))
         builtin_ids = {id(parameter) for parameter in builtin}
         custom_ids = {id(parameter) for parameter in custom}
-        parameters = [
-            self._parameter_metadata(
+        selected = builtin + custom
+        names = payload.get("names")
+        if names is not None:
+            by_name = {str(parameter.name): parameter for parameter in selected}
+            if any(name not in by_name for name in names):
+                raise AgentCommandError("parameter_not_found")
+            selected = [by_name[name] for name in dict.fromkeys(names)]
+        non_default_only = payload.get("non_default_only", False)
+        if non_default_only:
+            # Without a reliable isDefault the parameter is kept rather than silently dropped.
+            selected = [
+                parameter
+                for parameter in selected
+                if getattr(parameter, "isDefault", False) is not True
+            ]
+        include_values = non_default_only or payload.get("include_values", False)
+        include_menu_options = payload.get("include_menu_options", True)
+        parameters = []
+        for parameter in selected:
+            item = self._parameter_metadata(
                 parameter,
                 builtin=id(parameter) in builtin_ids,
                 custom=id(parameter) in custom_ids,
             )
-            for parameter in builtin + custom
-        ]
+            if not include_menu_options:
+                item["menu_names"] = item["menu_labels"] = None
+            if include_values:
+                item["value"] = self._listed_parameter_value(operator, parameter)
+            parameters.append(item)
         return {
             "operator_path": str(operator.path),
             "parameters": sorted(parameters, key=lambda item: item["name"]),
         }
+
+    @classmethod
+    def _listed_parameter_value(cls, operator, parameter):
+        # One unreadable value must not hide the rest of the list.
+        try:
+            value = cls._parameter_result(operator, str(parameter.name), parameter)
+        except AgentCommandError:
+            return {
+                "mode": cls._parameter_mode(parameter),
+                "value": None,
+                "value_type": "unknown",
+                "source": None,
+                "unsupported_reason": "value_unavailable",
+            }
+        del value["operator_path"], value["parameter"]
+        return value
 
     @classmethod
     def _parameter_metadata(cls, parameter, *, builtin, custom):
@@ -2836,6 +2873,7 @@ class AgentExt:
         "batch.execute",
         "batch.execute:item_results",
         "dat.text.get:offset",
+        "parameters.list:options",
         "binary.export",
         "events.read",
         "project.metadata",

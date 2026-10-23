@@ -238,6 +238,18 @@ family，所以 TOP 可以接進輸入為 In TOP 的元件，元件的 Out TOP �
 COMP 也依同一規則：Out TOP connector 不能接 In CHOP connector，沒有 In／Out Operator 的 COMP
 connector 以 `operator_family_mismatch` 拒絕（0.10 之前兩端都是 COMP 時一律接受）。
 
+`parameters list` 描述每個 Parameter，可用選項縮小範圍：`--include-values` 以 `parameters get`
+的形狀附上每個值（`mode`、`value`、`value_type`、`source`、`unsupported_reason`；讀不到的值回報
+`value_type: "unknown"` 與 `unsupported_reason: "value_unavailable"`）；`--non-default-only` 只列
+TouchDesigner 不視為預設值的 Parameter（隱含附上值）；`--names a,b` 只列指定的 Parameter（名稱不存在
+時回 `parameter_not_found`）；`--no-menu-options` 讓 `menu_names` 與 `menu_labels` 回報為 `null`。結果
+仍有上限，超過時回 `result_too_large`，不會截斷：
+
+```powershell
+td --json --instance <selector> parameters list /project1/select1 --non-default-only --no-menu-options
+td --json --instance <selector> parameters list /project1/select1 --names channames,renamefrom --include-values
+```
+
 `ops.inspect` 是 CHOP、DAT、TOP、SOP、POP、MAT、COMP 的被動有界讀取。它不下載 pixels、geometry、
 POP buffers、DAT content 或 Python objects，也不主動 cook。可變長度資料受 `--max-items`
 限制（預設 100、最高 1000），溢位會失敗而不截斷。COMP 的 `details` 摘要其介面：`child_count`
@@ -285,7 +297,7 @@ td --json --instance <selector> parameters list /project1/controls
 {"operator_path":"/project1/controls","page":"Controls","parameters":[{"name":"Gyrox","label":"Gyro X","kind":"float","default":0,"minimum":-1,"maximum":1},{"name":"Manual","label":"Manual","kind":"toggle","default":true},{"name":"Source","label":"Source","kind":"menu","default":"manual","menu_names":["manual","device"],"menu_labels":["Manual","Device"]}]}
 ```
 
-使用 `parameters menu-set`（Command `parameters.menu.set`）替換既有自訂 `Menu` 參數的選項。輸入 1–256 個唯一且非空的名稱、等量的非空標籤（每項最多 128 字元；`len(json.dumps(names + labels, ensure_ascii=True))` 不得超過 65,536，所以引號、分隔符與跳脫都計入，非 ASCII 字元每個算 6 bytes，基本多文種平面以外的字元算 12 bytes），以及必填的 `--preserve`：`index` 保留目前選取的位置，`name` 保留目前選取的名稱。選單 default 依同一規則對應；原本就不對應任何選項的 default 保持不變。從未指定過的 default 會回報第一個選項；規則需要移動它時會明確寫入，而 TouchDesigner 無法把它還原成未指定，所以只要已經嘗試寫入它（包括寫入 default 本身被拒絕，因為 TouchDesigner 可能已套用），之後的失敗即使讀回與原本相同，也回報 `parameter_rollback_failed`。只接受自訂、constant mode、選項不由 `menuSource` 產生的 `Menu` 參數；內建、`menuSource` 與 expression／export／bind 參數回傳 `parameter_menu_not_writable`，其他樣式（含 StrMenu）回傳 `parameter_type_unsupported`，目前值或 default 無法依規則對應時回傳 `parameter_value_invalid`，以上都在修改前拒絕。結果回傳新的名稱與標籤，以及修改前後的值、索引與 default。被拒絕的寫入會復原並驗證（`parameter_write_rejected`）；`parameter_rollback_failed` 或 `parameter_outcome_unknown` 須先查詢再執行下一次修改。此 Command 屬於 mutation，可放入 `commands execute` 計畫，不可放入 `batch execute`。選單較大時請用 `--input-file`，過長的 `--names-json`／`--labels-json` 可能超過 Windows 命令列長度上限。`parameters list` 會回傳每個 menu 的全部選項，所以一個 Operator 若有數個接近預算的 menu，結果可能超過上限；這個讀取會以 `result_too_large` 失敗且不改變任何狀態，`parameters get` 仍可讀取單一值。
+使用 `parameters menu-set`（Command `parameters.menu.set`）替換既有自訂 `Menu` 參數的選項。輸入 1–256 個唯一且非空的名稱、等量的非空標籤（每項最多 128 字元；`len(json.dumps(names + labels, ensure_ascii=True))` 不得超過 65,536，所以引號、分隔符與跳脫都計入，非 ASCII 字元每個算 6 bytes，基本多文種平面以外的字元算 12 bytes），以及必填的 `--preserve`：`index` 保留目前選取的位置，`name` 保留目前選取的名稱。選單 default 依同一規則對應；原本就不對應任何選項的 default 保持不變。從未指定過的 default 會回報第一個選項；規則需要移動它時會明確寫入，而 TouchDesigner 無法把它還原成未指定，所以只要已經嘗試寫入它（包括寫入 default 本身被拒絕，因為 TouchDesigner 可能已套用），之後的失敗即使讀回與原本相同，也回報 `parameter_rollback_failed`。只接受自訂、constant mode、選項不由 `menuSource` 產生的 `Menu` 參數；內建、`menuSource` 與 expression／export／bind 參數回傳 `parameter_menu_not_writable`，其他樣式（含 StrMenu）回傳 `parameter_type_unsupported`，目前值或 default 無法依規則對應時回傳 `parameter_value_invalid`，以上都在修改前拒絕。結果回傳新的名稱與標籤，以及修改前後的值、索引與 default。被拒絕的寫入會復原並驗證（`parameter_write_rejected`）；`parameter_rollback_failed` 或 `parameter_outcome_unknown` 須先查詢再執行下一次修改。此 Command 屬於 mutation，可放入 `commands execute` 計畫，不可放入 `batch execute`。選單較大時請用 `--input-file`，過長的 `--names-json`／`--labels-json` 可能超過 Windows 命令列長度上限。`parameters list` 會回傳每個 menu 的全部選項，所以一個 Operator 若有數個接近預算的 menu，結果可能超過上限；這個讀取會以 `result_too_large` 失敗且不改變任何狀態。`parameters list --no-menu-options` 仍可列出描述，`parameters get` 可讀取單一值。
 
 ```powershell
 td --json --instance <selector> parameters menu-set /project1/controls Source --names-json '["manual","device","replay"]' --labels-json '["Manual","Device","Replay"]' --preserve index

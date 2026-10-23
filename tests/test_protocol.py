@@ -1052,3 +1052,44 @@ def test_chop_values_is_a_bounded_batchable_read() -> None:
                 "input": {"operator_path": "/p", "sample_offset": 0, "sample_count": 4097},
             }
         )
+
+
+def test_parameter_list_options_stay_off_the_wire_and_need_an_advertising_agent() -> None:
+    plain = Command.model_validate(
+        {"name": "parameters.list", "input": {"operator_path": "/project1/a"}}
+    ).model_dump(mode="json")
+    assert plain["input"] == {"operator_path": "/project1/a"}
+    assert "parameters.list:options" not in COMMAND_CATALOG.required_capabilities(plain)
+    for option in (
+        {"names": ["gain"]},
+        {"include_values": True},
+        {"non_default_only": True},
+        {"include_menu_options": False},
+    ):
+        command = Command.model_validate(
+            {"name": "parameters.list", "input": {"operator_path": "/project1/a", **option}}
+        ).model_dump(mode="json")
+        assert command["input"] == {"operator_path": "/project1/a", **option}
+        assert "parameters.list:options" in COMMAND_CATALOG.required_capabilities(command)
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {"name": "parameters.list", "input": {"operator_path": "/p", "names": []}}
+        )
+
+
+def test_parameter_list_normalizes_attached_values() -> None:
+    result = COMMAND_CATALOG.normalize_result(
+        {"name": "parameters.list", "input": {"operator_path": "/project1/a"}},
+        {
+            "operator_path": "/project1/a",
+            "parameters": [
+                {
+                    "name": "gain",
+                    "value_kind": "number",
+                    "value": {"mode": "constant", "value": 0.5, "value_type": "number"},
+                }
+            ],
+        },
+    )
+    assert result["parameters"][0]["value"]["source"] is None
+    assert result["parameters"][0]["value"]["unsupported_reason"] is None

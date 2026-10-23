@@ -469,6 +469,34 @@ class ParameterInput(OperatorInput):
         return value
 
 
+MAX_LISTED_PARAMETER_NAMES = 256
+
+
+class ParameterListInput(OperatorInput):
+    names: list[Annotated[str, Field(min_length=1, max_length=256)]] | None = Field(
+        default=None,
+        min_length=1,
+        max_length=MAX_LISTED_PARAMETER_NAMES,
+        exclude_if=lambda value: value is None,
+        description="List only these parameters, by exact name.",
+    )
+    include_values: bool = Field(
+        default=False,
+        exclude_if=lambda value: value is False,
+        description="Attach each parameter's current value in the parameters.get shape.",
+    )
+    non_default_only: bool = Field(
+        default=False,
+        exclude_if=lambda value: value is False,
+        description="List only parameters that differ from their defaults; implies values.",
+    )
+    include_menu_options: bool = Field(
+        default=True,
+        exclude_if=lambda value: value is True,
+        description="Include menu_names and menu_labels; false reports them as null.",
+    )
+
+
 MAX_PARAMETER_SOURCE_BYTES = 16_384
 MAX_MULTI_OP_PATHS = 256
 MAX_SEQUENCE_BLOCKS = 128
@@ -729,6 +757,9 @@ def _parameter_descriptor(item: object) -> object:
 def _parameter_list_result(result: dict[str, Any]) -> dict[str, Any]:
     if isinstance(result.get("parameters"), list):
         result["parameters"] = [_parameter_descriptor(item) for item in result["parameters"]]
+        for item in result["parameters"]:
+            if isinstance(item, dict) and isinstance(item.get("value"), dict):
+                item["value"] = _parameter_result(item["value"])
     return result
 
 
@@ -985,10 +1016,24 @@ COMMAND_CATALOG = CommandCatalog(
         ),
         CommandDefinition(
             "parameters.list",
-            OperatorInput,
+            ParameterListInput,
             CommandEffect.READ_ONLY,
             ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
             _parameter_list_result,
+            features=(
+                (
+                    "parameters.list:options",
+                    lambda value: any(
+                        key in value
+                        for key in (
+                            "names",
+                            "include_values",
+                            "non_default_only",
+                            "include_menu_options",
+                        )
+                    ),
+                ),
+            ),
         ),
         CommandDefinition(
             "parameters.set",
@@ -1155,6 +1200,7 @@ CommandInput = (
     | ImportToxInput
     | ConnectOperatorsInput
     | DisconnectOperatorsInput
+    | ParameterListInput
     | ParameterInput
     | CreateParameterPageInput
     | SetParameterInput

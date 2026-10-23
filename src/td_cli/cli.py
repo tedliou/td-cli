@@ -1048,15 +1048,34 @@ def parameters_get(
 def parameters_list(
     ctx: typer.Context,
     operator_path: Annotated[str | None, typer.Argument()] = None,
+    names: Annotated[
+        str | None, typer.Option("--names", help="Comma-separated parameter names to list.")
+    ] = None,
+    include_values: Annotated[bool, typer.Option("--include-values")] = False,
+    non_default_only: Annotated[bool, typer.Option("--non-default-only")] = False,
+    no_menu_options: Annotated[
+        bool, typer.Option("--no-menu-options", help="Report menu_names and menu_labels as null.")
+    ] = False,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
     request_id: Annotated[str | None, typer.Option("--request-id")] = None,
 ) -> None:
+    options: dict[str, object] = {}
+    if names is not None:
+        options["names"] = names.split(",")
+    if include_values:
+        options["include_values"] = True
+    if non_default_only:
+        options["non_default_only"] = True
+    if no_menu_options:
+        options["include_menu_options"] = False
+    if options and operator_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
     _command(
         ctx,
         "parameters.list",
-        {"operator_path": operator_path} if operator_path is not None else None,
+        {"operator_path": operator_path, **options} if operator_path is not None else None,
         input,
         input_file,
         no_wait,
