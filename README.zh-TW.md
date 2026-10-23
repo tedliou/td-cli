@@ -43,6 +43,10 @@ td --json instances list
 td --json --instance <selector> ops create /project1 constantTOP source
 ```
 
+列出的每個 Instance 都會以 `project: {"name", "folder"}` 回報目前開啟的專案（另存新檔或開啟別的
+`.toe` 後，下一次 heartbeat 就會更新），不必對每個 Instance 呼叫 `project metadata` 就能選對 selector。
+比本 Release 舊的 Agent 會回報 `project: null`。
+
 升級時再次執行相同安裝命令並重新啟動 Daemon。解除安裝會保留 Daemon 資料與 TouchDesigner
 專案：
 

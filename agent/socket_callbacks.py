@@ -80,7 +80,7 @@ def onReceiveEvent(dat, rowIndex, message, event):
         agent.release_record(message["request_id"])
     elif event == "daemon_draining":
         agent.begin_draining()
-        dat.emit("heartbeat", data=agent.heartbeat_payload())
+        dat.emit("heartbeat", data=agent.heartbeat_report())
         deadline_milliseconds = int(float(message["deadline_seconds"]) * 1000)
         run(
             resumeAfterDraining,

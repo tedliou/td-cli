@@ -4472,3 +4472,23 @@ def test_disconnect_accepts_a_top_feeding_a_comp_in_top() -> None:
 
     assert result["disconnected"] is True
     assert blend.inputConnectors[0].connections == []
+
+
+def test_agent_reports_its_open_project_on_register_and_heartbeat() -> None:
+    project = SimpleNamespace(name="HelloBloom.651", folder="E:/work")
+    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: None, project_info=project)
+
+    assert agent.registration_payload()["project"] == {
+        "name": "HelloBloom.651",
+        "folder": "E:/work",
+    }
+    project.name = "HelloBloom.652"
+    assert agent.heartbeat_report()["project"] == {"name": "HelloBloom.652", "folder": "E:/work"}
+    assert "project" not in agent.heartbeat_payload()
+
+
+def test_agent_reports_no_project_when_touchdesigner_has_none() -> None:
+    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: None, project_info=None)
+    agent.project_info = None
+
+    assert agent.registration_payload()["project"] is None

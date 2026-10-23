@@ -2873,6 +2873,7 @@ class AgentExt:
             "protocol_versions": self.protocol_versions,
             "capabilities": list(self.CAPABILITIES),
             "status": "draining" if self.draining else "online",
+            "project": self.project_identity(),
         }
 
     def heartbeat_payload(self):
@@ -2881,6 +2882,18 @@ class AgentExt:
             "connection_id": self.connection_id,
             "status": "draining" if self.draining else "online",
         }
+
+    def heartbeat_report(self):
+        """The periodic heartbeat, which also follows a save-as or a newly opened project."""
+        return {**self.heartbeat_payload(), "project": self.project_identity()}
+
+    def project_identity(self):
+        if self.project_info is None:
+            return None
+        try:
+            return {"name": str(self.project_info.name), "folder": str(self.project_info.folder)}
+        except Exception:  # noqa: BLE001 - identity is advisory; never block a heartbeat
+            return None
 
     def rebind_connection(self, connection_id):
         self.connection_id = connection_id

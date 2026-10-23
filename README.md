@@ -46,6 +46,11 @@ td --json instances list
 td --json --instance <selector> ops create /project1 constantTOP source
 ```
 
+Each listed Instance reports the open project as `project: {"name", "folder"}`
+(updated on the next heartbeat after a save-as or another `.toe` is opened), so
+the right selector can be chosen without a `project metadata` call per Instance.
+Agents older than this Release report `project: null`.
+
 Use the same install command to upgrade to the latest stable Release, then
 restart the Daemon. To uninstall the executables while preserving Daemon data
 and TouchDesigner projects:
