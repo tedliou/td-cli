@@ -37,7 +37,7 @@ def main() -> None:
                 env=env,
             )
         with tempfile.TemporaryDirectory(prefix="td-cli-clean-") as clean:
-            for executable in ("td.exe", "td-daemon.exe", "td-agent.exe"):
+            for executable in ("td/td.exe", "td-daemon.exe", "td-agent.exe"):
                 subprocess.run(
                     [str((binaries / executable).resolve()), "--version"], check=True, cwd=clean
                 )
