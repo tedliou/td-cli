@@ -19,16 +19,24 @@ def test_release_build_refuses_unreviewed_native_runtime(monkeypatch: pytest.Mon
         license_files(Path("."), check_runtime=True)
 
 
+TD_RUNTIME_FILES = ("td-runtime/base_library.zip", "td-runtime/python311.dll")
+
+
 def _write_executables(root: Path) -> None:
-    for name in ("td.exe", "td-daemon.exe", "td-agent.exe"):
+    for name in ("td-daemon.exe", "td-agent.exe"):
         (root / name).write_bytes(name.encode())
+    # td is a PyInstaller onedir bundle so each invocation skips the onefile extraction.
+    for name in ("td.exe", *TD_RUNTIME_FILES):
+        path = root / "td" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(name.encode())
 
 
 def _write_agent_stage(root: Path, *, source_commit: str = "a" * 40) -> None:
     tox = root / "td-agent.tox"
     tox.write_bytes(b"tox")
     manifest = {
-        "agent_version": "0.10.0",
+        "agent_version": "0.11.0",
         "locked_touchdesigner_version": "2025.32050",
         "source_commit": source_commit,
         "artifact_sha256": hashlib.sha256(b"tox").hexdigest(),
@@ -65,16 +73,16 @@ def test_release_packaging_creates_the_four_root_layouts_and_sorted_checksums(
     } == first_digests
 
     assert [path.name for path in artifacts] == [
-        "td-agent-cli-v0.10.0-windows-x86_64.zip",
-        "td-agent-component-v0.10.0-td2025.32050.zip",
-        "td-daemon-v0.10.0-windows-x86_64.zip",
-        "td-v0.10.0-windows-x86_64.zip",
+        "td-agent-cli-v0.11.0-windows-x86_64.zip",
+        "td-agent-component-v0.11.0-td2025.32050.zip",
+        "td-daemon-v0.11.0-windows-x86_64.zip",
+        "td-v0.11.0-windows-x86_64.zip",
     ]
     expected_entries = {
         artifacts[0].name: ["td-agent.exe"],
         artifacts[1].name: ["manifest.json", "td-agent.tox", "verification.json"],
         artifacts[2].name: ["td-daemon.exe"],
-        artifacts[3].name: ["td.exe"],
+        artifacts[3].name: ["td.exe", *TD_RUNTIME_FILES],
     }
     for archive in artifacts:
         with zipfile.ZipFile(archive) as opened:
@@ -89,7 +97,7 @@ def test_release_packaging_creates_the_four_root_layouts_and_sorted_checksums(
     assert [line.split("  ")[1] for line in checksum_lines] == sorted(expected_entries)
     assert all(len(line.split("  ")[0]) == 64 for line in checksum_lines)
     assert "__VERSION__" not in (output / "install.ps1").read_text(encoding="utf-8")
-    assert "0.10.0" in (output / "install.ps1").read_text(encoding="utf-8")
+    assert "0.11.0" in (output / "install.ps1").read_text(encoding="utf-8")
     assert (output / "uninstall.ps1").is_file()
 
 
@@ -141,3 +149,12 @@ def test_agent_stage_rejects_verification_for_another_artifact(tmp_path: Path) -
 
     with pytest.raises(ValueError, match="artifact digest"):
         validate_agent_stage(tmp_path, expected_commit="a" * 40)
+
+
+def test_release_refuses_td_without_its_onedir_runtime(tmp_path: Path) -> None:
+    _write_executables(tmp_path)
+    _write_agent_stage(tmp_path)
+    shutil.rmtree(tmp_path / "td" / "td-runtime")
+
+    with pytest.raises(ValueError, match="td-runtime"):
+        package_release(tmp_path, tmp_path, tmp_path / "output", source_epoch=1_700_000_000)

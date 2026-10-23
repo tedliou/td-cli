@@ -43,6 +43,10 @@ td --json instances list
 td --json --instance <selector> ops create /project1 constantTOP source
 ```
 
+列出的每个 Instance 都会以 `project: {"name", "folder"}` 报告当前打开的项目（另存为或打开其他
+`.toe` 后，下一次 heartbeat 就会更新），无需对每个 Instance 调用 `project metadata` 就能选对 selector。
+比本 Release 旧的 Agent 会报告 `project: null`。
+
 升级时再次执行相同安装命令并重新启动 Daemon。卸载会保留 Daemon 数据与 TouchDesigner
 项目：
 
@@ -146,6 +150,17 @@ Command 或 `commands execute` 计划的字段在提交前验证失败时，`--j
 多余的字段名称会出现在位置中，最多 64 字符。文件无法读取、含 BOM、计划过大，或单一 Command
 文档、`--names-json`／`--labels-json` 不是有效 JSON 时，`details` 保持为空。
 
+每个 Command 子命令的 `--help` 都会列出选项的上下限与默认值。`td commands schema` 无需 Daemon
+即可列出所有 Command 名称；`td commands schema <name>` 输出该 Command 的 `effect`、是否
+`batchable`，以及其输入 JSON Schema，也就是 `--input`、`batch execute`（1–16 个只读 Command）
+与 `commands execute` 计划（1–256 个 Command）所需的格式。在 Git Bash 中请设置
+`MSYS_NO_PATHCONV=1`，否则开头的 `/project1` 会被改写成 Windows 路径而被拒绝。
+
+`batch execute` 会依次报告每一项读取：`results[i]` 为 `{"ok":true,"result":{...}}` 或
+`{"ok":false,"error":{"code":...}}`，`failed_count` 是失败的项数。部分读取失败时 Request 仍为
+成功，所以请看 `failed_count`，而不是 Request 状态。Agent 若不支持这种报告方式，Daemon 会在发送前
+以 `command_unsupported` 拒绝整批。
+
 <!-- doc-section: agent-component -->
 
 ## Agent Component
@@ -223,9 +238,38 @@ family，所以 TOP 可以接进输入为 In TOP 的组件，组件的 Out TOP �
 COMP 也依同一规则：Out TOP connector 不能接 In CHOP connector，没有 In／Out Operator 的 COMP
 connector 以 `operator_family_mismatch` 拒绝（0.10 之前两端都是 COMP 时一律接受）。
 
-`ops.inspect` 是 CHOP、DAT、TOP、SOP、POP、MAT 的被动有界读取。它不下载 pixels、geometry、
+`parameters list` 描述每个 Parameter，可用选项缩小范围：`--include-values` 以 `parameters get`
+的形状附上每个值（`mode`、`value`、`value_type`、`source`、`unsupported_reason`；读不到的值返回
+`value_type: "unknown"` 与 `unsupported_reason: "value_unavailable"`）；`--non-default-only` 只列
+TouchDesigner 不视为默认值的 Parameter（隐含附上值）；`--names a,b` 只列指定的 Parameter（名称不存在
+时返回 `parameter_not_found`）；`--no-menu-options` 让 `menu_names` 与 `menu_labels` 返回 `null`，并返回 `include_menu_options: false`。结果
+仍有上限，超过时返回 `result_too_large`，不会截断：
+
+```powershell
+td --json --instance <selector> parameters list /project1/select1 --non-default-only --no-menu-options
+td --json --instance <selector> parameters list /project1/select1 --names channames,renamefrom --include-values
+```
+
+`project snapshot` 以广度优先列出子树的 `path`、`type`、`depth`（`--max-depth` 最多 8、
+`--max-operators` 最多 1000），子树较大时返回 `result_too_large`。加上 `--paginate` 则返回一页并附
+`next_cursor`；以相同 root 与 `--max-depth` 把它传给 `--cursor`，直到 `next_cursor` 为 `null`（每个 snapshot 都会返回，完整结果为 `null`）。
+TouchDesigner 没有网络修改计数，所以各页不是同一时间点的一致结果：cursor 指向的下一个 Operator
+被移动或删除时返回 `snapshot_cursor_stale`（请重新开始），其他分页之间的修改则不会被检测。
+`--include-connections` 为每个 Operator 附上输出 `connections`（`target_path`、`output_index`、
+`input_index`）。Parameter 值请用 `parameters list --non-default-only`：
+
+```powershell
+td --json --instance <selector> project snapshot /project1 --paginate --include-connections
+td --json --instance <selector> project snapshot /project1 --cursor <next_cursor> --include-connections
+```
+
+`ops.inspect` 是 CHOP、DAT、TOP、SOP、POP、MAT、COMP 的被动有界读取。它不下载 pixels、geometry、
 POP buffers、DAT content 或 Python objects，也不主动 cook。可变长度数据受 `--max-items`
-限制（默认 100、最高 1000），溢位会失败而不截断。
+限制（默认 100、最高 1000），溢位会失败而不截断。COMP 的 `details` 摘要其接口：`child_count`
+（直属子节点数，列表请用 `ops children`）、`inputs`／`outputs` 以 `{index, operator, family}` 指出每个
+普通 connector 背后的 In／Out Operator、`hierarchy_inputs`／`hierarchy_outputs` 数量，以及只列参数名称的
+`custom_pages`（`{name, parameters}`）。connector、page 与参数名称合计受 `--max-items` 限制。比本 Release
+旧的 Agent 会以 `operator_family_unsupported` 拒绝 COMP。
 
 以 `ops state set /project1/geo/shape --display --render` 启用 SOP 几何标志，`--no-display` 与 `--no-render` 关闭。`ops state get` 可读回两者。Display 选择查看内容，Render 选择渲染几何；仍须设置 Geometry COMP 与 Render TOP。这些标志本身不会停止 cook 或释放内存。
 
@@ -266,7 +310,7 @@ td --json --instance <selector> parameters list /project1/controls
 {"operator_path":"/project1/controls","page":"Controls","parameters":[{"name":"Gyrox","label":"Gyro X","kind":"float","default":0,"minimum":-1,"maximum":1},{"name":"Manual","label":"Manual","kind":"toggle","default":true},{"name":"Source","label":"Source","kind":"menu","default":"manual","menu_names":["manual","device"],"menu_labels":["Manual","Device"]}]}
 ```
 
-使用 `parameters menu-set`（Command `parameters.menu.set`）替换已有自定义 `Menu` 参数的选项。输入 1–256 个唯一且非空的名称、等量的非空标签（每项最多 128 字符；`len(json.dumps(names + labels, ensure_ascii=True))` 不得超过 65,536，所以引号、分隔符与转义都计入，非 ASCII 字符每个算 6 bytes，基本多文种平面以外的字符算 12 bytes），以及必填的 `--preserve`：`index` 保留当前选中的位置，`name` 保留当前选中的名称。菜单 default 按同一规则对应；原本就不对应任何选项的 default 保持不变。从未指定过的 default 会返回第一个选项；规则需要移动它时会明确写入，而 TouchDesigner 无法把它还原为未指定，所以只要已经尝试写入它（包括写入 default 本身被拒绝，因为 TouchDesigner 可能已应用），之后的失败即使读回与原来相同，也返回 `parameter_rollback_failed`。只接受自定义、constant mode、选项不由 `menuSource` 生成的 `Menu` 参数；内置、`menuSource` 与 expression／export／bind 参数返回 `parameter_menu_not_writable`，其他样式（含 StrMenu）返回 `parameter_type_unsupported`，当前值或 default 无法按规则对应时返回 `parameter_value_invalid`，以上都在修改前拒绝。结果返回新的名称与标签，以及修改前后的值、索引与 default。被拒绝的写入会回滚并验证（`parameter_write_rejected`）；`parameter_rollback_failed` 或 `parameter_outcome_unknown` 须先查询再执行下一次修改。此 Command 属于 mutation，可放入 `commands execute` 计划，不可放入 `batch execute`。菜单较大时请用 `--input-file`，过长的 `--names-json`／`--labels-json` 可能超过 Windows 命令行长度上限。`parameters list` 会返回每个 menu 的全部选项，所以一个 Operator 若有数个接近预算的 menu，结果可能超过上限；这个读取会以 `result_too_large` 失败且不改变任何状态，`parameters get` 仍可读取单个值。
+使用 `parameters menu-set`（Command `parameters.menu.set`）替换已有自定义 `Menu` 参数的选项。输入 1–256 个唯一且非空的名称、等量的非空标签（每项最多 128 字符；`len(json.dumps(names + labels, ensure_ascii=True))` 不得超过 65,536，所以引号、分隔符与转义都计入，非 ASCII 字符每个算 6 bytes，基本多文种平面以外的字符算 12 bytes），以及必填的 `--preserve`：`index` 保留当前选中的位置，`name` 保留当前选中的名称。菜单 default 按同一规则对应；原本就不对应任何选项的 default 保持不变。从未指定过的 default 会返回第一个选项；规则需要移动它时会明确写入，而 TouchDesigner 无法把它还原为未指定，所以只要已经尝试写入它（包括写入 default 本身被拒绝，因为 TouchDesigner 可能已应用），之后的失败即使读回与原来相同，也返回 `parameter_rollback_failed`。只接受自定义、constant mode、选项不由 `menuSource` 生成的 `Menu` 参数；内置、`menuSource` 与 expression／export／bind 参数返回 `parameter_menu_not_writable`，其他样式（含 StrMenu）返回 `parameter_type_unsupported`，当前值或 default 无法按规则对应时返回 `parameter_value_invalid`，以上都在修改前拒绝。结果返回新的名称与标签，以及修改前后的值、索引与 default。被拒绝的写入会回滚并验证（`parameter_write_rejected`）；`parameter_rollback_failed` 或 `parameter_outcome_unknown` 须先查询再执行下一次修改。此 Command 属于 mutation，可放入 `commands execute` 计划，不可放入 `batch execute`。菜单较大时请用 `--input-file`，过长的 `--names-json`／`--labels-json` 可能超过 Windows 命令行长度上限。`parameters list` 会返回每个 menu 的全部选项，所以一个 Operator 若有数个接近预算的 menu，结果可能超过上限；这个读取会以 `result_too_large` 失败且不改变任何状态。`parameters list --no-menu-options` 仍可列出描述，`parameters get` 可读取单个值。
 
 ```powershell
 td --json --instance <selector> parameters menu-set /project1/controls Source --names-json '["manual","device","replay"]' --labels-json '["Manual","Device","Replay"]' --preserve index
@@ -322,6 +366,18 @@ td --json --instance <selector> ops destroy /project1/group/moved --recursive --
 
 三种操作默认最多影响 256 Operators（最高 1000）。Copy／move 会验证精确结果，并在失败时移除
 新 copy；无法证明最终状态时回传独立 rollback／uncertain-outcome error。
+
+更大的子树（例如以 `ops tox import --inventory summary` 安装的组件）在 destroy、copy、move 时需加
+`--inventory summary`（`--max-operators` 最高 10000）。结果改为 `operator_count`、`type_counts` 与
+`inventory_sha256`（`{path, op_type}` 各行按 `path` 排序后，以 canonical JSON（排序 key、无空白、ASCII）
+计算的 SHA-256；path 相对于被删除 Operator 或新 copy 的 parent）。只列出跨越子树边界的连线：destroy 的
+`detached_connections` 不含子树内部的连线。边界连线超过 512 条时，在任何修改之前返回
+`result_too_large`。各 Command 需要 Agent 声明 `ops.destroy:inventory_summary`、
+`ops.copy:inventory_summary` 或 `ops.move:inventory_summary`：
+
+```powershell
+td --json --instance <selector> ops destroy /project1/projection/kantanMapper --recursive --allow-connected --inventory summary --max-operators 5000
+```
 
 <!-- doc-section: trusted-tox-import -->
 
@@ -401,10 +457,25 @@ td --json --instance <selector> dat table replace /project1/grid '[["name","valu
 td --json --instance <selector> dat table patch /project1/grid '[["updated"]]' --row-offset 1 --column-offset 1
 ```
 
-文字访问限 `textDAT`，表格写入限 `tableDAT`；有界表格读取接受 `isTable` 为真的 DAT，包含用于读取实际 CHOP 输出值的 CHOP to DAT。读取遵循一般依赖 cook，不强制 cook。外部 File／Sync File、protected path、非 rectangular／非 string
+文字读取接受内容为文字（`isText`）的任何 DAT，包括 Execute 系列与 Script DAT 的 callback，并报告其 `op_type`；文字写入限 `textDAT`，表格写入限 `tableDAT`；有界表格读取接受 `isTable` 为真的 DAT，包含用于读取实际 CHOP 输出值的 CHOP to DAT。读取遵循一般依赖 cook，不强制 cook。外部 File／Sync File、protected path、非 rectangular／非 string
 cell 及越界 patch 都会被拒绝。Content 限制 32 KiB UTF-8、256 rows、256 columns、4096 cells、每
-cell 16 KiB。Mutation 会 read back 完整内容与尺寸，失败时恢复整份 DAT。这些 Command 不执行
+cell 16 KiB。较大的文字可用 `dat text get --offset N`（UTF-8 byte）分段读取：每次最多返回 `--max-bytes`
+bytes 的完整字符，并附 `offset`、`next_offset`（读到结尾时为 `null`）、`total_utf8_bytes`，以及整份内容的
+`text_sha256`；分段之间内容被修改时 sha256 会改变。offset 落在字符中间时返回 `invalid_arguments`。Mutation 会 read back 完整内容与尺寸，失败时恢复整份 DAT。这些 Command 不执行
 DAT、不 import module、不 evaluate content，也不接受 filesystem path。
+
+CHOP channel 值可直接读取，不需临时创建 CHOP to DAT：
+
+```powershell
+td --json --instance <selector> chop values get /project1/noise1 --channels tx,ty
+td --json --instance <selector> chop values get /project1/noise1 --sample-offset 0 --sample-count 64
+```
+
+未指定 sample 范围时返回每个 channel 的当前值与当前 `frame`；指定 `--sample-offset` 与
+`--sample-count`（两者须一起提供）时，每个 channel 返回该范围的 samples，并附 `sample_rate` 与
+`total_samples`。`channels` 依序列出返回的 channel。`--channels` 以完整名称选取 channel，名称不存在时返回 `chop_channel_not_found`。NaN
+与无限值以 `null` 表示，并计入 `non_finite_count`。每次最多返回 4096 个值，超过时返回
+`result_too_large`，不会截断。
 
 <!-- doc-section: project-save -->
 ## 保存当前项目
@@ -453,4 +524,4 @@ read-only Command 使用。
 终态 snapshot。请保存输出；中断或 outcome unknown 后先查询已记录的 Request，
 不要盲目重跑整份计划。不接受嵌套 `batch.execute`。
 
-0.10.0 离线升级除现有来源（含 0.7.0、0.7.1、0.8.0）外，新增精确 canonical 0.9.0 Agent 白名单，保留 Connectionstate 定义。Trusted TOX Import 可导入官方 Palette 组件（`--root-child`、`--inventory summary`、可诊断的 `details`），`ops connect` 依 In／Out Operator 的 family 把 TOP 接进或接出组件。这些需要 0.10.0 Agent；内嵌较旧 Agent 时，CLI 与 Daemon 会以 `command_unsupported` 拒绝新选项。
+0.11.0 离线升级除现有来源（含 0.7.0、0.7.1、0.8.0、0.9.0）外，新增精确 canonical 0.10.0 Agent 白名单，保留 Connectionstate 定义。Agent 读取接口新增：`batch execute` 逐项结果、Instance 的 `project`、`ops inspect` 的 COMP 接口摘要、Execute 系列与 byte offset 的 `dat text get`、`chop values get`、`parameters list` 的值与筛选选项、可分页的 `project snapshot`，以及 `ops destroy`／`copy`／`move` 的 `--inventory summary`。`td` 改以 onedir 发布，启动约 0.4 秒。新选项需要 0.11.0 Agent；内嵌较旧 Agent 时，CLI 与 Daemon 会以 `command_unsupported` 拒绝。

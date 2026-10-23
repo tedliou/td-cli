@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import inspect
 import json
 import secrets
 import sys
 import time
+import typing
 import uuid
 from pathlib import Path
 from typing import Annotated, Any
@@ -14,7 +16,13 @@ from typer._click.exceptions import ClickException, UsageError
 
 from td_cli import __version__
 from td_cli.client import ClientError, DaemonClient
-from td_cli.command_catalog import MAX_DAT_CONTENT_BYTES, MAX_INSPECTION_ITEMS, MAX_TOX_FILE_BYTES
+from td_cli.command_catalog import (
+    BATCH_MAX_COMMANDS,
+    COMMAND_CATALOG,
+    MAX_DAT_CONTENT_BYTES,
+    MAX_INSPECTION_ITEMS,
+    MAX_TOX_FILE_BYTES,
+)
 from td_cli.error_catalog import ERROR_CATALOG
 from td_cli.operator_catalog import OPERATOR_CATALOG
 from td_cli.processes import LaunchError, launch_detached
@@ -28,6 +36,8 @@ ops_state_app = typer.Typer()
 ops_hierarchy_app = typer.Typer()
 ops_tox_app = typer.Typer()
 dat_app = typer.Typer()
+chop_app = typer.Typer()
+chop_values_app = typer.Typer()
 dat_text_app = typer.Typer()
 dat_table_app = typer.Typer()
 parameters_app = typer.Typer()
@@ -43,6 +53,8 @@ ops_app.add_typer(ops_state_app, name="state")
 ops_app.add_typer(ops_hierarchy_app, name="hierarchy")
 ops_app.add_typer(ops_tox_app, name="tox")
 app.add_typer(dat_app, name="dat")
+app.add_typer(chop_app, name="chop")
+chop_app.add_typer(chop_values_app, name="values")
 dat_app.add_typer(dat_text_app, name="text")
 dat_app.add_typer(dat_table_app, name="table")
 app.add_typer(parameters_app, name="parameters")
@@ -136,7 +148,10 @@ def _run(ctx: typer.Context, operation) -> None:
 
 @instances_app.command("list")
 def instances_list(
-    ctx: typer.Context, status: Annotated[str | None, typer.Option("--status")] = None
+    ctx: typer.Context,
+    status: Annotated[
+        str | None, typer.Option("--status", help="Keep only online, offline or draining.")
+    ] = None,
 ) -> None:
     def operation() -> None:
         _reject_instance_on_query(ctx)
@@ -288,7 +303,12 @@ def _command(
 @commands_app.command("execute")
 def commands_execute(
     ctx: typer.Context,
-    input_file: Annotated[Path, typer.Option("--input-file")],
+    input_file: Annotated[
+        Path,
+        typer.Option(
+            "--input-file", help='JSON plan {"commands":[{"name","input"}]}, at most 1 MiB.'
+        ),
+    ],
 ) -> None:
     """Run 1–256 typed Commands in order; JSONL progress, stop on first failure."""
     from td_cli.command_run import read_plan, run_plan
@@ -320,6 +340,7 @@ def _structural_destination_input(
     node_x: int | None,
     node_y: int | None,
     max_operators: int | None,
+    inventory: str | None,
     *,
     specific_requested: bool,
     specific_input: dict[str, Any],
@@ -330,7 +351,11 @@ def _structural_destination_input(
     ):
         _fail(ctx, ClientError("invalid_arguments"))
     if (
-        node_x is not None or node_y is not None or specific_requested or max_operators is not None
+        node_x is not None
+        or node_y is not None
+        or specific_requested
+        or max_operators is not None
+        or inventory is not None
     ) and source_path is None:
         _fail(ctx, ClientError("invalid_arguments"))
     if source_path is None or target_parent_path is None or new_name is None:
@@ -342,6 +367,7 @@ def _structural_destination_input(
         "node_x": node_x,
         "node_y": node_y,
         "max_operators": max_operators if max_operators is not None else 256,
+        **({"inventory": inventory} if inventory is not None else {}),
         **specific_input,
     }
 
@@ -515,22 +541,56 @@ def ops_state_set(
     _command(ctx, "ops.state.set", dedicated, input, input_file, no_wait, request_id)
 
 
-@dat_text_app.command("get")
-def dat_text_get(
+@chop_values_app.command("get")
+def chop_values_get(
     ctx: typer.Context,
     operator_path: Annotated[str | None, typer.Argument()] = None,
-    max_bytes: Annotated[int | None, typer.Option("--max-bytes")] = None,
+    channels: Annotated[
+        str | None, typer.Option("--channels", help="Comma-separated channel names to read.")
+    ] = None,
+    sample_offset: Annotated[int | None, typer.Option("--sample-offset")] = None,
+    sample_count: Annotated[int | None, typer.Option("--sample-count")] = None,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
     request_id: Annotated[str | None, typer.Option("--request-id")] = None,
 ) -> None:
-    if max_bytes is not None and operator_path is None:
+    options = {
+        "channels": channels.split(",") if channels is not None else None,
+        "sample_offset": sample_offset,
+        "sample_count": sample_count,
+    }
+    if any(value is not None for value in options.values()) and operator_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = (
+        {
+            "operator_path": operator_path,
+            **{key: value for key, value in options.items() if value is not None},
+        }
+        if operator_path is not None
+        else None
+    )
+    _command(ctx, "chop.values.get", dedicated, input, input_file, no_wait, request_id)
+
+
+@dat_text_app.command("get")
+def dat_text_get(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    max_bytes: Annotated[int | None, typer.Option("--max-bytes")] = None,
+    offset: Annotated[int | None, typer.Option("--offset")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    if (max_bytes is not None or offset is not None) and operator_path is None:
         _fail(ctx, ClientError("invalid_arguments"))
     dedicated = (
         {
             "operator_path": operator_path,
             "max_bytes": max_bytes if max_bytes is not None else MAX_DAT_CONTENT_BYTES,
+            **({"offset": offset} if offset is not None else {}),
         }
         if operator_path is not None
         else None
@@ -645,7 +705,9 @@ def dat_table_patch(
 def ops_children(
     ctx: typer.Context,
     operator_path: Annotated[str | None, typer.Argument()] = None,
-    op_type: Annotated[str | None, typer.Option("--op-type")] = None,
+    op_type: Annotated[
+        str | None, typer.Option("--op-type", help="Keep only children of this exact type.")
+    ] = None,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
@@ -816,12 +878,15 @@ def ops_destroy(
     recursive: Annotated[bool, typer.Option("--recursive")] = False,
     allow_connected: Annotated[bool, typer.Option("--allow-connected")] = False,
     max_operators: Annotated[int | None, typer.Option("--max-operators")] = None,
+    inventory: Annotated[str | None, typer.Option("--inventory")] = None,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
     request_id: Annotated[str | None, typer.Option("--request-id")] = None,
 ) -> None:
-    if (recursive or allow_connected or max_operators is not None) and operator_path is None:
+    if (
+        recursive or allow_connected or max_operators is not None or inventory is not None
+    ) and operator_path is None:
         _fail(ctx, ClientError("invalid_arguments"))
     dedicated = (
         {
@@ -829,6 +894,7 @@ def ops_destroy(
             "recursive": recursive,
             "allow_connected": allow_connected,
             "max_operators": max_operators if max_operators is not None else 256,
+            **({"inventory": inventory} if inventory is not None else {}),
         }
         if operator_path is not None
         else None
@@ -846,6 +912,7 @@ def ops_copy(
     node_y: Annotated[int | None, typer.Option("--node-y")] = None,
     include_docked: Annotated[bool, typer.Option("--include-docked")] = False,
     max_operators: Annotated[int | None, typer.Option("--max-operators")] = None,
+    inventory: Annotated[str | None, typer.Option("--inventory")] = None,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
@@ -859,6 +926,7 @@ def ops_copy(
         node_x,
         node_y,
         max_operators,
+        inventory,
         specific_requested=include_docked,
         specific_input={"include_docked": include_docked},
     )
@@ -875,6 +943,7 @@ def ops_move(
     node_y: Annotated[int | None, typer.Option("--node-y")] = None,
     allow_connected: Annotated[bool, typer.Option("--allow-connected")] = False,
     max_operators: Annotated[int | None, typer.Option("--max-operators")] = None,
+    inventory: Annotated[str | None, typer.Option("--inventory")] = None,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
@@ -888,6 +957,7 @@ def ops_move(
         node_x,
         node_y,
         max_operators,
+        inventory,
         specific_requested=allow_connected,
         specific_input={"allow_connected": allow_connected},
     )
@@ -901,11 +971,20 @@ def ops_tox_import(
     tox_path: Annotated[str | None, typer.Argument()] = None,
     allowlist_root: Annotated[str | None, typer.Argument()] = None,
     target_name: Annotated[str | None, typer.Argument()] = None,
-    trusted: Annotated[bool, typer.Option("--trusted")] = False,
+    trusted: Annotated[
+        bool,
+        typer.Option("--trusted", help="Required: confirm the .tox and its scripts are trusted."),
+    ] = False,
     replace: Annotated[bool, typer.Option("--replace")] = False,
     max_file_bytes: Annotated[int | None, typer.Option("--max-file-bytes")] = None,
     max_operators: Annotated[int | None, typer.Option("--max-operators")] = None,
-    root_child: Annotated[str | None, typer.Option("--root-child")] = None,
+    root_child: Annotated[
+        str | None,
+        typer.Option(
+            "--root-child",
+            help="Install this same-named COMP inside the TOX root, as Palette does.",
+        ),
+    ] = None,
     inventory: Annotated[str | None, typer.Option("--inventory")] = None,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
@@ -983,15 +1062,34 @@ def parameters_get(
 def parameters_list(
     ctx: typer.Context,
     operator_path: Annotated[str | None, typer.Argument()] = None,
+    names: Annotated[
+        str | None, typer.Option("--names", help="Comma-separated parameter names to list.")
+    ] = None,
+    include_values: Annotated[bool, typer.Option("--include-values")] = False,
+    non_default_only: Annotated[bool, typer.Option("--non-default-only")] = False,
+    no_menu_options: Annotated[
+        bool, typer.Option("--no-menu-options", help="Report menu_names and menu_labels as null.")
+    ] = False,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
     request_id: Annotated[str | None, typer.Option("--request-id")] = None,
 ) -> None:
+    options: dict[str, object] = {}
+    if names is not None:
+        options["names"] = names.split(",")
+    if include_values:
+        options["include_values"] = True
+    if non_default_only:
+        options["non_default_only"] = True
+    if no_menu_options:
+        options["include_menu_options"] = False
+    if options and operator_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
     _command(
         ctx,
         "parameters.list",
-        {"operator_path": operator_path} if operator_path is not None else None,
+        {"operator_path": operator_path, **options} if operator_path is not None else None,
         input,
         input_file,
         no_wait,
@@ -1024,17 +1122,50 @@ def parameters_set(
     ctx: typer.Context,
     operator_path: Annotated[str | None, typer.Argument()] = None,
     parameter: Annotated[str | None, typer.Argument()] = None,
-    bool_value: Annotated[str | None, typer.Option("--bool")] = None,
-    integer: Annotated[int | None, typer.Option("--integer")] = None,
-    number: Annotated[float | None, typer.Option("--number")] = None,
-    string: Annotated[str | None, typer.Option("--string")] = None,
-    operator_value: Annotated[str | None, typer.Option("--operator")] = None,
-    operators_json: Annotated[str | None, typer.Option("--operators-json")] = None,
-    expression: Annotated[str | None, typer.Option("--expression")] = None,
-    export_source_operator: Annotated[str | None, typer.Option("--export-source-operator")] = None,
-    export_channel: Annotated[str | None, typer.Option("--export-channel")] = None,
-    bind_source_operator: Annotated[str | None, typer.Option("--bind-source-operator")] = None,
-    bind_parameter: Annotated[str | None, typer.Option("--bind-parameter")] = None,
+    bool_value: Annotated[
+        str | None, typer.Option("--bool", help="Constant toggle value: true or false.")
+    ] = None,
+    integer: Annotated[
+        int | None, typer.Option("--integer", help="Constant integer value.")
+    ] = None,
+    number: Annotated[float | None, typer.Option("--number", help="Constant float value.")] = None,
+    string: Annotated[
+        str | None, typer.Option("--string", help="Constant string or menu value.")
+    ] = None,
+    operator_value: Annotated[
+        str | None, typer.Option("--operator", help="Constant Operator path for an OP parameter.")
+    ] = None,
+    operators_json: Annotated[
+        str | None,
+        typer.Option(
+            "--operators-json", help="JSON array of Operator paths for a multi-OP parameter."
+        ),
+    ] = None,
+    expression: Annotated[
+        str | None, typer.Option("--expression", help="Set expression mode with this Python text.")
+    ] = None,
+    export_source_operator: Annotated[
+        str | None,
+        typer.Option(
+            "--export-source-operator",
+            help="Export mode: source CHOP path (with --export-channel).",
+        ),
+    ] = None,
+    export_channel: Annotated[
+        str | None,
+        typer.Option("--export-channel", help="Export mode: channel name of the source CHOP."),
+    ] = None,
+    bind_source_operator: Annotated[
+        str | None,
+        typer.Option(
+            "--bind-source-operator",
+            help="Bind mode: source Operator path (with --bind-parameter).",
+        ),
+    ] = None,
+    bind_parameter: Annotated[
+        str | None,
+        typer.Option("--bind-parameter", help="Bind mode: parameter name on the source Operator."),
+    ] = None,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
@@ -1137,8 +1268,13 @@ def parameters_menu_set(
     ctx: typer.Context,
     operator_path: Annotated[str | None, typer.Argument()] = None,
     parameter: Annotated[str | None, typer.Argument()] = None,
-    names_json: Annotated[str | None, typer.Option("--names-json")] = None,
-    labels_json: Annotated[str | None, typer.Option("--labels-json")] = None,
+    names_json: Annotated[
+        str | None, typer.Option("--names-json", help="JSON array of menu item names.")
+    ] = None,
+    labels_json: Annotated[
+        str | None,
+        typer.Option("--labels-json", help="JSON array of labels, same length as names."),
+    ] = None,
     preserve: Annotated[str | None, typer.Option("--preserve", help="index or name")] = None,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
@@ -1192,7 +1328,9 @@ def parameters_sequence_replace(
     ctx: typer.Context,
     operator_path: Annotated[str | None, typer.Argument()] = None,
     sequence: Annotated[str | None, typer.Argument()] = None,
-    blocks_json: Annotated[str | None, typer.Option("--blocks-json")] = None,
+    blocks_json: Annotated[
+        str | None, typer.Option("--blocks-json", help="JSON array of sequence block objects.")
+    ] = None,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
@@ -1223,13 +1361,30 @@ def project_snapshot(
     operator_path: Annotated[str | None, typer.Argument()] = None,
     max_depth: Annotated[int, typer.Option("--max-depth")] = 4,
     max_operators: Annotated[int, typer.Option("--max-operators")] = 256,
+    paginate: Annotated[bool, typer.Option("--paginate")] = False,
+    cursor: Annotated[str | None, typer.Option("--cursor")] = None,
+    include_connections: Annotated[bool, typer.Option("--include-connections")] = False,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: bool = False,
     request_id: str | None = None,
 ) -> None:
+    options: dict[str, object] = {}
+    if paginate:
+        options["paginate"] = True
+    if cursor is not None:
+        options["cursor"] = cursor
+    if include_connections:
+        options["include_connections"] = True
+    if options and operator_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
     dedicated = (
-        {"operator_path": operator_path, "max_depth": max_depth, "max_operators": max_operators}
+        {
+            "operator_path": operator_path,
+            "max_depth": max_depth,
+            "max_operators": max_operators,
+            **options,
+        }
         if operator_path is not None
         else None
     )
@@ -1273,13 +1428,19 @@ def binary_export(
     _command(ctx, "binary.export", dedicated, input, input_file, no_wait, request_id)
 
 
-@batch_app.command("execute")
+@batch_app.command(
+    "execute",
+    help=(
+        f"Run 1-{BATCH_MAX_COMMANDS} read-only Commands in one Request. For ordered "
+        "mutations use commands execute (1-256 Requests); td commands schema batch.execute."
+    ),
+)
 def batch_execute(
     ctx: typer.Context,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
-    no_wait: bool = False,
-    request_id: str | None = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
 ) -> None:
     _command(ctx, "batch.execute", None, input, input_file, no_wait, request_id)
 
@@ -1287,11 +1448,11 @@ def batch_execute(
 @events_app.command("read")
 def events_read(
     ctx: typer.Context,
-    after: int = 0,
-    limit: int = 100,
-    include_errors: bool = True,
-    no_wait: bool = False,
-    request_id: str | None = None,
+    after: Annotated[int, typer.Option("--after")] = 0,
+    limit: Annotated[int, typer.Option("--limit")] = 100,
+    include_errors: Annotated[bool, typer.Option("--include-errors/--no-include-errors")] = True,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
 ) -> None:
     _command(
         ctx,
@@ -1302,6 +1463,104 @@ def events_read(
         no_wait,
         request_id,
     )
+
+
+@commands_app.command("schema")
+def commands_schema(
+    ctx: typer.Context, name: Annotated[str | None, typer.Argument()] = None
+) -> None:
+    """List Command names, or print one Command's input JSON Schema without a Daemon."""
+
+    def operation() -> None:
+        _reject_instance_on_query(ctx)
+        if name is None:
+            _emit(ctx, {"commands": list(COMMAND_CATALOG.names)})
+            return
+        model = COMMAND_CATALOG.input_model(name)
+        if model is None:
+            raise ClientError("invalid_arguments")
+        _emit(
+            ctx,
+            {
+                "name": name,
+                "effect": COMMAND_CATALOG.effect(name).value,
+                "batchable": name in COMMAND_CATALOG.batch_names,
+                "input_schema": model.model_json_schema(),
+            },
+        )
+
+    _run(ctx, operation)
+
+
+_COMMON_OPTION_HELP = {
+    "input": "Command input as one JSON object; see td commands schema NAME.",
+    "input_file": "Read the JSON input object from a UTF-8 file, or - for stdin.",
+    "no_wait": "Return the queued Request snapshot instead of waiting for its outcome.",
+    "request_id": "Client-chosen Request ID (UUID); default is a new UUIDv7.",
+}
+
+
+def _field_help(field: dict[str, Any], *, with_default: bool) -> str:
+    """Summarize one JSON Schema property as a one-line option description."""
+    variants = [item for item in field.get("anyOf", [field]) if item.get("type") != "null"]
+    shape = variants[0] if len(variants) == 1 else field
+    facts = [field["description"].rstrip(".")] if "description" in field else []
+    if "enum" in shape:
+        facts.append("one of " + "|".join(str(value) for value in shape["enum"]))
+    for low, high, unit in (
+        ("minimum", "maximum", ""),
+        ("minLength", "maxLength", " chars"),
+        ("minItems", "maxItems", " items"),
+    ):
+        if low in shape and high in shape:
+            facts.append(f"{shape[low]}-{shape[high]}{unit}")
+        elif high in shape:
+            facts.append(f"at most {shape[high]}{unit}")
+        elif low in shape:
+            facts.append(f"at least {shape[low]}{unit}")
+    if with_default and field.get("default") is not None:
+        facts.append(f"default {json.dumps(field['default'])}")
+    return "; ".join(facts)
+
+
+def _attach_schema_help(group: typer.Typer, prefix: tuple[str, ...] = ()) -> None:
+    """Describe each Command's options from its input model so help cannot drift."""
+    for info in group.registered_commands:
+        path = ".".join((*prefix, str(info.name)))
+        name = path if path in COMMAND_CATALOG.names else path.replace("-", ".")
+        model = COMMAND_CATALOG.input_model(name)
+        if model is None or info.callback is None:
+            continue
+        if info.help is None and not info.callback.__doc__:
+            info.help = f"Submit the {name} Command; full input schema: td commands schema {name}."
+        properties = model.model_json_schema().get("properties", {})
+        # Resolve postponed annotations once so Typer later reads these same ParameterInfo objects.
+        hints = typing.get_type_hints(info.callback, include_extras=True)
+        info.callback.__annotations__ = hints
+        defaults = {
+            parameter: value.default
+            for parameter, value in inspect.signature(info.callback).parameters.items()
+        }
+        for parameter, annotation in hints.items():
+            for metadata in getattr(annotation, "__metadata__", ()):
+                if not isinstance(metadata, typer.models.ParameterInfo) or metadata.help:
+                    continue
+                if parameter in properties:
+                    # Typer already prints defaults other than None and False itself.
+                    default = defaults.get(parameter)
+                    typer_prints_default = default is not None and default is not False
+                    metadata.help = (
+                        _field_help(properties[parameter], with_default=not typer_prints_default)
+                        or None
+                    )
+                elif parameter in _COMMON_OPTION_HELP:
+                    metadata.help = _COMMON_OPTION_HELP[parameter]
+    for nested in group.registered_groups:
+        if nested.typer_instance is not None:
+            _attach_schema_help(nested.typer_instance, (*prefix, str(nested.name)))
+
+
+_attach_schema_help(app)
 
 
 def run() -> None:

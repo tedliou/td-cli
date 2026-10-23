@@ -81,6 +81,28 @@ def test_project_save_submits_explicit_path_and_digest(monkeypatch) -> None:
     }
 
 
+def test_project_save_accepts_uppercase_digest_from_get_filehash(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+    digest = "C68E5B03" + "AB" * 28
+    result = CliRunner().invoke(
+        cli.app,
+        ["--json", "project", "save", "E:/work/project.toe", "--expected-sha256", digest],
+    )
+    assert result.exit_code == 0, result.output
+    assert FakeDaemonClient.submitted["input"]["expected_sha256"] == "c68e5b03" + "ab" * 28
+
+
+def test_msys_converted_operator_path_names_the_git_bash_workaround(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+    result = CliRunner().invoke(
+        cli.app, ["--json", "ops", "children", "C:/Program Files/Git/project1/"]
+    )
+    assert result.exit_code == 2
+    error = json.loads(result.stdout)["error"]
+    assert error["code"] == "invalid_arguments"
+    assert "MSYS_NO_PATHCONV=1" in error["details"]["validation_errors"][0]["message"]
+
+
 def test_ops_get_submits_typed_command_and_emits_protocol_envelope(monkeypatch) -> None:
     monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
 
@@ -993,3 +1015,206 @@ def test_project_open_observes_global_timeout(tmp_path, monkeypatch):
     )
     assert result.exit_code == 0, result.output
     assert observed == [45]
+
+
+def test_commands_schema_lists_command_names_without_a_daemon(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", None)
+    result = CliRunner().invoke(cli.app, ["--json", "commands", "schema"])
+    assert result.exit_code == 0, result.output
+    names = json.loads(result.stdout)["data"]["commands"]
+    assert "parameters.set" in names
+    assert "dat.text.get" in names
+
+
+def test_commands_schema_reports_input_fields_limits_and_batchability(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", None)
+    result = CliRunner().invoke(cli.app, ["--json", "commands", "schema", "dat.text.get"])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)["data"]
+    assert data["name"] == "dat.text.get"
+    assert data["effect"] == "read_only"
+    assert data["batchable"] is True
+    assert data["input_schema"]["properties"]["max_bytes"]["maximum"] == 32768
+    assert data["input_schema"]["required"] == ["operator_path"]
+
+
+def test_commands_schema_rejects_unknown_command(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", None)
+    result = CliRunner().invoke(cli.app, ["--json", "commands", "schema", "ops.nope"])
+    assert result.exit_code == 2
+    assert json.loads(result.stdout)["error"]["code"] == "invalid_arguments"
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [
+        (["dat", "text", "get"], ["32768", "td commands schema dat.text.get"]),
+        (["project", "snapshot"], ["1000", "1-1000"]),
+        (["batch", "execute"], ["16", "commands execute"]),
+        (["ops", "destroy"], ["non-empty COMP", "detached_connections"]),
+    ],
+)
+def test_help_states_option_meaning_and_limits(argv, expected) -> None:
+    result = CliRunner().invoke(cli.app, [*argv, "--help"], terminal_width=200)
+    assert result.exit_code == 0, result.output
+    text = " ".join(result.stdout.split())
+    for fragment in expected:
+        assert fragment in text
+
+
+def test_cli_startup_does_not_import_the_daemon_server_stack() -> None:
+    import subprocess
+
+    probe = (
+        "import sys, td_cli.cli; "
+        "print(sorted(m for m in ('fastapi', 'uvicorn', 'socketio', 'td_cli.daemon.transport') "
+        "if m in sys.modules))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, timeout=60, check=True
+    )
+    assert result.stdout.strip() == "[]"
+
+
+def test_dat_text_get_offset_requests_a_chunk(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+    result = CliRunner().invoke(
+        cli.app, ["--json", "dat", "text", "get", "/project1/config", "--offset", "32768"]
+    )
+    assert result.exit_code == 0, result.output
+    assert FakeDaemonClient.submitted == {
+        "name": "dat.text.get",
+        "input": {"operator_path": "/project1/config", "max_bytes": 32768, "offset": 32768},
+    }
+
+
+def test_chop_values_get_submits_channels_and_sample_range(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "--json",
+            "chop",
+            "values",
+            "get",
+            "/project1/osc",
+            "--channels",
+            "tx,ty",
+            "--sample-offset",
+            "0",
+            "--sample-count",
+            "8",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert FakeDaemonClient.submitted == {
+        "name": "chop.values.get",
+        "input": {
+            "operator_path": "/project1/osc",
+            "channels": ["tx", "ty"],
+            "sample_offset": 0,
+            "sample_count": 8,
+        },
+    }
+
+
+def test_parameters_list_submits_value_name_and_menu_options(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "--json",
+            "parameters",
+            "list",
+            "/project1/select1",
+            "--names",
+            "channames,renamefrom",
+            "--include-values",
+            "--non-default-only",
+            "--no-menu-options",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert FakeDaemonClient.submitted == {
+        "name": "parameters.list",
+        "input": {
+            "operator_path": "/project1/select1",
+            "names": ["channames", "renamefrom"],
+            "include_values": True,
+            "non_default_only": True,
+            "include_menu_options": False,
+        },
+    }
+
+
+def test_project_snapshot_submits_paging_and_connections(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "--json",
+            "project",
+            "snapshot",
+            "/project1",
+            "--cursor",
+            "abc",
+            "--include-connections",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert FakeDaemonClient.submitted == {
+        "name": "project.snapshot",
+        "input": {
+            "operator_path": "/project1",
+            "max_depth": 4,
+            "max_operators": 256,
+            "cursor": "abc",
+            "include_connections": True,
+        },
+    }
+
+
+def test_structural_commands_submit_a_summary_inventory(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+    destroy = CliRunner().invoke(
+        cli.app,
+        [
+            "--json",
+            "ops",
+            "destroy",
+            "/project1/big",
+            "--recursive",
+            "--max-operators",
+            "5000",
+            "--inventory",
+            "summary",
+        ],
+    )
+    assert destroy.exit_code == 0, destroy.output
+    assert FakeDaemonClient.submitted["input"] == {
+        "operator_path": "/project1/big",
+        "recursive": True,
+        "allow_connected": False,
+        "max_operators": 5000,
+        "inventory": "summary",
+    }
+    move = CliRunner().invoke(
+        cli.app,
+        [
+            "--json",
+            "ops",
+            "move",
+            "/project1/big",
+            "/project1/group",
+            "big",
+            "--inventory",
+            "summary",
+        ],
+    )
+    assert move.exit_code == 0, move.output
+    assert FakeDaemonClient.submitted["input"]["inventory"] == "summary"
+    copy = CliRunner().invoke(
+        cli.app, ["--json", "ops", "copy", "/project1/big", "/project1/group", "big2"]
+    )
+    assert copy.exit_code == 0, copy.output
+    assert "inventory" not in FakeDaemonClient.submitted["input"]

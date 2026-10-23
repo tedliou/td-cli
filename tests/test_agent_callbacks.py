@@ -54,6 +54,9 @@ class FakeAgentExtension:
     def heartbeat_payload(self) -> dict[str, object]:
         return {"instance_id": self.instance_id, "connection_id": self.connection_id}
 
+    def heartbeat_report(self) -> dict[str, object]:
+        return {**self.heartbeat_payload(), "project": None}
+
     def synchronization_records(self):
         return list(self.records)
 
@@ -184,7 +187,7 @@ def test_connection_starts_generation_tagged_independent_heartbeat_scheduler() -
 
     extension.connection_id = "connection-1"
     callbacks["schedulerTick"](generation, scheduled[0][1][1])
-    assert socket.emitted == [("heartbeat", extension.heartbeat_payload())]
+    assert socket.emitted == [("heartbeat", extension.heartbeat_report())]
     assert extension.heartbeat_marks == 1
     assert len(scheduled) == 2
 

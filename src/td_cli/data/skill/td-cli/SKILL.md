@@ -12,7 +12,8 @@ subcommand's `--help`. For operator names and support, use `td ops types --help`
 and its catalog queries. Read the actual graph/parameters before editing it.
 An operator type's existence in TouchDesigner does not imply td-cli supports every
 operation on it. Use exact absolute operator paths, and select an Instance when
-more than one is online.
+more than one is online. In Git Bash, set `MSYS_NO_PATHCONV=1` so `/project1` is
+not rewritten into a Windows path.
 
 - For starting, selecting, reconnecting, upgrading or saving, read
   [sessions.md](references/sessions.md).
@@ -26,7 +27,12 @@ bounded; a timeout only ends the wait. Retain the Request ID and inspect it usin
 `td requests get <id>` before deciding another action. Do not repeat a mutation
 whose outcome is unknown.
 
-`batch execute` accepts read-only Commands only. For many typed mutations, use
+Each Command subcommand's `--help` states its option limits. `td commands schema`
+lists Command names, and `td commands schema <name>` prints that Command's input
+JSON Schema (field names, bounds, defaults) for `--input`, batches and plans.
+
+`batch execute` runs 1-16 read-only Commands in one Request. Each `results[i]` is ok/result or
+ok/error; check `failed_count`, because the Request succeeds even when some reads fail. For many typed mutations, use
 `commands execute --input-file plan.json` with `{"commands":[{"name":"ops.create",
 "input":{...}}]}` (1-256 Commands, 1 MiB). It runs independent Requests in order,
 stops on the first non-success, and emits flushed JSONL with each zero-based

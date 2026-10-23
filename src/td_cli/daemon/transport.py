@@ -64,6 +64,7 @@ class _InstanceMetadata:
     capabilities: list[str]
     last_heartbeat_at: str
     offline_expires_at: str | None = None
+    project: dict[str, str] | None = None
 
 
 def create_transport_app(
@@ -159,6 +160,7 @@ def create_transport_app(
                     "capabilities": sorted(item.capabilities),
                     "last_heartbeat_at": item.last_heartbeat_at,
                     "offline_expires_at": item.offline_expires_at,
+                    "project": item.project,
                 }
             )
         return result
@@ -317,6 +319,7 @@ def create_transport_app(
             agent_version,
             capabilities,
             _now(),
+            project=_project(data),
         )
         await require_lifecycle().register(
             instance_id,
@@ -349,6 +352,11 @@ def create_transport_app(
         await require_lifecycle().heartbeat(adapter.instance_id, adapter.connection_id)
         item = metadata[adapter.instance_id]
         item.last_heartbeat_at = _now()
+        project = _project(data)
+        # The Agent wire drops nulls, so a missing project cannot be told apart from an older
+        # Agent that never reports one; keep the last known project instead of clearing it.
+        if project is not None:
+            item.project = project
         if isinstance(data, dict) and data.get("status") == "draining":
             item.status = "draining"
             await require_lifecycle().set_draining(adapter.instance_id, adapter.connection_id)
@@ -571,6 +579,23 @@ def _registration(data: object) -> tuple[str, str, list[str]] | None:
     ):
         return None
     return instance_id, str(data.get("agent_version", "unknown")), capabilities
+
+
+MAX_PROJECT_FIELD_CHARACTERS = 1024
+
+
+def _project(data: object) -> dict[str, str] | None:
+    """Return the open project an Agent reports, or None for an older or malformed report."""
+    project = data.get("project") if isinstance(data, dict) else None
+    if not isinstance(project, dict):
+        return None
+    fields = {key: project.get(key) for key in ("name", "folder")}
+    if not all(
+        isinstance(value, str) and len(value) <= MAX_PROJECT_FIELD_CHARACTERS
+        for value in fields.values()
+    ):
+        return None
+    return {key: str(value) for key, value in fields.items()}
 
 
 def _current(

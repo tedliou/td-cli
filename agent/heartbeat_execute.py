@@ -28,5 +28,5 @@ def schedulerTick(generation, component):
     agent.maintain_connection()
     if agent.connection_id:
         agent.mark_heartbeat()
-        component.op("socketio1").emit("heartbeat", data=agent.heartbeat_payload())
+        component.op("socketio1").emit("heartbeat", data=agent.heartbeat_report())
     scheduleTick(generation, component)

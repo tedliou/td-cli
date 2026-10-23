@@ -2,6 +2,7 @@
 
 import base64
 import builtins
+import collections
 import hashlib
 import json
 import math
@@ -68,6 +69,7 @@ class OperatorControl:
         "ops.state.get": "_get_operator_state",
         "ops.state.set": "_set_operator_state",
         "ops.tox.import": "_import_tox",
+        "chop.values.get": "_get_chop_values",
         "dat.text.get": "_get_text_dat",
         "dat.text.set": "_set_text_dat",
         "dat.table.get": "_get_table_dat",
@@ -97,6 +99,8 @@ class OperatorControl:
         ("render", "render", "boolean"),
     )
     MAX_DAT_CONTENT_BYTES = 32_768
+    MAX_CHOP_VALUES = 4096
+    MAX_SUMMARY_BOUNDARY_CONNECTIONS = 512
     MAX_TABLE_ROWS = 256
     MAX_TABLE_COLUMNS = 256
     MAX_TABLE_CELLS = 4096
@@ -107,7 +111,7 @@ class OperatorControl:
     MAX_HIERARCHY_TRAVERSAL = 1000
     MAX_INSPECTION_STRING_BYTES = 4096
     MAX_TOX_FILE_BYTES = 67_108_864
-    INSPECTION_FAMILIES = ("CHOP", "DAT", "TOP", "SOP", "POP", "MAT")
+    INSPECTION_FAMILIES = ("CHOP", "DAT", "TOP", "SOP", "POP", "MAT", "COMP")
 
     def __init__(self, operator_lookup, operator_catalog, protected_path=None, passive_lookup=None):
         self.operator_lookup = operator_lookup
@@ -261,6 +265,44 @@ class OperatorControl:
     def _inspect_mat(_operator, _max_items):
         return {}
 
+    def _inspect_comp(self, operator, max_items):
+        """Summarize a COMP's interface: connectors by In/Out Operator, children, custom pages."""
+
+        def connectors(items, inner_name):
+            result = []
+            for connector in items:
+                inner = getattr(connector, inner_name, None)
+                result.append(
+                    {
+                        "index": self._nonnegative_integer(connector.index),
+                        "operator": None if inner is None else self._inspection_string(inner.name),
+                        "family": None if inner is None else str(inner.family),
+                    }
+                )
+            return result
+
+        inputs = list(operator.inputConnectors)
+        outputs = list(operator.outputConnectors)
+        pages = list(operator.customPages)
+        page_parameters = [list(page.pars) for page in pages]
+        self._require_inspection_bound(
+            len(inputs) + len(outputs) + len(pages) + sum(map(len, page_parameters)), max_items
+        )
+        return {
+            "child_count": len(operator.children),
+            "inputs": connectors(inputs, "inOP"),
+            "outputs": connectors(outputs, "outOP"),
+            "hierarchy_inputs": len(operator.inputCOMPConnectors),
+            "hierarchy_outputs": len(operator.outputCOMPConnectors),
+            "custom_pages": [
+                {
+                    "name": self._inspection_string(page.name),
+                    "parameters": [self._inspection_string(item.name) for item in parameters],
+                }
+                for page, parameters in zip(pages, page_parameters, strict=True)
+            ],
+        }
+
     @classmethod
     def _inspection_bounds(cls, operator):
         result = {
@@ -332,20 +374,105 @@ class OperatorControl:
             raise AgentCommandError("family_inspection_unavailable")
         return number
 
+    def _get_chop_values(self, payload):
+        """Read current or ranged CHOP sample values without creating any Operator."""
+        operator = self._operator(payload)
+        if str(operator.family) != "CHOP":
+            raise AgentCommandError("operator_family_unsupported")
+        channels = list(operator.chans())
+        wanted = payload.get("channels")
+        if wanted is not None:
+            by_name = {str(channel.name): channel for channel in channels}
+            if any(name not in by_name for name in wanted):
+                raise AgentCommandError("chop_channel_not_found")
+            channels = [by_name[name] for name in wanted]
+        non_finite = 0
+
+        def number(value):
+            nonlocal non_finite
+            value = float(value)
+            if math.isfinite(value):
+                return value
+            non_finite += 1
+            return None
+
+        offset = payload.get("sample_offset")
+        if offset is None:
+            self._require_inspection_bound(len(channels), self.MAX_CHOP_VALUES)
+            values = {str(channel.name): number(channel.eval()) for channel in channels}
+            clock = getattr(_td_runtime, "absTime", None) or getattr(builtins, "absTime", None)
+            frame = getattr(clock, "frame", None)
+            return {
+                "operator_path": str(operator.path),
+                "frame": frame,
+                "channels": list(values),
+                "values": values,
+                "non_finite_count": non_finite,
+            }
+        total = int(operator.numSamples)
+        indexes = range(offset, min(offset + payload["sample_count"], total))
+        self._require_inspection_bound(len(channels) * len(indexes), self.MAX_CHOP_VALUES)
+        return {
+            "operator_path": str(operator.path),
+            "sample_offset": offset,
+            "sample_rate": float(operator.rate),
+            "total_samples": total,
+            "channels": [str(channel.name) for channel in channels],
+            "values": {
+                str(channel.name): [number(channel[index]) for index in indexes]
+                for channel in channels
+            },
+            "non_finite_count": non_finite,
+        }
+
     def _get_text_dat(self, payload):
-        operator = self._require_dat(payload, "textDAT")
+        # Any text-content DAT is readable, including Execute-family callbacks; writes stay
+        # limited to Text DATs.
+        operator = self._operator(payload)
+        if str(operator.family) != "DAT" or not getattr(operator, "isText", False):
+            raise AgentCommandError("dat_type_mismatch")
         try:
             text = str(operator.text)
             byte_count = len(text.encode("utf-8"))
         except Exception as error:
             raise AgentCommandError("dat_content_unavailable") from error
+        if payload.get("offset") is not None:
+            return self._text_chunk(operator, text, payload["offset"], payload["max_bytes"])
         if byte_count > payload["max_bytes"]:
             raise AgentCommandError("result_too_large")
         return {
             "operator_path": str(operator.path),
+            "op_type": str(operator.OPType),
             "dat_kind": "text",
             "text": text,
             "utf8_bytes": byte_count,
+        }
+
+    @staticmethod
+    def _text_chunk(operator, text, offset, max_bytes):
+        """Return whole UTF-8 characters starting at a byte offset, with the next offset."""
+        data = text.encode("utf-8")
+
+        def continuation(index):
+            return index < len(data) and data[index] & 0xC0 == 0x80
+
+        if offset > len(data) or continuation(offset):
+            raise AgentCommandError("invalid_arguments")
+        end = min(offset + max_bytes, len(data))
+        while continuation(end):
+            end -= 1
+        if end == offset and offset < len(data):
+            raise AgentCommandError("result_too_large")
+        return {
+            "operator_path": str(operator.path),
+            "op_type": str(operator.OPType),
+            "dat_kind": "text",
+            "text": data[offset:end].decode("utf-8"),
+            "utf8_bytes": end - offset,
+            "offset": offset,
+            "next_offset": end if end < len(data) else None,
+            "total_utf8_bytes": len(data),
+            "text_sha256": hashlib.sha256(data).hexdigest(),
         }
 
     def _set_text_dat(self, payload):
@@ -1004,6 +1131,13 @@ class OperatorControl:
         connections = self._subtree_connections(subtree)
         if connections and not payload["allow_connected"]:
             raise AgentCommandError("operator_connected")
+        summary = None
+        detached = connections
+        if payload.get("inventory") == "summary":
+            # A summary reports only the wires that cross the destroyed subtree's boundary.
+            detached = self._outside_connections(subtree, connections)
+            self._require_summary_boundary(detached)
+            summary = self._inventory_summary(subtree, operator)
         try:
             operator.destroy()
         except Exception as error:
@@ -1015,7 +1149,8 @@ class OperatorControl:
         return {
             "operator_path": path,
             "operator_count": len(subtree),
-            "detached_connections": connections,
+            **(summary or {}),
+            "detached_connections": detached,
             "destroyed": True,
         }
 
@@ -1035,6 +1170,9 @@ class OperatorControl:
         if source.docked and not payload["include_docked"]:
             raise AgentCommandError("operator_docked")
         unreplicated = self._boundary_connections(source_subtree)
+        summary = payload.get("inventory") == "summary"
+        if summary:
+            self._require_summary_boundary(unreplicated)
         before = {str(child.path) for child in target_parent.children}
         created = None
         created_roots = []
@@ -1080,6 +1218,7 @@ class OperatorControl:
             "source_path": str(source.path),
             **self._operator_result(created),
             "operator_count": len(affected),
+            **(self._inventory_summary(affected, created) if summary else {}),
             "include_docked": payload["include_docked"],
             "unreplicated_connections": unreplicated,
         }
@@ -1096,6 +1235,9 @@ class OperatorControl:
         detached = self._boundary_connections(source_subtree)
         if detached and not payload["allow_connected"]:
             raise AgentCommandError("operator_connected")
+        summary = payload.get("inventory") == "summary"
+        if summary:
+            self._require_summary_boundary(detached)
         copied = self._copy_operator(
             {
                 "source_path": old_path,
@@ -1105,6 +1247,7 @@ class OperatorControl:
                 "node_y": payload.get("node_y"),
                 "include_docked": False,
                 "max_operators": payload["max_operators"],
+                "inventory": payload.get("inventory", "full"),
             }
         )
         created = self.operator_lookup(copied["path"])
@@ -1128,6 +1271,9 @@ class OperatorControl:
             "op_type": copied["op_type"],
             "family": copied["family"],
             "operator_count": copied["operator_count"],
+            **(
+                {key: copied[key] for key in ("inventory_sha256", "type_counts")} if summary else {}
+            ),
             "detached_connections": detached,
             "identity_preserved": False,
             "moved": True,
@@ -1669,12 +1815,36 @@ class OperatorControl:
 
     @classmethod
     def _boundary_connections(cls, subtree):
+        return cls._outside_connections(subtree, cls._subtree_connections(subtree))
+
+    @staticmethod
+    def _outside_connections(subtree, connections):
         paths = {str(operator.path) for operator in subtree}
         return [
             edge
-            for edge in cls._subtree_connections(subtree)
+            for edge in connections
             if (edge["source_path"] in paths) != (edge["target_path"] in paths)
         ]
+
+    def _require_summary_boundary(self, connections):
+        # A summary lists boundary connections in full, so it must fit before anything changes.
+        if len(connections) > self.MAX_SUMMARY_BOUNDARY_CONNECTIONS:
+            raise AgentCommandError("result_too_large")
+
+    @staticmethod
+    def _inventory_summary(operators, root):
+        """Digest the affected Operators by path relative to the root's parent and type."""
+        prefix = str(root.path).rsplit("/", 1)[0] + "/"
+        rows = sorted(
+            (str(operator.path)[len(prefix) :], str(operator.OPType)) for operator in operators
+        )
+        inventory = [{"path": path, "op_type": op_type} for path, op_type in rows]
+        canonical = json.dumps(inventory, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+        counts = collections.Counter(row["op_type"] for row in inventory)
+        return {
+            "inventory_sha256": hashlib.sha256(canonical.encode("ascii")).hexdigest(),
+            "type_counts": dict(sorted(counts.items())),
+        }
 
     def _rollback_created(self, roots):
         paths = [str(root.path) for root in roots]
@@ -1708,18 +1878,58 @@ class OperatorControl:
         custom = list(getattr(operator, "customPars", []))
         builtin_ids = {id(parameter) for parameter in builtin}
         custom_ids = {id(parameter) for parameter in custom}
-        parameters = [
-            self._parameter_metadata(
+        selected = builtin + custom
+        names = payload.get("names")
+        if names is not None:
+            by_name = {str(parameter.name): parameter for parameter in selected}
+            if any(name not in by_name for name in names):
+                raise AgentCommandError("parameter_not_found")
+            selected = [by_name[name] for name in dict.fromkeys(names)]
+        non_default_only = payload.get("non_default_only", False)
+        if non_default_only:
+            # TouchDesigner's isDefault covers value, mode, and expression, so parameters whose
+            # default is an expression (rate = me.time.rate) stay out. Without a reliable
+            # isDefault the parameter is kept rather than silently dropped.
+            selected = [
+                parameter
+                for parameter in selected
+                if getattr(parameter, "isDefault", False) is not True
+            ]
+        include_values = non_default_only or payload.get("include_values", False)
+        include_menu_options = payload.get("include_menu_options", True)
+        parameters = []
+        for parameter in selected:
+            item = self._parameter_metadata(
                 parameter,
                 builtin=id(parameter) in builtin_ids,
                 custom=id(parameter) in custom_ids,
             )
-            for parameter in builtin + custom
-        ]
+            if not include_menu_options:
+                item["menu_names"] = item["menu_labels"] = None
+            if include_values:
+                item["value"] = self._listed_parameter_value(operator, parameter)
+            parameters.append(item)
         return {
             "operator_path": str(operator.path),
+            **({} if include_menu_options else {"include_menu_options": False}),
             "parameters": sorted(parameters, key=lambda item: item["name"]),
         }
+
+    @classmethod
+    def _listed_parameter_value(cls, operator, parameter):
+        # One unreadable value must not hide the rest of the list.
+        try:
+            value = cls._parameter_result(operator, str(parameter.name), parameter)
+        except AgentCommandError:
+            return {
+                "mode": cls._parameter_mode(parameter),
+                "value": None,
+                "value_type": "unknown",
+                "source": None,
+                "unsupported_reason": "value_unavailable",
+            }
+        del value["operator_path"], value["parameter"]
+        return value
 
     @classmethod
     def _parameter_metadata(cls, parameter, *, builtin, custom):
@@ -2712,13 +2922,20 @@ class AgentExt:
 
     CAPABILITIES = tuple(OperatorControl.HANDLERS) + (
         "batch.execute",
+        "batch.execute:item_results",
+        "dat.text.get:offset",
+        "parameters.list:options",
         "binary.export",
         "events.read",
         "project.metadata",
         "project.snapshot",
+        "project.snapshot:options",
         "project.save",
         "ops.tox.import:root_child",
         "ops.tox.import:inventory_summary",
+        "ops.destroy:inventory_summary",
+        "ops.copy:inventory_summary",
+        "ops.move:inventory_summary",
     )
 
     def __init__(self, owner_comp, operator_lookup=None, project_info=None, app_info=None):
@@ -2872,6 +3089,7 @@ class AgentExt:
             "protocol_versions": self.protocol_versions,
             "capabilities": list(self.CAPABILITIES),
             "status": "draining" if self.draining else "online",
+            "project": self.project_identity(),
         }
 
     def heartbeat_payload(self):
@@ -2880,6 +3098,18 @@ class AgentExt:
             "connection_id": self.connection_id,
             "status": "draining" if self.draining else "online",
         }
+
+    def heartbeat_report(self):
+        """The periodic heartbeat, which also follows a save-as or a newly opened project."""
+        return {**self.heartbeat_payload(), "project": self.project_identity()}
+
+    def project_identity(self):
+        if self.project_info is None:
+            return None
+        try:
+            return {"name": str(self.project_info.name), "folder": str(self.project_info.folder)}
+        except Exception:  # noqa: BLE001 - identity is advisory; never block a heartbeat
+            return None
 
     def rebind_connection(self, connection_id):
         self.connection_id = connection_id
@@ -3141,7 +3371,11 @@ class AgentExt:
                 for item in commands
             ):
                 raise AgentCommandError("command_unsupported")
-            return {"results": [self.execute_command(item) for item in commands]}
+            results = [self._batch_item(item) for item in commands]
+            return {
+                "results": results,
+                "failed_count": sum(not item["ok"] for item in results),
+            }
         if name in OperatorControl.HANDLERS:
             return self.operator_control.execute(command)
         operator = self.operator_lookup(payload["operator_path"])
@@ -3153,21 +3387,89 @@ class AgentExt:
             return self._binary_export(operator, payload)
         raise AgentCommandError("command_unsupported")
 
+    def _batch_item(self, command):
+        """Run one read of a batch; a failed read is reported in place, not raised."""
+        try:
+            return {"ok": True, "result": self.execute_command(command)}
+        except AgentCommandError as error:
+            return {"ok": False, "error": self._outcome_error(error.code, error.details)}
+        except Exception:  # noqa: BLE001 - a read has no side effect to classify as unknown
+            return {"ok": False, "error": self._outcome_error("internal_error")}
+
     def _snapshot(self, root, payload):
         maximum = payload["max_operators"]
+        root_path = str(root.path)
+        cursor = payload.get("cursor")
+        paginate = cursor is not None or payload.get("paginate", False)
+        offset, expected_path = 0, None
+        if cursor is not None:
+            offset, expected_path = self._decode_snapshot_cursor(
+                cursor, root_path, payload["max_depth"]
+            )
         rows = []
-        queue = [(root, 0)]
+        queue = collections.deque([(root, 0)])
+        index = 0
         while queue:
-            operator, depth = queue.pop(0)
-            if len(rows) >= maximum:
-                raise AgentCommandError("result_too_large")
-            rows.append({**self._operator_result(operator), "depth": depth})
+            operator, depth = queue.popleft()
             if depth < payload["max_depth"]:
                 queue.extend(
                     (child, depth + 1)
                     for child in sorted(operator.children, key=lambda child: str(child.path))
                 )
-        return {"root_path": str(root.path), "operators": rows}
+            if index < offset:
+                index += 1
+                continue
+            if index == offset and expected_path not in (None, str(operator.path)):
+                raise AgentCommandError("snapshot_cursor_stale")
+            if len(rows) >= maximum:
+                if not paginate:
+                    raise AgentCommandError("result_too_large")
+                next_cursor = self._encode_snapshot_cursor(
+                    root_path, payload["max_depth"], index, str(operator.path)
+                )
+                return {"root_path": root_path, "operators": rows, "next_cursor": next_cursor}
+            row = {**self._operator_result(operator), "depth": depth}
+            if payload.get("include_connections", False):
+                row["connections"] = [
+                    {
+                        "target_path": str(connection.owner.path),
+                        "output_index": int(connector.index),
+                        "input_index": int(connection.index),
+                    }
+                    for connector in getattr(operator, "outputConnectors", [])
+                    for connection in connector.connections
+                ]
+            rows.append(row)
+            index += 1
+        if offset and index <= offset:
+            # The operator the cursor pointed at is gone: the network shrank between pages.
+            raise AgentCommandError("snapshot_cursor_stale")
+        return {"root_path": root_path, "operators": rows, "next_cursor": None}
+
+    @staticmethod
+    def _encode_snapshot_cursor(root_path, max_depth, offset, next_path):
+        state = {"root": root_path, "max_depth": max_depth, "offset": offset, "next": next_path}
+        raw = json.dumps(state, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+    @staticmethod
+    def _decode_snapshot_cursor(cursor, root_path, max_depth):
+        try:
+            raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
+            state = json.loads(raw.decode("utf-8"))
+            offset, next_path = state["offset"], state["next"]
+            valid = (
+                state["root"] == root_path
+                and state["max_depth"] == max_depth
+                and type(offset) is int
+                and offset > 0
+                and isinstance(next_path, str)
+            )
+        except (ValueError, TypeError, KeyError, UnicodeDecodeError):
+            valid = False
+        if not valid:
+            raise AgentCommandError("invalid_arguments")
+        return offset, next_path
 
     @staticmethod
     def _binary_export(operator, payload):
