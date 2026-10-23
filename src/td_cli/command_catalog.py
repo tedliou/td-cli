@@ -30,8 +30,8 @@ def _valid_operator_path(value: str) -> str:
         if re.match(r"^[A-Za-z]:[/\\]", value):
             # Git Bash (MSYS) rewrites a leading "/project1" into "C:/Program Files/Git/project1".
             raise ValueError(
-                "operator_path must be canonical and absolute; got a Windows path, "
-                "likely from Git Bash path conversion (set MSYS_NO_PATHCONV=1)"
+                "operator_path must be canonical and absolute, not a Windows path "
+                "(in Git Bash, set MSYS_NO_PATHCONV=1 to stop path conversion)"
             )
         raise ValueError("operator_path must be canonical and absolute")
     return value
@@ -561,7 +561,7 @@ class ProjectMetadataInput(StrictModel):
 class ProjectSaveInput(StrictModel):
     expected_path: str
     expected_sha256: str = Field(
-        pattern=r"^[0-9a-f]{64}$", description="SHA-256 hex of the current .toe on disk."
+        pattern=r"^[0-9a-fA-F]{64}$", description="SHA-256 hex of the current .toe on disk."
     )
 
     @field_validator("expected_sha256", mode="before")

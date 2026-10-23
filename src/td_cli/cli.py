@@ -1351,8 +1351,8 @@ def batch_execute(
     ctx: typer.Context,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
-    no_wait: bool = False,
-    request_id: str | None = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
 ) -> None:
     _command(ctx, "batch.execute", None, input, input_file, no_wait, request_id)
 
@@ -1360,11 +1360,11 @@ def batch_execute(
 @events_app.command("read")
 def events_read(
     ctx: typer.Context,
-    after: int = 0,
-    limit: int = 100,
-    include_errors: bool = True,
-    no_wait: bool = False,
-    request_id: str | None = None,
+    after: Annotated[int, typer.Option("--after")] = 0,
+    limit: Annotated[int, typer.Option("--limit")] = 100,
+    include_errors: Annotated[bool, typer.Option("--include-errors/--no-include-errors")] = True,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
 ) -> None:
     _command(
         ctx,
@@ -1458,10 +1458,12 @@ def _attach_schema_help(group: typer.Typer, prefix: tuple[str, ...] = ()) -> Non
                 if not isinstance(metadata, typer.models.ParameterInfo) or metadata.help:
                     continue
                 if parameter in properties:
-                    # Typer already prints non-empty Python defaults itself.
-                    shown = defaults.get(parameter) not in (None, False)
+                    # Typer already prints defaults other than None and False itself.
+                    default = defaults.get(parameter)
+                    typer_prints_default = default is not None and default is not False
                     metadata.help = (
-                        _field_help(properties[parameter], with_default=not shown) or None
+                        _field_help(properties[parameter], with_default=not typer_prints_default)
+                        or None
                     )
                 elif parameter in _COMMON_OPTION_HELP:
                     metadata.help = _COMMON_OPTION_HELP[parameter]

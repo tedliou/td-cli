@@ -53,8 +53,9 @@ function Compare-SemVer([string]$Left, [string]$Right) {
 }
 
 function Remove-Junction([string]$Path) {
-    # Windows PowerShell 5.1 Remove-Item throws NullReferenceException on junctions; delete only the link.
-    try { [IO.Directory]::Delete($Path) } catch [IO.DirectoryNotFoundException] {}
+    # Windows PowerShell 5.1 Remove-Item throws NullReferenceException on junctions; delete only the
+    # link. Failures stay best-effort, as with the former -ErrorAction SilentlyContinue.
+    try { [IO.Directory]::Delete($Path) } catch {}
 }
 
 function Test-InstalledFiles([string]$Root, [string[]]$Archives, [string]$Scratch) {
