@@ -1093,3 +1093,17 @@ def test_parameter_list_normalizes_attached_values() -> None:
     )
     assert result["parameters"][0]["value"]["source"] is None
     assert result["parameters"][0]["value"]["unsupported_reason"] is None
+
+
+def test_snapshot_paging_and_connections_need_an_advertising_agent() -> None:
+    plain = Command.model_validate(
+        {"name": "project.snapshot", "input": {"operator_path": "/project1"}}
+    ).model_dump(mode="json")
+    assert set(plain["input"]) == {"operator_path", "max_depth", "max_operators"}
+    assert "project.snapshot:options" not in COMMAND_CATALOG.required_capabilities(plain)
+    for option in ({"paginate": True}, {"cursor": "abc"}, {"include_connections": True}):
+        command = Command.model_validate(
+            {"name": "project.snapshot", "input": {"operator_path": "/project1", **option}}
+        ).model_dump(mode="json")
+        assert {**command["input"], **option} == command["input"]
+        assert "project.snapshot:options" in COMMAND_CATALOG.required_capabilities(command)

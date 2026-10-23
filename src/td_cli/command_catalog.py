@@ -614,6 +614,23 @@ class ReplaceSequenceInput(SequenceInput):
 class SnapshotInput(OperatorInput):
     max_depth: int = Field(default=4, ge=0, le=8)
     max_operators: int = Field(default=256, ge=1, le=1000)
+    paginate: bool = Field(
+        default=False,
+        exclude_if=lambda value: value is False,
+        description="Return one page of max_operators with next_cursor instead of failing.",
+    )
+    cursor: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=4096,
+        exclude_if=lambda value: value is None,
+        description="next_cursor of the previous page; same root and max_depth.",
+    )
+    include_connections: bool = Field(
+        default=False,
+        exclude_if=lambda value: value is False,
+        description="Attach each Operator's output connections.",
+    )
 
 
 class ProjectMetadataInput(StrictModel):
@@ -1141,6 +1158,14 @@ COMMAND_CATALOG = CommandCatalog(
             SnapshotInput,
             CommandEffect.READ_ONLY,
             ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
+            features=(
+                (
+                    "project.snapshot:options",
+                    lambda value: any(
+                        key in value for key in ("paginate", "cursor", "include_connections")
+                    ),
+                ),
+            ),
         ),
         CommandDefinition(
             "project.metadata",

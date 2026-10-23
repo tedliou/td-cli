@@ -1131,3 +1131,30 @@ def test_parameters_list_submits_value_name_and_menu_options(monkeypatch) -> Non
             "include_menu_options": False,
         },
     }
+
+
+def test_project_snapshot_submits_paging_and_connections(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "--json",
+            "project",
+            "snapshot",
+            "/project1",
+            "--cursor",
+            "abc",
+            "--include-connections",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert FakeDaemonClient.submitted == {
+        "name": "project.snapshot",
+        "input": {
+            "operator_path": "/project1",
+            "max_depth": 4,
+            "max_operators": 256,
+            "cursor": "abc",
+            "include_connections": True,
+        },
+    }

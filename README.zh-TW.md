@@ -250,6 +250,19 @@ td --json --instance <selector> parameters list /project1/select1 --non-default-
 td --json --instance <selector> parameters list /project1/select1 --names channames,renamefrom --include-values
 ```
 
+`project snapshot` 以廣度優先列出子樹的 `path`、`type`、`depth`（`--max-depth` 最多 8、
+`--max-operators` 最多 1000），子樹較大時回 `result_too_large`。加上 `--paginate` 則回傳一頁並附
+`next_cursor`；以相同 root 與 `--max-depth` 把它傳給 `--cursor`，直到 `next_cursor` 為 `null`。
+TouchDesigner 沒有網路修改計數，所以各頁不是同一時間點的一致結果：cursor 指向的下一個 Operator
+被移動或刪除時回 `snapshot_cursor_stale`（請重新開始），其他分頁之間的修改則不會被偵測。
+`--include-connections` 為每個 Operator 附上輸出 `connections`（`target_path`、`output_index`、
+`input_index`）。Parameter 值請用 `parameters list --non-default-only`：
+
+```powershell
+td --json --instance <selector> project snapshot /project1 --paginate --include-connections
+td --json --instance <selector> project snapshot /project1 --cursor <next_cursor> --include-connections
+```
+
 `ops.inspect` 是 CHOP、DAT、TOP、SOP、POP、MAT、COMP 的被動有界讀取。它不下載 pixels、geometry、
 POP buffers、DAT content 或 Python objects，也不主動 cook。可變長度資料受 `--max-items`
 限制（預設 100、最高 1000），溢位會失敗而不截斷。COMP 的 `details` 摘要其介面：`child_count`

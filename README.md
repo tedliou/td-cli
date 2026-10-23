@@ -297,6 +297,22 @@ td --json --instance <selector> parameters list /project1/select1 --non-default-
 td --json --instance <selector> parameters list /project1/select1 --names channames,renamefrom --include-values
 ```
 
+`project snapshot` lists a subtree breadth-first as `path`, `type`, and `depth`
+(`--max-depth` up to 8, `--max-operators` up to 1000) and fails with
+`result_too_large` when the subtree is larger. `--paginate` instead returns one
+page with `next_cursor`; pass it to `--cursor` with the same root and
+`--max-depth` until `next_cursor` is `null`. TouchDesigner has no network revision
+counter, so pages are not one consistent view: a cursor whose next Operator moved
+or disappeared fails with `snapshot_cursor_stale` (start again), but other edits
+between pages are not detected. `--include-connections` adds each Operator's
+output `connections` (`target_path`, `output_index`, `input_index`). For Parameter
+values use `parameters list --non-default-only`:
+
+```powershell
+td --json --instance <selector> project snapshot /project1 --paginate --include-connections
+td --json --instance <selector> project snapshot /project1 --cursor <next_cursor> --include-connections
+```
+
 `ops.inspect` is a passive, batchable Operator Family Inspection for CHOP, DAT,
 TOP, SOP, POP, MAT, and COMP. Its `family` discriminator selects a strict typed
 `details` object; common cached memory, cook timing, Display, and Render

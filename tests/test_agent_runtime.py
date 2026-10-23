@@ -4260,6 +4260,64 @@ def test_snapshot_is_deterministic_breadth_first_and_enforces_operator_cap() -> 
         )
 
 
+def _snapshot_page(agent, **options):
+    return agent.execute_command(
+        {
+            "name": "project.snapshot",
+            "input": {"operator_path": "/project1", "max_depth": 2, "max_operators": 2, **options},
+        }
+    )
+
+
+def test_snapshot_pages_continue_from_a_cursor_until_the_end() -> None:
+    root = FakeOperator("/project1")
+    child_b = FakeOperator("/project1/b")
+    child_a = FakeOperator("/project1/a")
+    child_a.children = [FakeOperator("/project1/a/z")]
+    root.children = [child_b, child_a]
+    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: root)
+
+    first = _snapshot_page(agent, paginate=True)
+    assert [item["path"] for item in first["operators"]] == ["/project1", "/project1/a"]
+    second = _snapshot_page(agent, cursor=first["next_cursor"])
+    assert [item["path"] for item in second["operators"]] == ["/project1/b", "/project1/a/z"]
+    assert second["next_cursor"] is None
+
+
+def test_snapshot_cursor_fails_when_the_network_changed_under_it() -> None:
+    root = FakeOperator("/project1")
+    child_b = FakeOperator("/project1/b")
+    child_a = FakeOperator("/project1/a")
+    root.children = [child_b, child_a, FakeOperator("/project1/c")]
+    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: root)
+
+    first = _snapshot_page(agent, paginate=True)
+    root.children = [child_a, FakeOperator("/project1/c")]
+    with pytest.raises(module.AgentCommandError, match="snapshot_cursor_stale"):
+        _snapshot_page(agent, cursor=first["next_cursor"])
+    with pytest.raises(module.AgentCommandError, match="invalid_arguments"):
+        _snapshot_page(agent, cursor="not-a-cursor")
+    with pytest.raises(module.AgentCommandError, match="invalid_arguments"):
+        _snapshot_page(agent, cursor=first["next_cursor"], max_depth=1)
+
+
+def test_snapshot_reports_each_operator_output_connection() -> None:
+    root = FakeOperator("/project1")
+    source = FakeOperator("/project1/source", family="TOP", outputs=1)
+    target = FakeOperator("/project1/target", family="TOP", inputs=1)
+    source.outputConnectors[0].connect(target.inputConnectors[0])
+    root.children = [source, target]
+    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: root)
+
+    result = _snapshot_page(agent, max_operators=3, include_connections=True)
+    rows = {item["path"]: item for item in result["operators"]}
+    assert rows["/project1/source"]["connections"] == [
+        {"target_path": "/project1/target", "output_index": 0, "input_index": 0}
+    ]
+    assert rows["/project1/target"]["connections"] == []
+    assert "next_cursor" not in result
+
+
 def test_binary_export_enforces_family_and_raw_byte_cap() -> None:
     comp = FakeOperator("/project1/component", family="COMP")
     agent = AgentExt(FakeOwner(), operator_lookup=lambda _: comp)

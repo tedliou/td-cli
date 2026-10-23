@@ -1347,13 +1347,30 @@ def project_snapshot(
     operator_path: Annotated[str | None, typer.Argument()] = None,
     max_depth: Annotated[int, typer.Option("--max-depth")] = 4,
     max_operators: Annotated[int, typer.Option("--max-operators")] = 256,
+    paginate: Annotated[bool, typer.Option("--paginate")] = False,
+    cursor: Annotated[str | None, typer.Option("--cursor")] = None,
+    include_connections: Annotated[bool, typer.Option("--include-connections")] = False,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: bool = False,
     request_id: str | None = None,
 ) -> None:
+    options: dict[str, object] = {}
+    if paginate:
+        options["paginate"] = True
+    if cursor is not None:
+        options["cursor"] = cursor
+    if include_connections:
+        options["include_connections"] = True
+    if options and operator_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
     dedicated = (
-        {"operator_path": operator_path, "max_depth": max_depth, "max_operators": max_operators}
+        {
+            "operator_path": operator_path,
+            "max_depth": max_depth,
+            "max_operators": max_operators,
+            **options,
+        }
         if operator_path is not None
         else None
     )

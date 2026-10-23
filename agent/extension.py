@@ -2,6 +2,7 @@
 
 import base64
 import builtins
+import collections
 import hashlib
 import json
 import math
@@ -2878,6 +2879,7 @@ class AgentExt:
         "events.read",
         "project.metadata",
         "project.snapshot",
+        "project.snapshot:options",
         "project.save",
         "ops.tox.import:root_child",
         "ops.tox.import:inventory_summary",
@@ -3343,19 +3345,81 @@ class AgentExt:
 
     def _snapshot(self, root, payload):
         maximum = payload["max_operators"]
+        root_path = str(root.path)
+        cursor = payload.get("cursor")
+        paginate = cursor is not None or payload.get("paginate", False)
+        offset, expected_path = 0, None
+        if cursor is not None:
+            offset, expected_path = self._decode_snapshot_cursor(
+                cursor, root_path, payload["max_depth"]
+            )
         rows = []
-        queue = [(root, 0)]
+        queue = collections.deque([(root, 0)])
+        index = 0
         while queue:
-            operator, depth = queue.pop(0)
-            if len(rows) >= maximum:
-                raise AgentCommandError("result_too_large")
-            rows.append({**self._operator_result(operator), "depth": depth})
+            operator, depth = queue.popleft()
             if depth < payload["max_depth"]:
                 queue.extend(
                     (child, depth + 1)
                     for child in sorted(operator.children, key=lambda child: str(child.path))
                 )
-        return {"root_path": str(root.path), "operators": rows}
+            if index < offset:
+                index += 1
+                continue
+            if index == offset and expected_path not in (None, str(operator.path)):
+                raise AgentCommandError("snapshot_cursor_stale")
+            if len(rows) >= maximum:
+                if not paginate:
+                    raise AgentCommandError("result_too_large")
+                next_cursor = self._encode_snapshot_cursor(
+                    root_path, payload["max_depth"], index, str(operator.path)
+                )
+                return {"root_path": root_path, "operators": rows, "next_cursor": next_cursor}
+            row = {**self._operator_result(operator), "depth": depth}
+            if payload.get("include_connections", False):
+                row["connections"] = [
+                    {
+                        "target_path": str(connection.owner.path),
+                        "output_index": int(connector.index),
+                        "input_index": int(connection.index),
+                    }
+                    for connector in getattr(operator, "outputConnectors", [])
+                    for connection in connector.connections
+                ]
+            rows.append(row)
+            index += 1
+        if offset and index <= offset:
+            # The operator the cursor pointed at is gone: the network shrank between pages.
+            raise AgentCommandError("snapshot_cursor_stale")
+        result = {"root_path": root_path, "operators": rows}
+        if paginate:
+            result["next_cursor"] = None
+        return result
+
+    @staticmethod
+    def _encode_snapshot_cursor(root_path, max_depth, offset, next_path):
+        state = {"root": root_path, "max_depth": max_depth, "offset": offset, "next": next_path}
+        raw = json.dumps(state, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+    @staticmethod
+    def _decode_snapshot_cursor(cursor, root_path, max_depth):
+        try:
+            raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
+            state = json.loads(raw.decode("utf-8"))
+            offset, next_path = state["offset"], state["next"]
+            valid = (
+                state["root"] == root_path
+                and state["max_depth"] == max_depth
+                and type(offset) is int
+                and offset > 0
+                and isinstance(next_path, str)
+            )
+        except (ValueError, TypeError, KeyError, UnicodeDecodeError):
+            valid = False
+        if not valid:
+            raise AgentCommandError("invalid_arguments")
+        return offset, next_path
 
     @staticmethod
     def _binary_export(operator, payload):

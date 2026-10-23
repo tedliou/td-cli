@@ -67,6 +67,7 @@ ERROR_CATALOG = ErrorCatalog(
         "request_outcome_unknown",
         "outcome_capacity_exceeded",
         "result_too_large",
+        "snapshot_cursor_stale",
         # Operators
         "operator_not_found",
         "operator_parent_invalid",
