@@ -152,6 +152,11 @@ Command 或 `commands execute` 计划的字段在提交前验证失败时，`--j
 与 `commands execute` 计划（1–256 个 Command）所需的格式。在 Git Bash 中请设置
 `MSYS_NO_PATHCONV=1`，否则开头的 `/project1` 会被改写成 Windows 路径而被拒绝。
 
+`batch execute` 会依次报告每一项读取：`results[i]` 为 `{"ok":true,"result":{...}}` 或
+`{"ok":false,"error":{"code":...}}`，`failed_count` 是失败的项数。部分读取失败时 Request 仍为
+成功，所以请看 `failed_count`，而不是 Request 状态。Agent 若不支持这种报告方式，Daemon 会在发送前
+以 `command_unsupported` 拒绝整批。
+
 <!-- doc-section: agent-component -->
 
 ## Agent Component

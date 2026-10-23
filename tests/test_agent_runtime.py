@@ -4077,6 +4077,39 @@ def test_agent_rejects_mutation_batch_before_any_mutation() -> None:
     assert root.par.display.val is True
 
 
+def test_batch_reports_each_read_and_keeps_successes_when_one_fails() -> None:
+    root = FakeOperator("/project1")
+    agent = AgentExt(
+        FakeOwner(), operator_lookup=lambda path: root if path == "/project1" else None
+    )
+
+    result = agent.execute_command(
+        {
+            "name": "batch.execute",
+            "input": {
+                "commands": [
+                    {"name": "ops.get", "input": {"operator_path": "/project1"}},
+                    {"name": "ops.get", "input": {"operator_path": "/project1/missing"}},
+                ]
+            },
+        }
+    )
+
+    assert result["failed_count"] == 1
+    first, second = result["results"]
+    assert first["ok"] is True
+    assert first["result"]["path"] == "/project1"
+    assert second == {
+        "ok": False,
+        "error": {
+            "code": "operator_not_found",
+            "message": "operator_not_found",
+            "details": {},
+            "retryable": False,
+        },
+    }
+
+
 def test_snapshot_is_deterministic_breadth_first_and_enforces_operator_cap() -> None:
     root = FakeOperator("/project1")
     child_b = FakeOperator("/project1/b")

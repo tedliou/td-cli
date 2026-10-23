@@ -47,21 +47,36 @@ def test_command_catalog_normalizes_locked_transport_results() -> None:
                     {
                         "name": "parameters.get",
                         "input": {"operator_path": "/project1", "parameter": "display"},
-                    }
+                    },
+                    {
+                        "name": "parameters.get",
+                        "input": {"operator_path": "/project1/missing", "parameter": "display"},
+                    },
                 ]
             },
         },
-        {"results": [{"value_type": "operator"}]},
+        {
+            "results": [
+                {"ok": True, "result": {"value_type": "operator"}},
+                {"ok": False, "error": {"code": "operator_not_found"}},
+            ],
+            "failed_count": 1,
+        },
     )
     assert nested == {
         "results": [
             {
-                "value_type": "operator",
-                "source": None,
-                "unsupported_reason": None,
-                "value": None,
-            }
-        ]
+                "ok": True,
+                "result": {
+                    "value_type": "operator",
+                    "source": None,
+                    "unsupported_reason": None,
+                    "value": None,
+                },
+            },
+            {"ok": False, "error": {"code": "operator_not_found"}},
+        ],
+        "failed_count": 1,
     }
 
 
@@ -996,3 +1011,15 @@ def test_default_tox_import_options_stay_off_the_wire_for_older_daemons() -> Non
     assert featured["input"]["root_child"] == "asset"
     assert featured["input"]["inventory"] == "summary"
     assert Command.model_validate(plain).model_dump(mode="json") == plain
+
+
+def test_every_batch_requires_agents_that_report_each_read() -> None:
+    batch = {
+        "name": "batch.execute",
+        "input": {"commands": [{"name": "ops.get", "input": {"operator_path": "/project1"}}]},
+    }
+    assert COMMAND_CATALOG.required_capabilities(batch) == {
+        "batch.execute",
+        "batch.execute:item_results",
+        "ops.get",
+    }

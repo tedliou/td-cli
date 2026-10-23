@@ -2712,6 +2712,7 @@ class AgentExt:
 
     CAPABILITIES = tuple(OperatorControl.HANDLERS) + (
         "batch.execute",
+        "batch.execute:item_results",
         "binary.export",
         "events.read",
         "project.metadata",
@@ -3141,7 +3142,11 @@ class AgentExt:
                 for item in commands
             ):
                 raise AgentCommandError("command_unsupported")
-            return {"results": [self.execute_command(item) for item in commands]}
+            results = [self._batch_item(item) for item in commands]
+            return {
+                "results": results,
+                "failed_count": sum(not item["ok"] for item in results),
+            }
         if name in OperatorControl.HANDLERS:
             return self.operator_control.execute(command)
         operator = self.operator_lookup(payload["operator_path"])
@@ -3152,6 +3157,15 @@ class AgentExt:
         if name == "binary.export":
             return self._binary_export(operator, payload)
         raise AgentCommandError("command_unsupported")
+
+    def _batch_item(self, command):
+        """Run one read of a batch; a failed read is reported in place, not raised."""
+        try:
+            return {"ok": True, "result": self.execute_command(command)}
+        except AgentCommandError as error:
+            return {"ok": False, "error": self._outcome_error(error.code, error.details)}
+        except Exception:  # noqa: BLE001 - a read has no side effect to classify as unknown
+            return {"ok": False, "error": self._outcome_error("internal_error")}
 
     def _snapshot(self, root, payload):
         maximum = payload["max_operators"]

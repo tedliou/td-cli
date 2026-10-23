@@ -176,6 +176,12 @@ defaults. `td commands schema` lists the Command names without a Daemon, and
 (1-256 Commands) expect. In Git Bash, set `MSYS_NO_PATHCONV=1`, or a leading
 `/project1` is rewritten into a Windows path and rejected.
 
+`batch execute` reports every read in order: `results[i]` is `{"ok":true,"result":{...}}`
+or `{"ok":false,"error":{"code":...}}`, and `failed_count` counts the failed reads. The
+Request still succeeds when some reads fail, so check `failed_count` instead of the Request
+status. A Daemon rejects a batch with `command_unsupported` before dispatch when the Agent does
+not report reads this way.
+
 <!-- doc-section: agent-component -->
 
 ## Agent Component

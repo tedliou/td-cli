@@ -838,12 +838,15 @@ class CommandCatalog:
             nested_results = normalized.get("results")
             if isinstance(nested_commands, list) and isinstance(nested_results, list):
                 normalized["results"] = [
-                    self.normalize_result(nested_command, nested_result)
-                    for nested_command, nested_result in zip(
-                        nested_commands, nested_results, strict=False
-                    )
+                    self._normalize_batch_item(nested_command, item)
+                    for nested_command, item in zip(nested_commands, nested_results, strict=False)
                 ]
         return self._definition(name).result_normalizer(normalized)
+
+    def _normalize_batch_item(self, command: object, item: object) -> object:
+        if isinstance(item, dict) and item.get("ok") is True and "result" in item:
+            return {**item, "result": self.normalize_result(command, item["result"])}
+        return item
 
     def _definition(self, name: str) -> CommandDefinition:
         definition = self._by_name.get(name)
@@ -1082,6 +1085,10 @@ COMMAND_CATALOG = CommandCatalog(
             BatchExecuteInput,
             CommandEffect.READ_ONLY,
             ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
+            features=(
+                # Every batch needs an Agent that reports each read as ok/result or ok/error.
+                ("batch.execute:item_results", lambda _value: True),
+            ),
         ),
     )
 )
