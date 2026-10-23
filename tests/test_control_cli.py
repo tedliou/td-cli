@@ -1060,3 +1060,15 @@ def test_help_states_option_meaning_and_limits(argv, expected) -> None:
     text = " ".join(result.stdout.split())
     for fragment in expected:
         assert fragment in text
+
+
+def test_dat_text_get_offset_requests_a_chunk(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+    result = CliRunner().invoke(
+        cli.app, ["--json", "dat", "text", "get", "/project1/config", "--offset", "32768"]
+    )
+    assert result.exit_code == 0, result.output
+    assert FakeDaemonClient.submitted == {
+        "name": "dat.text.get",
+        "input": {"operator_path": "/project1/config", "max_bytes": 32768, "offset": 32768},
+    }

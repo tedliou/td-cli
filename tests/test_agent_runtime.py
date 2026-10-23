@@ -4544,3 +4544,31 @@ def test_agent_reports_no_project_when_touchdesigner_has_none() -> None:
     agent.project_info = None
 
     assert agent.registration_payload()["project"] is None
+
+
+def test_text_get_with_offset_reads_large_text_in_whole_character_chunks() -> None:
+    text = "ab" + "繁" * 3 + "z"  # 2 + 9 + 1 = 12 UTF-8 bytes
+    text_dat = FakeTextDat("/project1/config", text)
+    control = make_control({text_dat.path: text_dat}.get)
+
+    def read(offset, max_bytes):
+        return control.execute(
+            {
+                "name": "dat.text.get",
+                "input": {"operator_path": text_dat.path, "max_bytes": max_bytes, "offset": offset},
+            }
+        )
+
+    first = read(0, 4)
+    assert (first["text"], first["offset"], first["next_offset"]) == ("ab", 0, 2)
+    assert first["total_utf8_bytes"] == 12
+    assert first["text_sha256"] == hashlib.sha256(text.encode("utf-8")).hexdigest()
+    second = read(2, 6)
+    assert (second["text"], second["next_offset"]) == ("繁繁", 8)
+    last = read(8, 32)
+    assert (last["text"], last["next_offset"]) == ("繁z", None)
+    assert "".join(chunk["text"] for chunk in (first, second, last)) == text
+    with pytest.raises(module.AgentCommandError, match="invalid_arguments"):
+        read(3, 32)
+    with pytest.raises(module.AgentCommandError, match="result_too_large"):
+        read(2, 2)

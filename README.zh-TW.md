@@ -422,7 +422,9 @@ td --json --instance <selector> dat table patch /project1/grid '[["updated"]]' -
 
 文字讀取接受內容為文字（`isText`）的任何 DAT，包括 Execute 系列與 Script DAT 的 callback，並回報其 `op_type`；文字寫入限 `textDAT`，表格寫入限 `tableDAT`；有界表格讀取接受 `isTable` 為真的 DAT，包含用於讀取實際 CHOP 輸出值的 CHOP to DAT。讀取遵循一般相依 cook，不強制 cook。外部 File／Sync File、protected path、非 rectangular／非 string
 cell 及越界 patch 都會被拒絕。Content 上限 32 KiB UTF-8、256 rows、256 columns、4096 cells、每
-cell 16 KiB。Mutation 會 read back 完整內容與尺寸，失敗時復原整份 DAT。這些 Command 不執行
+cell 16 KiB。較大的文字可用 `dat text get --offset N`（UTF-8 byte）分段讀取：每次最多回傳 `--max-bytes`
+bytes 的完整字元，並附 `offset`、`next_offset`（讀到結尾時為 `null`）、`total_utf8_bytes`，以及整份內容的
+`text_sha256`；分段之間內容被修改時 sha256 會改變。offset 落在字元中間時回 `invalid_arguments`。Mutation 會 read back 完整內容與尺寸，失敗時復原整份 DAT。這些 Command 不執行
 DAT、不 import module、不 evaluate content，也不接受 filesystem path。
 
 <!-- doc-section: project-save -->

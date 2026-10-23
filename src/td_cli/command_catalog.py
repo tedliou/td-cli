@@ -198,6 +198,12 @@ class SetOperatorStateInput(OperatorInput):
 
 class TextDatReadInput(OperatorInput):
     max_bytes: int = Field(default=MAX_DAT_CONTENT_BYTES, ge=1, le=MAX_DAT_CONTENT_BYTES)
+    offset: int | None = Field(
+        default=None,
+        ge=0,
+        exclude_if=lambda value: value is None,
+        description="UTF-8 byte offset; read one chunk of at most max_bytes and its next_offset.",
+    )
 
 
 class TextDatSetInput(OperatorInput):
@@ -906,6 +912,7 @@ COMMAND_CATALOG = CommandCatalog(
             TextDatReadInput,
             CommandEffect.READ_ONLY,
             ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
+            features=(("dat.text.get:offset", lambda value: value.get("offset") is not None),),
         ),
         CommandDefinition(
             "dat.text.set", TextDatSetInput, CommandEffect.MUTATION, ExecutionClass.BOUNDED_MUTATION

@@ -536,17 +536,19 @@ def dat_text_get(
     ctx: typer.Context,
     operator_path: Annotated[str | None, typer.Argument()] = None,
     max_bytes: Annotated[int | None, typer.Option("--max-bytes")] = None,
+    offset: Annotated[int | None, typer.Option("--offset")] = None,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
     request_id: Annotated[str | None, typer.Option("--request-id")] = None,
 ) -> None:
-    if max_bytes is not None and operator_path is None:
+    if (max_bytes is not None or offset is not None) and operator_path is None:
         _fail(ctx, ClientError("invalid_arguments"))
     dedicated = (
         {
             "operator_path": operator_path,
             "max_bytes": max_bytes if max_bytes is not None else MAX_DAT_CONTENT_BYTES,
+            **({"offset": offset} if offset is not None else {}),
         }
         if operator_path is not None
         else None

@@ -517,7 +517,12 @@ non-empty File parameter or enabled Sync File mode, root and Agent Component
 protected paths, non-rectangular/non-string cells, and patches outside current
 dimensions. Content is limited to 32 KiB of UTF-8, with at most 256 rows, 256
 columns, 4096 cells, and 16 KiB per cell. Reads fail instead of truncating when
-their explicit byte limit is exceeded. Every mutation reads back the exact
+their explicit byte limit is exceeded. To read a larger text, pass
+`dat text get --offset N` (UTF-8 bytes): each call returns at most `--max-bytes`
+bytes of whole characters with `offset`, `next_offset` (`null` at the end),
+`total_utf8_bytes`, and the `text_sha256` of the complete text, which changes if
+the text was edited between chunks. An offset inside a character fails with
+`invalid_arguments`. Every mutation reads back the exact
 complete content and dimensions, then restores and verifies the entire prior
 DAT on failure; distinct unavailable, non-writable, rollback-failed, and
 uncertain-outcome errors preserve honest state. These Commands never execute

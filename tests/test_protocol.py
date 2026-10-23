@@ -1023,3 +1023,16 @@ def test_every_batch_requires_agents_that_report_each_read() -> None:
         "batch.execute:item_results",
         "ops.get",
     }
+
+
+def test_text_get_offset_is_optional_on_the_wire_and_needs_an_advertising_agent() -> None:
+    plain = Command.model_validate(
+        {"name": "dat.text.get", "input": {"operator_path": "/project1/notes"}}
+    ).model_dump(mode="json")
+    assert "offset" not in plain["input"]
+    chunked = Command.model_validate(
+        {"name": "dat.text.get", "input": {"operator_path": "/project1/notes", "offset": 0}}
+    ).model_dump(mode="json")
+    assert chunked["input"]["offset"] == 0
+    assert "dat.text.get:offset" in COMMAND_CATALOG.required_capabilities(chunked)
+    assert "dat.text.get:offset" not in COMMAND_CATALOG.required_capabilities(plain)

@@ -381,6 +381,8 @@ class OperatorControl:
             byte_count = len(text.encode("utf-8"))
         except Exception as error:
             raise AgentCommandError("dat_content_unavailable") from error
+        if payload.get("offset") is not None:
+            return self._text_chunk(operator, text, payload["offset"], payload["max_bytes"])
         if byte_count > payload["max_bytes"]:
             raise AgentCommandError("result_too_large")
         return {
@@ -389,6 +391,33 @@ class OperatorControl:
             "dat_kind": "text",
             "text": text,
             "utf8_bytes": byte_count,
+        }
+
+    @staticmethod
+    def _text_chunk(operator, text, offset, max_bytes):
+        """Return whole UTF-8 characters starting at a byte offset, with the next offset."""
+        data = text.encode("utf-8")
+
+        def continuation(index):
+            return index < len(data) and data[index] & 0xC0 == 0x80
+
+        if offset > len(data) or continuation(offset):
+            raise AgentCommandError("invalid_arguments")
+        end = min(offset + max_bytes, len(data))
+        while continuation(end):
+            end -= 1
+        if end == offset and offset < len(data):
+            raise AgentCommandError("result_too_large")
+        return {
+            "operator_path": str(operator.path),
+            "op_type": str(operator.OPType),
+            "dat_kind": "text",
+            "text": data[offset:end].decode("utf-8"),
+            "utf8_bytes": end - offset,
+            "offset": offset,
+            "next_offset": end if end < len(data) else None,
+            "total_utf8_bytes": len(data),
+            "text_sha256": hashlib.sha256(data).hexdigest(),
         }
 
     def _set_text_dat(self, payload):
@@ -2756,6 +2785,7 @@ class AgentExt:
     CAPABILITIES = tuple(OperatorControl.HANDLERS) + (
         "batch.execute",
         "batch.execute:item_results",
+        "dat.text.get:offset",
         "binary.export",
         "events.read",
         "project.metadata",
