@@ -52,6 +52,11 @@ function Compare-SemVer([string]$Left, [string]$Right) {
     return $leftIdentifiers.Count.CompareTo($rightIdentifiers.Count)
 }
 
+function Remove-Junction([string]$Path) {
+    # Windows PowerShell 5.1 Remove-Item throws NullReferenceException on junctions; delete only the link.
+    try { [IO.Directory]::Delete($Path) } catch [IO.DirectoryNotFoundException] {}
+}
+
 function Test-InstalledFiles([string]$Root, [string[]]$Archives, [string]$Scratch) {
     $verify = Join-Path $Scratch 'verify'
     New-Item -ItemType Directory -Force -Path $verify | Out-Null
@@ -104,12 +109,12 @@ try {
     }
     $oldDaemon = Join-Path $current 'td-daemon.exe'
     if (Test-Path $oldDaemon) { & $oldDaemon stop 2>$null | Out-Null }
-    Remove-Item $next -Force -ErrorAction SilentlyContinue
+    Remove-Junction $next
     New-Item -ItemType Junction -Path $next -Target $versionRoot | Out-Null
-    Remove-Item $previous -Force -ErrorAction SilentlyContinue
+    Remove-Junction $previous
     if (Test-Path $current) { Move-Item $current $previous }
     Move-Item $next $current
-    Remove-Item $previous -Force -ErrorAction SilentlyContinue
+    Remove-Junction $previous
     if (-not $NoPathUpdate) {
         $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
         $parts = @($userPath -split ';' | Where-Object { $_ -and $_ -ne $current }) + $current
@@ -121,5 +126,5 @@ try {
     throw
 } finally {
     Remove-Item $temporary -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item $next -Force -ErrorAction SilentlyContinue
+    Remove-Junction $next
 }
