@@ -46,6 +46,11 @@ td --json instances list
 td --json --instance <selector> ops create /project1 constantTOP source
 ```
 
+Each listed Instance reports the open project as `project: {"name", "folder"}`
+(updated on the next heartbeat after a save-as or another `.toe` is opened), so
+the right selector can be chosen without a `project metadata` call per Instance.
+Agents older than this Release report `project: null`.
+
 Use the same install command to upgrade to the latest stable Release, then
 restart the Daemon. To uninstall the executables while preserving Daemon data
 and TouchDesigner projects:
@@ -176,6 +181,12 @@ defaults. `td commands schema` lists the Command names without a Daemon, and
 (1-256 Commands) expect. In Git Bash, set `MSYS_NO_PATHCONV=1`, or a leading
 `/project1` is rewritten into a Windows path and rejected.
 
+`batch execute` reports every read in order: `results[i]` is `{"ok":true,"result":{...}}`
+or `{"ok":false,"error":{"code":...}}`, and `failed_count` counts the failed reads. The
+Request still succeeds when some reads fail, so check `failed_count` instead of the Request
+status. A Daemon rejects a batch with `command_unsupported` before dispatch when the Agent does
+not report reads this way.
+
 <!-- doc-section: agent-component -->
 
 ## Agent Component
@@ -271,14 +282,53 @@ feed an In CHOP connector, and a COMP connector without an In or Out Operator
 is rejected with `operator_family_mismatch` (before 0.10 such COMP pairs were
 accepted because both ends were COMPs).
 
+`parameters list` describes every Parameter. Options narrow it:
+`--include-values` attaches each value in the `parameters get` shape (`mode`,
+`value`, `value_type`, `source`, `unsupported_reason`; a value that cannot be read
+reports `value_type: "unknown"` with `unsupported_reason: "value_unavailable"`),
+`--non-default-only` lists only Parameters TouchDesigner does not report as default
+(it implies values), `--names a,b` lists only those Parameters (an unknown name fails
+with `parameter_not_found`), and `--no-menu-options` reports `menu_names` and
+`menu_labels` as `null` and echoes `include_menu_options: false`. Results stay bounded and fail with `result_too_large`
+instead of truncating:
+
+```powershell
+td --json --instance <selector> parameters list /project1/select1 --non-default-only --no-menu-options
+td --json --instance <selector> parameters list /project1/select1 --names channames,renamefrom --include-values
+```
+
+`project snapshot` lists a subtree breadth-first as `path`, `type`, and `depth`
+(`--max-depth` up to 8, `--max-operators` up to 1000) and fails with
+`result_too_large` when the subtree is larger. `--paginate` instead returns one
+page with `next_cursor`; pass it to `--cursor` with the same root and
+`--max-depth` until `next_cursor` is `null` (every snapshot reports it; a complete
+result has `null`). TouchDesigner has no network revision
+counter, so pages are not one consistent view: a cursor whose next Operator moved
+or disappeared fails with `snapshot_cursor_stale` (start again), but other edits
+between pages are not detected. `--include-connections` adds each Operator's
+output `connections` (`target_path`, `output_index`, `input_index`). For Parameter
+values use `parameters list --non-default-only`:
+
+```powershell
+td --json --instance <selector> project snapshot /project1 --paginate --include-connections
+td --json --instance <selector> project snapshot /project1 --cursor <next_cursor> --include-connections
+```
+
 `ops.inspect` is a passive, batchable Operator Family Inspection for CHOP, DAT,
-TOP, SOP, POP, and MAT. Its `family` discriminator selects a strict typed
+TOP, SOP, POP, MAT, and COMP. Its `family` discriminator selects a strict typed
 `details` object; common cached memory, cook timing, Display, and Render
 metadata is returned alongside it. Variable-length CHOP channel and SOP
 attribute/group names are bounded by `--max-items` (default 100, maximum 1000)
 and overflow fails without truncation. It never downloads pixels, geometry, POP
 buffers, DAT content, or arbitrary Python objects and never explicitly cooks an
 Operator. Existing dedicated Commands remain the content and mutation seams.
+For a COMP, `details` summarizes its interface: `child_count` (direct children;
+list them with `ops children`), `inputs` and `outputs` as `{index, operator,
+family}` naming the In or Out Operator behind each regular connector,
+`hierarchy_inputs`/`hierarchy_outputs` counts, and `custom_pages` as `{name,
+parameters}` with parameter names only. Connectors, pages, and their parameter
+names together count against `--max-items`. Agents older than this Release
+reject COMPs with `operator_family_unsupported`.
 
 Use `ops state set /project1/geo/shape --display --render` to enable SOP geometry flags; `--no-display` and `--no-render` clear them. `ops state get` reads both flags back. Display selects viewer content; Render selects geometry for rendering. The Geometry COMP and Render TOP must also be configured. These flags do not themselves stop cooking or free memory.
 
@@ -323,7 +373,7 @@ td --json --instance <selector> parameters list /project1/controls
 {"operator_path":"/project1/controls","page":"Controls","parameters":[{"name":"Gyrox","label":"Gyro X","kind":"float","default":0,"minimum":-1,"maximum":1},{"name":"Manual","label":"Manual","kind":"toggle","default":true},{"name":"Source","label":"Source","kind":"menu","default":"manual","menu_names":["manual","device"],"menu_labels":["Manual","Device"]}]}
 ```
 
-Replace the options of an existing custom `Menu` parameter with `parameters menu-set` (Command `parameters.menu.set`). It takes 1–256 unique non-empty names and the same number of non-empty labels (maximum 128 characters each; `len(json.dumps(names + labels, ensure_ascii=True))` must not exceed 65,536, so quotes, separators, and escapes count and a non-ASCII character counts 6 bytes, or 12 outside the Basic Multilingual Plane) and a required `--preserve` policy: `index` keeps the selected position, `name` keeps the selected name. The menu default follows the same policy; a default that names no current option is left unchanged. A default that was never assigned reports the first option; when the policy moves it, it is assigned explicitly, and because TouchDesigner cannot make it implicit again, any failure after the write of that default has been attempted (including a rejected write of the default itself, which TouchDesigner may have applied) reports `parameter_rollback_failed` even though the menu reads back as before. Only custom, constant-mode `Menu` parameters whose options are not driven by a `menuSource` are accepted; built-in, `menuSource`, and expression/export/bind parameters fail with `parameter_menu_not_writable`, other styles (including StrMenu) with `parameter_type_unsupported`, and a selection or default the policy cannot map with `parameter_value_invalid`, all before any change. The result reports the new names and labels plus the value, index, and default before and after. A rejected write is rolled back and verified (`parameter_write_rejected`); `parameter_rollback_failed` or `parameter_outcome_unknown` require inspection before the next mutation. The Command is a mutation, so it can appear in `commands execute` plans but not in `batch execute`. Pass large menus with `--input-file`, because long `--names-json`/`--labels-json` values can exceed the Windows command-line limit. `parameters list` returns every option of every menu, so an Operator with several menus near the budget can exceed the result limit; that read fails with `result_too_large` and changes nothing, and `parameters get` still reads one value.
+Replace the options of an existing custom `Menu` parameter with `parameters menu-set` (Command `parameters.menu.set`). It takes 1–256 unique non-empty names and the same number of non-empty labels (maximum 128 characters each; `len(json.dumps(names + labels, ensure_ascii=True))` must not exceed 65,536, so quotes, separators, and escapes count and a non-ASCII character counts 6 bytes, or 12 outside the Basic Multilingual Plane) and a required `--preserve` policy: `index` keeps the selected position, `name` keeps the selected name. The menu default follows the same policy; a default that names no current option is left unchanged. A default that was never assigned reports the first option; when the policy moves it, it is assigned explicitly, and because TouchDesigner cannot make it implicit again, any failure after the write of that default has been attempted (including a rejected write of the default itself, which TouchDesigner may have applied) reports `parameter_rollback_failed` even though the menu reads back as before. Only custom, constant-mode `Menu` parameters whose options are not driven by a `menuSource` are accepted; built-in, `menuSource`, and expression/export/bind parameters fail with `parameter_menu_not_writable`, other styles (including StrMenu) with `parameter_type_unsupported`, and a selection or default the policy cannot map with `parameter_value_invalid`, all before any change. The result reports the new names and labels plus the value, index, and default before and after. A rejected write is rolled back and verified (`parameter_write_rejected`); `parameter_rollback_failed` or `parameter_outcome_unknown` require inspection before the next mutation. The Command is a mutation, so it can appear in `commands execute` plans but not in `batch execute`. Pass large menus with `--input-file`, because long `--names-json`/`--labels-json` values can exceed the Windows command-line limit. `parameters list` returns every option of every menu, so an Operator with several menus near the budget can exceed the result limit; that read fails with `result_too_large` and changes nothing. `parameters list --no-menu-options` still lists the descriptors, and `parameters get` reads one value.
 
 ```powershell
 td --json --instance <selector> parameters menu-set /project1/controls Source --names-json '["manual","device","replay"]' --labels-json '["Manual","Device","Replay"]' --preserve index
@@ -386,6 +436,22 @@ remove the created copy on failure; a distinct rollback or uncertain-outcome
 error is returned when the requested final state cannot be proven. Neither
 operation promises to rewrite DAT string literals, external systems, or every
 path-bearing expression/reference.
+
+Larger subtrees, such as a component installed with `ops tox import --inventory
+summary`, need `--inventory summary` on destroy, copy, or move (`--max-operators`
+up to 10000). The result then carries `operator_count`, `type_counts`, and
+`inventory_sha256` (the SHA-256 of the canonical JSON, sorted keys with no
+whitespace and ASCII, of `{path, op_type}` rows sorted by `path`, each path
+relative to the parent of the destroyed Operator or of the new copy). Only boundary
+connections are listed: destroy's `detached_connections` omits wires inside the
+subtree. More than 512 boundary connections fail with `result_too_large` before
+anything changes. Each command needs an Agent advertising
+`ops.destroy:inventory_summary`, `ops.copy:inventory_summary`, or
+`ops.move:inventory_summary`:
+
+```powershell
+td --json --instance <selector> ops destroy /project1/projection/kantanMapper --recursive --allow-connected --inventory summary --max-operators 5000
+```
 
 <!-- doc-section: trusted-tox-import -->
 
@@ -489,7 +555,9 @@ td --json --instance <selector> dat table replace /project1/grid '[["name","valu
 td --json --instance <selector> dat table patch /project1/grid '[["updated"]]' --row-offset 1 --column-offset 1
 ```
 
-Text access requires `textDAT`; table writes require `tableDAT`. Bounded table
+Text reads accept any DAT with text content (`isText`), including the callbacks
+of Execute-family and Script DATs, and report its `op_type`; text writes require
+`textDAT`, and table writes require `tableDAT`. Bounded table
 reads accept any DAT with table-formatted data (`isTable`), including CHOP to DAT
 for reading actual CHOP output values. Reads use normal dependency cooking, without
 forcing cooks. Mutation rejects a
@@ -497,11 +565,31 @@ non-empty File parameter or enabled Sync File mode, root and Agent Component
 protected paths, non-rectangular/non-string cells, and patches outside current
 dimensions. Content is limited to 32 KiB of UTF-8, with at most 256 rows, 256
 columns, 4096 cells, and 16 KiB per cell. Reads fail instead of truncating when
-their explicit byte limit is exceeded. Every mutation reads back the exact
+their explicit byte limit is exceeded. To read a larger text, pass
+`dat text get --offset N` (UTF-8 bytes): each call returns at most `--max-bytes`
+bytes of whole characters with `offset`, `next_offset` (`null` at the end),
+`total_utf8_bytes`, and the `text_sha256` of the complete text, which changes if
+the text was edited between chunks. An offset inside a character fails with
+`invalid_arguments`. Every mutation reads back the exact
 complete content and dimensions, then restores and verifies the entire prior
 DAT on failure; distinct unavailable, non-writable, rollback-failed, and
 uncertain-outcome errors preserve honest state. These Commands never execute
 DATs, import modules, evaluate content, or accept filesystem paths.
+
+CHOP channel values are read directly, without a temporary CHOP to DAT:
+
+```powershell
+td --json --instance <selector> chop values get /project1/noise1 --channels tx,ty
+td --json --instance <selector> chop values get /project1/noise1 --sample-offset 0 --sample-count 64
+```
+
+Without a sample range the result holds the current value of each channel plus
+the current `frame`; with `--sample-offset` and `--sample-count` (always given
+together) each channel holds that window of samples plus `sample_rate` and
+`total_samples`. `channels` lists the returned channels in order. `--channels` selects channels by exact name; an unknown name fails
+with `chop_channel_not_found`. NaN and infinite samples become `null`, counted in
+`non_finite_count`. At most 4096 values are returned per call; a larger request
+fails with `result_too_large` instead of truncating.
 
 <!-- doc-section: project-save -->
 ## Save the current project

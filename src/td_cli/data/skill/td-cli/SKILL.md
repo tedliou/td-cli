@@ -31,7 +31,8 @@ Each Command subcommand's `--help` states its option limits. `td commands schema
 lists Command names, and `td commands schema <name>` prints that Command's input
 JSON Schema (field names, bounds, defaults) for `--input`, batches and plans.
 
-`batch execute` runs 1-16 read-only Commands in one Request. For many typed mutations, use
+`batch execute` runs 1-16 read-only Commands in one Request. Each `results[i]` is ok/result or
+ok/error; check `failed_count`, because the Request succeeds even when some reads fail. For many typed mutations, use
 `commands execute --input-file plan.json` with `{"commands":[{"name":"ops.create",
 "input":{...}}]}` (1-256 Commands, 1 MiB). It runs independent Requests in order,
 stops on the first non-success, and emits flushed JSONL with each zero-based

@@ -78,12 +78,16 @@ def stop_server(server: uvicorn.Server, thread: threading.Thread) -> None:
 
 
 async def register(
-    client: socketio.AsyncClient, port: int, *, synchronize: bool = True
+    client: socketio.AsyncClient,
+    port: int,
+    *,
+    synchronize: bool = True,
+    payload: dict[str, object] | None = None,
 ) -> dict[str, object]:
     registered: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
     client.on("registered", lambda data: registered.set_result(data))
     await client.connect(f"http://127.0.0.1:{port}", auth={"token": TOKEN})
-    await client.emit("register", registration_payload())
+    await client.emit("register", payload or registration_payload())
     connection = await asyncio.wait_for(registered, 2)
     if synchronize:
         await client.emit("execution_sync", {**connection, "records": []})
@@ -511,6 +515,45 @@ async def test_sender_saturation_degrades_health_fail_closed(
         assert health["ready"] is False
     finally:
         gate.set()
+        if client.connected:
+            await client.disconnect()
+        stop_server(server, thread)
+
+
+@pytest.mark.asyncio
+async def test_instances_report_the_open_project_and_follow_heartbeats(tmp_path: Path) -> None:
+    server, thread, port = await start_server(create_transport_app(tmp_path, token=TOKEN))
+    client = socketio.AsyncClient(reconnection=False)
+    heartbeat = asyncio.Event()
+    client.on("heartbeat_recorded", lambda _: heartbeat.set())
+    try:
+        first = {"name": "HelloBloom.651", "folder": "E:/work"}
+        connection = await register(
+            client, port, payload={**registration_payload(), "project": first}
+        )
+        _, listed = await get_json(port, "/v3/instances")
+        assert listed[0]["project"] == first
+
+        saved_as = {"name": "HelloBloom.652", "folder": "E:/work"}
+        await client.emit("heartbeat", {**connection, "status": "online", "project": saved_as})
+        await asyncio.wait_for(heartbeat.wait(), 2)
+        _, listed = await get_json(port, "/v3/instances")
+        assert listed[0]["project"] == saved_as
+    finally:
+        if client.connected:
+            await client.disconnect()
+        stop_server(server, thread)
+
+
+@pytest.mark.asyncio
+async def test_instances_report_no_project_for_older_agents(tmp_path: Path) -> None:
+    server, thread, port = await start_server(create_transport_app(tmp_path, token=TOKEN))
+    client = socketio.AsyncClient(reconnection=False)
+    try:
+        await register(client, port, payload={**registration_payload(), "project": {"name": 7}})
+        _, listed = await get_json(port, "/v3/instances")
+        assert listed[0]["project"] is None
+    finally:
         if client.connected:
             await client.disconnect()
         stop_server(server, thread)

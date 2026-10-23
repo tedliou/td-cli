@@ -419,6 +419,7 @@ class FakeTextDat(FakeOperator):
     def __init__(self, path: str, text: str = "", *, file="", syncfile=False) -> None:
         super().__init__(path, op_type="textDAT", family="DAT")
         self.isTable = False
+        self.isText = True
         self.text = text
         self.par = SimpleNamespace(file=FakeDatParameter(file), syncfile=FakeDatParameter(syncfile))
 
@@ -427,6 +428,7 @@ class FakeTableDat(FakeOperator):
     def __init__(self, path: str, rows=None, *, file="", syncfile=False) -> None:
         super().__init__(path, op_type="tableDAT", family="DAT")
         self.isTable = True
+        self.isText = False
         self._rows = [list(row) for row in (rows or [])]
         self.par = SimpleNamespace(file=FakeDatParameter(file), syncfile=FakeDatParameter(syncfile))
 
@@ -1355,8 +1357,41 @@ def test_family_inspection_returns_discriminated_results_for_all_six_families() 
     )
 
 
+def test_comp_inspection_summarizes_connectors_children_and_custom_pages() -> None:
+    comp = inspection_operator("/project1/muse_input", "COMP")
+    in_top = FakeOperator("/project1/muse_input/in1", op_type="inTOP", family="TOP")
+    out_chop = FakeOperator("/project1/muse_input/out1", op_type="outCHOP", family="CHOP")
+    comp.children = [in_top, out_chop, FakeOperator("/project1/muse_input/osc")]
+    comp.inputConnectors = [SimpleNamespace(index=0, inOP=in_top, isInput=True)]
+    comp.outputConnectors = [SimpleNamespace(index=0, outOP=out_chop, isInput=False)]
+    comp.inputCOMPConnectors = [SimpleNamespace(index=0)]
+    comp.outputCOMPConnectors = []
+    comp.customPages = [
+        SimpleNamespace(name="Controls", pars=[SimpleNamespace(name="Speed")]),
+    ]
+    control = make_control({comp.path: comp}.get)
+
+    result = control.execute(
+        {"name": "ops.inspect", "input": {"operator_path": comp.path, "max_items": 8}}
+    )
+
+    assert result["family"] == "COMP"
+    assert result["details"] == {
+        "child_count": 3,
+        "inputs": [{"index": 0, "operator": "in1", "family": "TOP"}],
+        "outputs": [{"index": 0, "operator": "out1", "family": "CHOP"}],
+        "hierarchy_inputs": 1,
+        "hierarchy_outputs": 0,
+        "custom_pages": [{"name": "Controls", "parameters": ["Speed"]}],
+    }
+    with pytest.raises(module.AgentCommandError, match="result_too_large"):
+        control.execute(
+            {"name": "ops.inspect", "input": {"operator_path": comp.path, "max_items": 3}}
+        )
+
+
 def test_family_inspection_rejects_unsupported_unavailable_and_overflow() -> None:
-    comp = inspection_operator("/project1/comp", "COMP")
+    comp = inspection_operator("/project1/comp", "UNKNOWN")
     chop = inspection_operator("/project1/chop", "CHOP")
     chop.numChans, chop.numSamples, chop.rate = 2, 1, 60.0
     chop.start, chop.end, chop.isTimeSlice, chop.export = 0.0, 0.0, False, False
@@ -1660,6 +1695,7 @@ def test_text_dat_get_is_lossless_bounded_and_exactly_typed() -> None:
 
     assert result == {
         "operator_path": text_dat.path,
+        "op_type": "textDAT",
         "dat_kind": "text",
         "text": "繁體\n",
         "utf8_bytes": 7,
@@ -1669,10 +1705,26 @@ def test_text_dat_get_is_lossless_bounded_and_exactly_typed() -> None:
         make_control({text_dat.path: text_dat}.get).execute(
             {"name": "dat.text.get", "input": {"operator_path": text_dat.path, "max_bytes": 6}}
         )
-    wrong = FakeOperator("/project1/not_text", op_type="executeDAT", family="DAT")
+    wrong = FakeTableDat("/project1/not_text", [["a"]])
     with pytest.raises(module.AgentCommandError, match="dat_type_mismatch"):
         make_control({wrong.path: wrong}.get).execute(
             {"name": "dat.text.get", "input": {"operator_path": wrong.path, "max_bytes": 32}}
+        )
+
+
+def test_text_get_reads_callbacks_of_execute_family_dats_but_set_stays_text_dat_only() -> None:
+    callbacks = FakeTextDat("/project1/active1/chopexec1", "def onOffToOn(channel):\n")
+    callbacks.OPType = "chopexecuteDAT"
+    control = make_control({callbacks.path: callbacks}.get)
+
+    result = control.execute(
+        {"name": "dat.text.get", "input": {"operator_path": callbacks.path, "max_bytes": 64}}
+    )
+    assert result["op_type"] == "chopexecuteDAT"
+    assert result["text"] == "def onOffToOn(channel):\n"
+    with pytest.raises(module.AgentCommandError, match="dat_type_mismatch"):
+        control.execute(
+            {"name": "dat.text.set", "input": {"operator_path": callbacks.path, "text": "x"}}
         )
 
 
@@ -2473,6 +2525,74 @@ def test_destroy_requires_explicit_subtree_and_connection_authorization() -> Non
     }
 
 
+def _wired_group():
+    root = FakeOperator("/project1/group")
+    child = FakeOperator("/project1/group/child", op_type="noiseTOP", family="TOP", outputs=1)
+    target = FakeOperator("/project1/group/target", op_type="nullTOP", family="TOP", inputs=1)
+    outside = FakeOperator("/project1/outside", family="TOP", inputs=1)
+    child.outputConnectors[0].connect(target.inputConnectors[0])
+    child.outputConnectors[0].connect(outside.inputConnectors[0])
+    root.children = [child, target]
+    operators = {item.path: item for item in (root, child, target, outside)}
+    lookup = lambda path: (
+        operators.get(path)
+        if operators.get(path) is not None and not operators[path].destroyed
+        else None
+    )
+    control = OperatorControl(lookup, RUNTIME_OPERATOR_CATALOG, protected_path="/project1/td_agent")
+    return control, lookup
+
+
+def _summary_destroy(control):
+    return control.execute(
+        {
+            "name": "ops.destroy",
+            "input": {
+                "operator_path": "/project1/group",
+                "recursive": True,
+                "allow_connected": True,
+                "max_operators": 10,
+                "inventory": "summary",
+            },
+        }
+    )
+
+
+def test_summary_destroy_reports_a_digest_and_only_boundary_connections() -> None:
+    control, lookup = _wired_group()
+    result = _summary_destroy(control)
+    inventory = [
+        {"path": "group", "op_type": "base"},
+        {"path": "group/child", "op_type": "noiseTOP"},
+        {"path": "group/target", "op_type": "nullTOP"},
+    ]
+    canonical = json.dumps(inventory, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+    assert result == {
+        "operator_path": "/project1/group",
+        "operator_count": 3,
+        "inventory_sha256": hashlib.sha256(canonical.encode("ascii")).hexdigest(),
+        "type_counts": {"base": 1, "noiseTOP": 1, "nullTOP": 1},
+        "detached_connections": [
+            {
+                "source_path": "/project1/group/child",
+                "output_index": 0,
+                "target_path": "/project1/outside",
+                "input_index": 0,
+            }
+        ],
+        "destroyed": True,
+    }
+    assert lookup("/project1/group") is None
+
+
+def test_summary_destroy_fails_before_mutation_when_boundary_connections_overflow() -> None:
+    control, lookup = _wired_group()
+    control.MAX_SUMMARY_BOUNDARY_CONNECTIONS = 0
+    with pytest.raises(module.AgentCommandError, match="result_too_large"):
+        _summary_destroy(control)
+    assert lookup("/project1/group") is not None
+
+
 @pytest.mark.parametrize("path", ["/", "/project1", "/project1/td_agent"])
 def test_destroy_protects_root_agent_component_and_its_ancestors(path: str) -> None:
     operator = FakeOperator(path)
@@ -2749,6 +2869,46 @@ def test_move_copies_then_destroys_and_reports_detached_boundary_connections() -
     }
     assert lookup("/project1/source") is None
     assert lookup("/project1/group/moved") is not None
+
+
+def test_summary_move_reports_the_new_location_digest() -> None:
+    source = FakeOperator("/project1/source", op_type="constant", family="TOP")
+    target_parent = FakeOperator("/project1/group")
+    operators = {item.path: item for item in (source, target_parent)}
+
+    def copy(source_operator, *, name, includeDocked):
+        created = FakeOperator(
+            f"{target_parent.path}/{name}", op_type=source_operator.OPType, family="TOP"
+        )
+        operators[created.path] = created
+        target_parent.children.append(created)
+        return created
+
+    target_parent.copy = copy
+    lookup = lambda path: (
+        operators.get(path)
+        if operators.get(path) is not None and not operators[path].destroyed
+        else None
+    )
+    control = OperatorControl(lookup, RUNTIME_OPERATOR_CATALOG, protected_path="/project1/td_agent")
+    result = control.execute(
+        {
+            "name": "ops.move",
+            "input": {
+                "source_path": source.path,
+                "target_parent_path": target_parent.path,
+                "new_name": "moved",
+                "allow_connected": False,
+                "max_operators": 10,
+                "inventory": "summary",
+            },
+        }
+    )
+    canonical = '[{"op_type":"constant","path":"moved"}]'
+    assert result["inventory_sha256"] == hashlib.sha256(canonical.encode("ascii")).hexdigest()
+    assert result["type_counts"] == {"constant": 1}
+    assert result["detached_connections"] == []
+    assert result["moved"] is True
 
 
 def test_copy_rolls_back_an_inexact_touchdesigner_result() -> None:
@@ -3535,6 +3695,86 @@ def test_parameter_list_reports_runtime_names_types_and_expression_capabilities(
     batch.preflight({"name": "parameters.list", "input": {"operator_path": root.path}})
 
 
+def _listed_parameters_root():
+    root = FakeOperator("/project1")
+    gain = FakeParameter(0.5)
+    gain.name, gain.label, gain.isDefault = "gain", "Gain", False
+    gain.page = SimpleNamespace(name="Test")
+    width = FakeParameter(8)
+    width.name, width.label, width.isDefault = "width", "Width", True
+    width.page = SimpleNamespace(name="Test")
+    operation = FakeParameter("add")
+    operation.name, operation.label, operation.isDefault = "operation", "Operation", True
+    operation.page = SimpleNamespace(name="Test")
+    operation.isMenu, operation.isString = True, False
+    operation.menuNames, operation.menuLabels = ["add", "multiply"], ["Add", "Multiply"]
+    root.builtinPars = [gain, width, operation]
+    root.customPars = []
+    return root
+
+
+def test_parameter_list_attaches_values_selects_names_and_omits_menu_options() -> None:
+    root = _listed_parameters_root()
+    result = make_control(lambda _: root).execute(
+        {
+            "name": "parameters.list",
+            "input": {
+                "operator_path": root.path,
+                "names": ["operation", "gain"],
+                "include_values": True,
+                "include_menu_options": False,
+            },
+        }
+    )
+    items = {item["name"]: item for item in result["parameters"]}
+    assert sorted(items) == ["gain", "operation"]
+    assert items["gain"]["value"] == {
+        "mode": "constant",
+        "value": 0.5,
+        "value_type": "number",
+        "source": None,
+        "unsupported_reason": None,
+    }
+    assert items["operation"]["value"]["value"] == "add"
+    assert items["operation"]["menu_names"] is None
+    assert items["operation"]["menu_labels"] is None
+
+
+def test_parameter_list_reports_only_non_default_parameters_with_values() -> None:
+    root = _listed_parameters_root()
+    result = make_control(lambda _: root).execute(
+        {
+            "name": "parameters.list",
+            "input": {"operator_path": root.path, "non_default_only": True},
+        }
+    )
+    assert [item["name"] for item in result["parameters"]] == ["gain"]
+    assert result["parameters"][0]["value"]["value"] == 0.5
+
+    # A default expression (isDefault) stays out; a driven parameter that is not default is listed.
+    width, operation = root.builtinPars[1], root.builtinPars[2]
+    width.mode, width.expr = "expression", "me.time.rate"
+    operation.mode, operation.expr, operation.isDefault = "expression", "'add'", False
+    driven = make_control(lambda _: root).execute(
+        {
+            "name": "parameters.list",
+            "input": {"operator_path": root.path, "non_default_only": True},
+        }
+    )
+    assert [item["name"] for item in driven["parameters"]] == ["gain", "operation"]
+
+
+def test_parameter_list_rejects_unknown_selected_names() -> None:
+    root = _listed_parameters_root()
+    with pytest.raises(module.AgentCommandError, match="parameter_not_found"):
+        make_control(lambda _: root).execute(
+            {
+                "name": "parameters.list",
+                "input": {"operator_path": root.path, "names": ["gain", "missing"]},
+            }
+        )
+
+
 @pytest.mark.parametrize("mode", ["export", "bind"])
 def test_parameter_get_reports_non_constant_runtime_modes(mode: str) -> None:
     root = FakeOperator("/project1")
@@ -4077,6 +4317,39 @@ def test_agent_rejects_mutation_batch_before_any_mutation() -> None:
     assert root.par.display.val is True
 
 
+def test_batch_reports_each_read_and_keeps_successes_when_one_fails() -> None:
+    root = FakeOperator("/project1")
+    agent = AgentExt(
+        FakeOwner(), operator_lookup=lambda path: root if path == "/project1" else None
+    )
+
+    result = agent.execute_command(
+        {
+            "name": "batch.execute",
+            "input": {
+                "commands": [
+                    {"name": "ops.get", "input": {"operator_path": "/project1"}},
+                    {"name": "ops.get", "input": {"operator_path": "/project1/missing"}},
+                ]
+            },
+        }
+    )
+
+    assert result["failed_count"] == 1
+    first, second = result["results"]
+    assert first["ok"] is True
+    assert first["result"]["path"] == "/project1"
+    assert second == {
+        "ok": False,
+        "error": {
+            "code": "operator_not_found",
+            "message": "operator_not_found",
+            "details": {},
+            "retryable": False,
+        },
+    }
+
+
 def test_snapshot_is_deterministic_breadth_first_and_enforces_operator_cap() -> None:
     root = FakeOperator("/project1")
     child_b = FakeOperator("/project1/b")
@@ -4105,6 +4378,64 @@ def test_snapshot_is_deterministic_breadth_first_and_enforces_operator_cap() -> 
                 "input": {"operator_path": "/project1", "max_depth": 2, "max_operators": 3},
             }
         )
+
+
+def _snapshot_page(agent, **options):
+    return agent.execute_command(
+        {
+            "name": "project.snapshot",
+            "input": {"operator_path": "/project1", "max_depth": 2, "max_operators": 2, **options},
+        }
+    )
+
+
+def test_snapshot_pages_continue_from_a_cursor_until_the_end() -> None:
+    root = FakeOperator("/project1")
+    child_b = FakeOperator("/project1/b")
+    child_a = FakeOperator("/project1/a")
+    child_a.children = [FakeOperator("/project1/a/z")]
+    root.children = [child_b, child_a]
+    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: root)
+
+    first = _snapshot_page(agent, paginate=True)
+    assert [item["path"] for item in first["operators"]] == ["/project1", "/project1/a"]
+    second = _snapshot_page(agent, cursor=first["next_cursor"])
+    assert [item["path"] for item in second["operators"]] == ["/project1/b", "/project1/a/z"]
+    assert second["next_cursor"] is None
+
+
+def test_snapshot_cursor_fails_when_the_network_changed_under_it() -> None:
+    root = FakeOperator("/project1")
+    child_b = FakeOperator("/project1/b")
+    child_a = FakeOperator("/project1/a")
+    root.children = [child_b, child_a, FakeOperator("/project1/c")]
+    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: root)
+
+    first = _snapshot_page(agent, paginate=True)
+    root.children = [child_a, FakeOperator("/project1/c")]
+    with pytest.raises(module.AgentCommandError, match="snapshot_cursor_stale"):
+        _snapshot_page(agent, cursor=first["next_cursor"])
+    with pytest.raises(module.AgentCommandError, match="invalid_arguments"):
+        _snapshot_page(agent, cursor="not-a-cursor")
+    with pytest.raises(module.AgentCommandError, match="invalid_arguments"):
+        _snapshot_page(agent, cursor=first["next_cursor"], max_depth=1)
+
+
+def test_snapshot_reports_each_operator_output_connection() -> None:
+    root = FakeOperator("/project1")
+    source = FakeOperator("/project1/source", family="TOP", outputs=1)
+    target = FakeOperator("/project1/target", family="TOP", inputs=1)
+    source.outputConnectors[0].connect(target.inputConnectors[0])
+    root.children = [source, target]
+    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: root)
+
+    result = _snapshot_page(agent, max_operators=3, include_connections=True)
+    rows = {item["path"]: item for item in result["operators"]}
+    assert rows["/project1/source"]["connections"] == [
+        {"target_path": "/project1/target", "output_index": 0, "input_index": 0}
+    ]
+    assert rows["/project1/target"]["connections"] == []
+    assert result["next_cursor"] is None
 
 
 def test_binary_export_enforces_family_and_raw_byte_cap() -> None:
@@ -4439,3 +4770,116 @@ def test_disconnect_accepts_a_top_feeding_a_comp_in_top() -> None:
 
     assert result["disconnected"] is True
     assert blend.inputConnectors[0].connections == []
+
+
+def test_agent_reports_its_open_project_on_register_and_heartbeat() -> None:
+    project = SimpleNamespace(name="HelloBloom.651", folder="E:/work")
+    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: None, project_info=project)
+
+    assert agent.registration_payload()["project"] == {
+        "name": "HelloBloom.651",
+        "folder": "E:/work",
+    }
+    project.name = "HelloBloom.652"
+    assert agent.heartbeat_report()["project"] == {"name": "HelloBloom.652", "folder": "E:/work"}
+    assert "project" not in agent.heartbeat_payload()
+
+
+def test_agent_reports_no_project_when_touchdesigner_has_none() -> None:
+    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: None, project_info=None)
+    agent.project_info = None
+
+    assert agent.registration_payload()["project"] is None
+
+
+def test_text_get_with_offset_reads_large_text_in_whole_character_chunks() -> None:
+    text = "ab" + "繁" * 3 + "z"  # 2 + 9 + 1 = 12 UTF-8 bytes
+    text_dat = FakeTextDat("/project1/config", text)
+    control = make_control({text_dat.path: text_dat}.get)
+
+    def read(offset, max_bytes):
+        return control.execute(
+            {
+                "name": "dat.text.get",
+                "input": {"operator_path": text_dat.path, "max_bytes": max_bytes, "offset": offset},
+            }
+        )
+
+    first = read(0, 4)
+    assert (first["text"], first["offset"], first["next_offset"]) == ("ab", 0, 2)
+    assert first["total_utf8_bytes"] == 12
+    assert first["text_sha256"] == hashlib.sha256(text.encode("utf-8")).hexdigest()
+    second = read(2, 6)
+    assert (second["text"], second["next_offset"]) == ("繁繁", 8)
+    last = read(8, 32)
+    assert (last["text"], last["next_offset"]) == ("繁z", None)
+    assert "".join(chunk["text"] for chunk in (first, second, last)) == text
+    with pytest.raises(module.AgentCommandError, match="invalid_arguments"):
+        read(3, 32)
+    with pytest.raises(module.AgentCommandError, match="result_too_large"):
+        read(2, 2)
+
+
+class FakeChannel:
+    def __init__(self, name: str, samples: list[float]) -> None:
+        self.name = name
+        self._samples = samples
+
+    def eval(self):
+        return self._samples[-1]
+
+    def __getitem__(self, index: int) -> float:
+        return self._samples[index]
+
+
+def chop_with(path: str, channels: dict[str, list[float]]):
+    chop = FakeOperator(path, op_type="selectCHOP", family="CHOP")
+    chop.chans = lambda: [FakeChannel(name, samples) for name, samples in channels.items()]
+    chop.numSamples = len(next(iter(channels.values())))
+    chop.rate = 60.0
+    return chop
+
+
+def test_chop_values_reads_current_values_without_mutating(monkeypatch) -> None:
+    monkeypatch.setattr(builtins, "absTime", SimpleNamespace(frame=1234), raising=False)
+    chop = chop_with("/project1/osc", {"tx": [0.0, 0.12], "ty": [1.0, float("nan")]})
+    control = make_control({chop.path: chop}.get)
+
+    result = control.execute({"name": "chop.values.get", "input": {"operator_path": chop.path}})
+
+    assert result == {
+        "operator_path": chop.path,
+        "frame": 1234,
+        "channels": ["tx", "ty"],
+        "values": {"tx": 0.12, "ty": None},
+        "non_finite_count": 1,
+    }
+
+
+def test_chop_values_reads_a_bounded_sample_range_of_selected_channels() -> None:
+    chop = chop_with("/project1/osc", {"tx": [0.0, 0.5, 1.0], "ty": [2.0, 3.0, 4.0]})
+    control = make_control({chop.path: chop}.get)
+
+    result = control.execute(
+        {
+            "name": "chop.values.get",
+            "input": {
+                "operator_path": chop.path,
+                "channels": ["ty"],
+                "sample_offset": 1,
+                "sample_count": 2,
+            },
+        }
+    )
+
+    assert result["values"] == {"ty": [3.0, 4.0]}
+    assert (result["sample_offset"], result["sample_rate"], result["total_samples"]) == (1, 60.0, 3)
+    with pytest.raises(module.AgentCommandError, match="chop_channel_not_found"):
+        control.execute(
+            {"name": "chop.values.get", "input": {"operator_path": chop.path, "channels": ["tz"]}}
+        )
+    not_chop = FakeOperator("/project1/top", family="TOP")
+    with pytest.raises(module.AgentCommandError, match="operator_family_unsupported"):
+        make_control({not_chop.path: not_chop}.get).execute(
+            {"name": "chop.values.get", "input": {"operator_path": not_chop.path}}
+        )

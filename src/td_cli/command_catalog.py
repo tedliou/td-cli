@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import PureWindowsPath
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -139,8 +139,8 @@ class ConnectionsInput(OperatorInput):
 MAX_INSPECTION_ITEMS = 100
 MAX_INSPECTION_STRING_BYTES = 4096
 MAX_TOX_FILE_BYTES = 67_108_864
-MAX_TOX_FULL_INVENTORY_OPERATORS = 1000
-MAX_TOX_OPERATORS = 10_000
+MAX_FULL_INVENTORY_OPERATORS = 1000
+MAX_SUMMARY_INVENTORY_OPERATORS = 10_000
 
 
 class InspectOperatorInput(OperatorInput):
@@ -198,6 +198,40 @@ class SetOperatorStateInput(OperatorInput):
 
 class TextDatReadInput(OperatorInput):
     max_bytes: int = Field(default=MAX_DAT_CONTENT_BYTES, ge=1, le=MAX_DAT_CONTENT_BYTES)
+    offset: int | None = Field(
+        default=None,
+        ge=0,
+        exclude_if=lambda value: value is None,
+        description="UTF-8 byte offset; read one chunk of at most max_bytes and its next_offset.",
+    )
+
+
+MAX_CHOP_VALUES = 4096
+
+
+class ChopValuesInput(OperatorInput):
+    channels: list[Annotated[str, Field(min_length=1, max_length=256)]] | None = Field(
+        default=None,
+        min_length=1,
+        max_length=MAX_CHOP_VALUES,
+        exclude_if=lambda value: value is None,
+        description="Read only these channel names.",
+    )
+    sample_offset: int | None = Field(
+        default=None,
+        ge=0,
+        exclude_if=lambda value: value is None,
+        description="First sample index; with sample_count reads a range instead of current values.",
+    )
+    sample_count: int | None = Field(
+        default=None, ge=1, le=MAX_CHOP_VALUES, exclude_if=lambda value: value is None
+    )
+
+    @model_validator(mode="after")
+    def range_is_complete(self) -> ChopValuesInput:
+        if (self.sample_offset is None) != (self.sample_count is None):
+            raise ValueError("sample_offset and sample_count must be given together")
+        return self
 
 
 class TextDatSetInput(OperatorInput):
@@ -313,7 +347,25 @@ class RenameOperatorInput(OperatorInput):
     _new_name = field_validator("new_name")(_valid_operator_name)
 
 
-class DestroyOperatorInput(OperatorInput):
+class InventoryModeInput(StrictModel):
+    max_operators: int = Field(default=256, ge=1, le=MAX_SUMMARY_INVENTORY_OPERATORS)
+    # Defaults are omitted from the wire so a newer CLI still talks to an older Daemon.
+    inventory: Literal["full", "summary"] = Field(
+        default="full",
+        exclude_if=lambda value: value == "full",
+        description="summary: report a digest and type counts instead of every Operator.",
+    )
+
+    @model_validator(mode="after")
+    def full_inventory_fits_one_outcome(self) -> Self:
+        if self.inventory == "full" and self.max_operators > MAX_FULL_INVENTORY_OPERATORS:
+            raise ValueError(
+                f"max_operators above {MAX_FULL_INVENTORY_OPERATORS} requires inventory 'summary'"
+            )
+        return self
+
+
+class DestroyOperatorInput(OperatorInput, InventoryModeInput):
     recursive: bool = Field(
         default=False, description="Also destroy a non-empty COMP and its whole subtree."
     )
@@ -321,16 +373,14 @@ class DestroyOperatorInput(OperatorInput):
         default=False,
         description="Destroy even when wired; the result lists the removed detached_connections.",
     )
-    max_operators: int = Field(default=256, ge=1, le=1000)
 
 
-class StructuralDestinationInput(StrictModel):
+class StructuralDestinationInput(InventoryModeInput):
     source_path: str
     target_parent_path: str
     new_name: str
     node_x: int | None = Field(default=None, ge=-32768, le=32767)
     node_y: int | None = Field(default=None, ge=-32768, le=32767)
-    max_operators: int = Field(default=256, ge=1, le=1000)
 
     _source_path = field_validator("source_path")(_valid_operator_path)
     _target_parent_path = field_validator("target_parent_path")(_valid_operator_path)
@@ -361,7 +411,7 @@ def _valid_local_windows_path(value: str) -> str:
     return value
 
 
-class ImportToxInput(StrictModel):
+class ImportToxInput(InventoryModeInput):
     parent_path: str
     tox_path: str
     allowlist_root: str
@@ -369,12 +419,7 @@ class ImportToxInput(StrictModel):
     trusted: Literal[True]
     replace: bool = False
     max_file_bytes: int = Field(default=MAX_TOX_FILE_BYTES, ge=1, le=MAX_TOX_FILE_BYTES)
-    max_operators: int = Field(default=256, ge=1, le=MAX_TOX_OPERATORS)
-    # Defaults are omitted from the wire so a newer CLI still talks to an older Daemon.
     root_child: str | None = Field(default=None, exclude_if=lambda value: value is None)
-    inventory: Literal["full", "summary"] = Field(
-        default="full", exclude_if=lambda value: value == "full"
-    )
 
     _parent_path = field_validator("parent_path")(_valid_operator_path)
     _tox_path = field_validator("tox_path")(_valid_local_windows_path)
@@ -392,15 +437,6 @@ class ImportToxInput(StrictModel):
     @classmethod
     def root_child_is_an_operator_name(cls, value: str | None) -> str | None:
         return None if value is None else _valid_operator_name(value)
-
-    @model_validator(mode="after")
-    def full_inventory_fits_one_outcome(self) -> ImportToxInput:
-        if self.inventory == "full" and self.max_operators > MAX_TOX_FULL_INVENTORY_OPERATORS:
-            raise ValueError(
-                f"max_operators above {MAX_TOX_FULL_INVENTORY_OPERATORS} requires "
-                "inventory 'summary'"
-            )
-        return self
 
 
 class ConnectOperatorsInput(StrictModel):
@@ -433,6 +469,34 @@ class ParameterInput(OperatorInput):
         if not value:
             raise ValueError("parameter must not be empty")
         return value
+
+
+MAX_LISTED_PARAMETER_NAMES = 256
+
+
+class ParameterListInput(OperatorInput):
+    names: list[Annotated[str, Field(min_length=1, max_length=256)]] | None = Field(
+        default=None,
+        min_length=1,
+        max_length=MAX_LISTED_PARAMETER_NAMES,
+        exclude_if=lambda value: value is None,
+        description="List only these parameters, by exact name.",
+    )
+    include_values: bool = Field(
+        default=False,
+        exclude_if=lambda value: value is False,
+        description="Attach each parameter's current value in the parameters.get shape.",
+    )
+    non_default_only: bool = Field(
+        default=False,
+        exclude_if=lambda value: value is False,
+        description="List only parameters that differ from their defaults; implies values.",
+    )
+    include_menu_options: bool = Field(
+        default=True,
+        exclude_if=lambda value: value is True,
+        description="Include menu_names and menu_labels; false reports them as null.",
+    )
 
 
 MAX_PARAMETER_SOURCE_BYTES = 16_384
@@ -552,6 +616,23 @@ class ReplaceSequenceInput(SequenceInput):
 class SnapshotInput(OperatorInput):
     max_depth: int = Field(default=4, ge=0, le=8)
     max_operators: int = Field(default=256, ge=1, le=1000)
+    paginate: bool = Field(
+        default=False,
+        exclude_if=lambda value: value is False,
+        description="Return one page of max_operators with next_cursor instead of failing.",
+    )
+    cursor: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=4096,
+        exclude_if=lambda value: value is None,
+        description="next_cursor of the previous page; same root and max_depth.",
+    )
+    include_connections: bool = Field(
+        default=False,
+        exclude_if=lambda value: value is False,
+        description="Attach each Operator's output connections.",
+    )
 
 
 class ProjectMetadataInput(StrictModel):
@@ -625,6 +706,10 @@ def _connections_result(result: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _inventory_summary_feature(name: str) -> tuple[str, Callable[[dict[str, Any]], bool]]:
+    return (f"{name}:inventory_summary", lambda value: value.get("inventory") == "summary")
+
+
 def _copy_result(result: dict[str, Any]) -> dict[str, Any]:
     if "include_docked" in result:
         result["include_docked"] = bool(result["include_docked"])
@@ -648,6 +733,27 @@ def _state_result(result: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _text_read_result(result: dict[str, Any]) -> dict[str, Any]:
+    if "offset" in result:
+        result.setdefault("next_offset", None)
+    return result
+
+
+def _chop_values_result(result: dict[str, Any]) -> dict[str, Any]:
+    # The Agent wire drops null dict values, so the ordered channel list restores them.
+    values = result.get("values")
+    if isinstance(result.get("channels"), list) and isinstance(values, dict):
+        result["values"] = {name: values.get(name) for name in result["channels"]}
+    if "sample_offset" not in result:
+        result.setdefault("frame", None)
+    return result
+
+
+def _snapshot_result(result: dict[str, Any]) -> dict[str, Any]:
+    result.setdefault("next_cursor", None)
+    return result
+
+
 def _inspection_result(result: dict[str, Any]) -> dict[str, Any]:
     for section, fields in {
         "cook": ("cooked_this_frame", "cooked_previous_frame"),
@@ -663,6 +769,15 @@ def _inspection_result(result: dict[str, Any]) -> dict[str, Any]:
     if isinstance(details, dict):
         if result.get("family") == "DAT":
             details.setdefault("editing_file", None)
+        if result.get("family") == "COMP":
+            for side in ("inputs", "outputs"):
+                if isinstance(details.get(side), list):
+                    details[side] = [
+                        {"operator": None, "family": None, **item}
+                        if isinstance(item, dict)
+                        else item
+                        for item in details[side]
+                    ]
         for field in ("time_slice", "export", "editable", "template", "compare"):
             if field in details:
                 details[field] = bool(details[field])
@@ -694,7 +809,19 @@ def _parameter_descriptor(item: object) -> object:
 
 def _parameter_list_result(result: dict[str, Any]) -> dict[str, Any]:
     if isinstance(result.get("parameters"), list):
-        result["parameters"] = [_parameter_descriptor(item) for item in result["parameters"]]
+        # The wire drops null menu options; the echoed option says they were left out.
+        omitted = {"menu_names": None, "menu_labels": None}
+        result["parameters"] = [
+            _parameter_descriptor(
+                {**omitted, **item}
+                if result.get("include_menu_options") is False and isinstance(item, dict)
+                else item
+            )
+            for item in result["parameters"]
+        ]
+        for item in result["parameters"]:
+            if isinstance(item, dict) and isinstance(item.get("value"), dict):
+                item["value"] = _parameter_result(item["value"])
     return result
 
 
@@ -838,12 +965,15 @@ class CommandCatalog:
             nested_results = normalized.get("results")
             if isinstance(nested_commands, list) and isinstance(nested_results, list):
                 normalized["results"] = [
-                    self.normalize_result(nested_command, nested_result)
-                    for nested_command, nested_result in zip(
-                        nested_commands, nested_results, strict=False
-                    )
+                    self._normalize_batch_item(nested_command, item)
+                    for nested_command, item in zip(nested_commands, nested_results, strict=False)
                 ]
         return self._definition(name).result_normalizer(normalized)
+
+    def _normalize_batch_item(self, command: object, item: object) -> object:
+        if isinstance(item, dict) and item.get("ok") is True and "result" in item:
+            return {**item, "result": self.normalize_result(command, item["result"])}
+        return item
 
     def _definition(self, name: str) -> CommandDefinition:
         definition = self._by_name.get(name)
@@ -903,6 +1033,15 @@ COMMAND_CATALOG = CommandCatalog(
             TextDatReadInput,
             CommandEffect.READ_ONLY,
             ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
+            _text_read_result,
+            features=(("dat.text.get:offset", lambda value: value.get("offset") is not None),),
+        ),
+        CommandDefinition(
+            "chop.values.get",
+            ChopValuesInput,
+            CommandEffect.READ_ONLY,
+            ExecutionClass.FAST_READ,
+            _chop_values_result,
         ),
         CommandDefinition(
             "dat.text.set", TextDatSetInput, CommandEffect.MUTATION, ExecutionClass.BOUNDED_MUTATION
@@ -941,10 +1080,24 @@ COMMAND_CATALOG = CommandCatalog(
         ),
         CommandDefinition(
             "parameters.list",
-            OperatorInput,
+            ParameterListInput,
             CommandEffect.READ_ONLY,
             ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
             _parameter_list_result,
+            features=(
+                (
+                    "parameters.list:options",
+                    lambda value: any(
+                        key in value
+                        for key in (
+                            "names",
+                            "include_values",
+                            "non_default_only",
+                            "include_menu_options",
+                        )
+                    ),
+                ),
+            ),
         ),
         CommandDefinition(
             "parameters.set",
@@ -996,6 +1149,7 @@ COMMAND_CATALOG = CommandCatalog(
             DestroyOperatorInput,
             CommandEffect.MUTATION,
             ExecutionClass.BOUNDED_MUTATION,
+            features=(_inventory_summary_feature("ops.destroy"),),
         ),
         CommandDefinition(
             "ops.copy",
@@ -1003,9 +1157,14 @@ COMMAND_CATALOG = CommandCatalog(
             CommandEffect.MUTATION,
             ExecutionClass.BOUNDED_MUTATION,
             _copy_result,
+            features=(_inventory_summary_feature("ops.copy"),),
         ),
         CommandDefinition(
-            "ops.move", MoveOperatorInput, CommandEffect.MUTATION, ExecutionClass.BOUNDED_MUTATION
+            "ops.move",
+            MoveOperatorInput,
+            CommandEffect.MUTATION,
+            ExecutionClass.BOUNDED_MUTATION,
+            features=(_inventory_summary_feature("ops.move"),),
         ),
         CommandDefinition(
             "ops.tox.import",
@@ -1015,10 +1174,7 @@ COMMAND_CATALOG = CommandCatalog(
             _import_result,
             (
                 ("ops.tox.import:root_child", lambda value: value.get("root_child") is not None),
-                (
-                    "ops.tox.import:inventory_summary",
-                    lambda value: value.get("inventory") == "summary",
-                ),
+                _inventory_summary_feature("ops.tox.import"),
             ),
         ),
         CommandDefinition(
@@ -1052,6 +1208,15 @@ COMMAND_CATALOG = CommandCatalog(
             SnapshotInput,
             CommandEffect.READ_ONLY,
             ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
+            _snapshot_result,
+            features=(
+                (
+                    "project.snapshot:options",
+                    lambda value: any(
+                        key in value for key in ("paginate", "cursor", "include_connections")
+                    ),
+                ),
+            ),
         ),
         CommandDefinition(
             "project.metadata",
@@ -1082,6 +1247,10 @@ COMMAND_CATALOG = CommandCatalog(
             BatchExecuteInput,
             CommandEffect.READ_ONLY,
             ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
+            features=(
+                # Every batch needs an Agent that reports each read as ok/result or ok/error.
+                ("batch.execute:item_results", lambda _value: True),
+            ),
         ),
     )
 )
@@ -1093,6 +1262,7 @@ CommandInput = (
     | ConnectionsInput
     | InspectOperatorInput
     | SetOperatorStateInput
+    | ChopValuesInput
     | TextDatReadInput
     | TextDatSetInput
     | TableDatReadInput
@@ -1106,6 +1276,7 @@ CommandInput = (
     | ImportToxInput
     | ConnectOperatorsInput
     | DisconnectOperatorsInput
+    | ParameterListInput
     | ParameterInput
     | CreateParameterPageInput
     | SetParameterInput
