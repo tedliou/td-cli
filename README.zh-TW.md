@@ -146,6 +146,12 @@ Command 或 `commands execute` 計畫的欄位在送出前驗證失敗時，`--j
 多出的欄位名稱會出現在位置中，最多 64 字元。檔案無法讀取、含 BOM、計畫過大，或單一 Command
 文件、`--names-json`／`--labels-json` 不是有效 JSON 時，`details` 保持空白。
 
+每個 Command 子命令的 `--help` 都會列出選項的上下限與預設值。`td commands schema` 不需 Daemon
+即可列出所有 Command 名稱；`td commands schema <name>` 印出該 Command 的 `effect`、是否
+`batchable`，以及其輸入 JSON Schema，也就是 `--input`、`batch execute`（1–16 個唯讀 Command）
+與 `commands execute` 計畫（1–256 個 Command）所需的格式。在 Git Bash 中請設定
+`MSYS_NO_PATHCONV=1`，否則開頭的 `/project1` 會被改寫成 Windows 路徑而遭拒絕。
+
 <!-- doc-section: agent-component -->
 
 ## Agent Component
