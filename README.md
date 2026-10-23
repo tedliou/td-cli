@@ -168,6 +168,14 @@ the location, truncated to 64 characters. Unreadable files, a byte order mark,
 an oversized plan, or a single-Command document or `--names-json`/`--labels-json`
 option that is not valid JSON keep `details` empty.
 
+Every Command subcommand's `--help` describes its options with their bounds and
+defaults. `td commands schema` lists the Command names without a Daemon, and
+`td commands schema <name>` prints that Command's `effect`, whether it is
+`batchable`, and its input JSON Schema, which is the shape `--input`,
+`batch execute` (1-16 read-only Commands) and `commands execute` plans
+(1-256 Commands) expect. In Git Bash, set `MSYS_NO_PATHCONV=1`, or a leading
+`/project1` is rewritten into a Windows path and rejected.
+
 <!-- doc-section: agent-component -->
 
 ## Agent Component

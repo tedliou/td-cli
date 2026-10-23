@@ -27,6 +27,12 @@ def _valid_operator_path(value: str) -> str:
         and any(part in {"", ".", ".."} for part in value.split("/")[1:])
         or any(character in value for character in "*?[]")
     ):
+        if re.match(r"^[A-Za-z]:[/\\]", value):
+            # Git Bash (MSYS) rewrites a leading "/project1" into "C:/Program Files/Git/project1".
+            raise ValueError(
+                "operator_path must be canonical and absolute, not a Windows path "
+                "(in Git Bash, set MSYS_NO_PATHCONV=1 to stop path conversion)"
+            )
         raise ValueError("operator_path must be canonical and absolute")
     return value
 
@@ -308,8 +314,13 @@ class RenameOperatorInput(OperatorInput):
 
 
 class DestroyOperatorInput(OperatorInput):
-    recursive: bool = False
-    allow_connected: bool = False
+    recursive: bool = Field(
+        default=False, description="Also destroy a non-empty COMP and its whole subtree."
+    )
+    allow_connected: bool = Field(
+        default=False,
+        description="Destroy even when wired; the result lists the removed detached_connections.",
+    )
     max_operators: int = Field(default=256, ge=1, le=1000)
 
 
@@ -331,7 +342,10 @@ class CopyOperatorInput(StructuralDestinationInput):
 
 
 class MoveOperatorInput(StructuralDestinationInput):
-    allow_connected: bool = False
+    allow_connected: bool = Field(
+        default=False,
+        description="Move even when wired across the boundary; the result lists detached_connections.",
+    )
 
 
 def _valid_local_windows_path(value: str) -> str:
@@ -546,7 +560,15 @@ class ProjectMetadataInput(StrictModel):
 
 class ProjectSaveInput(StrictModel):
     expected_path: str
-    expected_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    expected_sha256: str = Field(
+        pattern=r"^[0-9a-fA-F]{64}$", description="SHA-256 hex of the current .toe on disk."
+    )
+
+    @field_validator("expected_sha256", mode="before")
+    @classmethod
+    def lowercase_digest(cls, value: Any) -> Any:
+        # PowerShell Get-FileHash prints uppercase hex; the digest itself is case-insensitive.
+        return value.lower() if isinstance(value, str) else value
 
     @field_validator("expected_path")
     @classmethod
@@ -578,8 +600,11 @@ class BatchItem(StrictModel):
         return self
 
 
+BATCH_MAX_COMMANDS = 16
+
+
 class BatchExecuteInput(StrictModel):
-    commands: list[BatchItem] = Field(min_length=1, max_length=16)
+    commands: list[BatchItem] = Field(min_length=1, max_length=BATCH_MAX_COMMANDS)
 
 
 def _identity_result(result: dict[str, Any]) -> dict[str, Any]:

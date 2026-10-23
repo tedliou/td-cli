@@ -81,6 +81,28 @@ def test_project_save_submits_explicit_path_and_digest(monkeypatch) -> None:
     }
 
 
+def test_project_save_accepts_uppercase_digest_from_get_filehash(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+    digest = "C68E5B03" + "AB" * 28
+    result = CliRunner().invoke(
+        cli.app,
+        ["--json", "project", "save", "E:/work/project.toe", "--expected-sha256", digest],
+    )
+    assert result.exit_code == 0, result.output
+    assert FakeDaemonClient.submitted["input"]["expected_sha256"] == "c68e5b03" + "ab" * 28
+
+
+def test_msys_converted_operator_path_names_the_git_bash_workaround(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+    result = CliRunner().invoke(
+        cli.app, ["--json", "ops", "children", "C:/Program Files/Git/project1/"]
+    )
+    assert result.exit_code == 2
+    error = json.loads(result.stdout)["error"]
+    assert error["code"] == "invalid_arguments"
+    assert "MSYS_NO_PATHCONV=1" in error["details"]["validation_errors"][0]["message"]
+
+
 def test_ops_get_submits_typed_command_and_emits_protocol_envelope(monkeypatch) -> None:
     monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
 
@@ -993,3 +1015,48 @@ def test_project_open_observes_global_timeout(tmp_path, monkeypatch):
     )
     assert result.exit_code == 0, result.output
     assert observed == [45]
+
+
+def test_commands_schema_lists_command_names_without_a_daemon(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", None)
+    result = CliRunner().invoke(cli.app, ["--json", "commands", "schema"])
+    assert result.exit_code == 0, result.output
+    names = json.loads(result.stdout)["data"]["commands"]
+    assert "parameters.set" in names
+    assert "dat.text.get" in names
+
+
+def test_commands_schema_reports_input_fields_limits_and_batchability(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", None)
+    result = CliRunner().invoke(cli.app, ["--json", "commands", "schema", "dat.text.get"])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)["data"]
+    assert data["name"] == "dat.text.get"
+    assert data["effect"] == "read_only"
+    assert data["batchable"] is True
+    assert data["input_schema"]["properties"]["max_bytes"]["maximum"] == 32768
+    assert data["input_schema"]["required"] == ["operator_path"]
+
+
+def test_commands_schema_rejects_unknown_command(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", None)
+    result = CliRunner().invoke(cli.app, ["--json", "commands", "schema", "ops.nope"])
+    assert result.exit_code == 2
+    assert json.loads(result.stdout)["error"]["code"] == "invalid_arguments"
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [
+        (["dat", "text", "get"], ["32768", "td commands schema dat.text.get"]),
+        (["project", "snapshot"], ["1000", "1-1000"]),
+        (["batch", "execute"], ["16", "commands execute"]),
+        (["ops", "destroy"], ["non-empty COMP", "detached_connections"]),
+    ],
+)
+def test_help_states_option_meaning_and_limits(argv, expected) -> None:
+    result = CliRunner().invoke(cli.app, [*argv, "--help"], terminal_width=200)
+    assert result.exit_code == 0, result.output
+    text = " ".join(result.stdout.split())
+    for fragment in expected:
+        assert fragment in text

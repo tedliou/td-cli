@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import functools
 import http.server
+import os
 import shutil
 import subprocess
 import threading
@@ -41,7 +42,13 @@ def test_installer_verifies_nested_license_files_on_same_version(tmp_path: Path)
 
     def run() -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            command, capture_output=True, text=True, encoding="utf-8", timeout=60, check=False
+            command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+            check=False,
         )
 
     try:
@@ -66,3 +73,76 @@ def test_installer_verifies_nested_license_files_on_same_version(tmp_path: Path)
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+def _shell_environment(shell: str) -> dict[str, str]:
+    environment = dict(os.environ)
+    if shell == "powershell":
+        # A PowerShell 7 parent's PSModulePath hides the 5.1 built-in modules (Get-FileHash).
+        environment["PSModulePath"] = str(
+            Path(os.environ.get("SystemRoot", r"C:\Windows"))
+            / "System32/WindowsPowerShell/v1.0/Modules"
+        )
+    return environment
+
+
+@pytest.mark.parametrize("shell", ["powershell", "pwsh"])
+def test_installer_upgrade_replaces_current_junction_and_keeps_old_version(
+    tmp_path: Path, shell: str
+) -> None:
+    if shutil.which(shell) is None:
+        pytest.skip(f"{shell} is required")
+    source = tmp_path / "source"
+    source.mkdir()
+    _write_executables(source)
+    _write_agent_stage(source)
+    output = tmp_path / "release"
+    package_release(source, source, output, source_epoch=1_700_000_000)
+    install = tmp_path / "installed"
+    old_version = install / "versions" / "0.0.1"
+    old_version.mkdir(parents=True)
+    (old_version / "sentinel.txt").write_text("old", encoding="utf-8")
+    subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(install / "current"), str(old_version)],
+        capture_output=True,
+        check=True,
+        timeout=30,
+    )
+    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(output))
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        result = subprocess.run(
+            [
+                shell,
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(output / "install.ps1"),
+                "-AssetBaseUri",
+                f"http://127.0.0.1:{server.server_port}",
+                "-InstallRoot",
+                str(install),
+                "-NonInteractive",
+                "-NoPathUpdate",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=120,
+            check=False,
+            env=_shell_environment(shell),
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+    assert result.returncode == 0, result.stderr
+    assert "Installed td-cli" in result.stdout
+    assert (install / "current" / "td.exe").is_file()
+    assert not (install / "current.previous").exists()
+    assert not (install / "current.next").exists()
+    assert (old_version / "sentinel.txt").read_text(encoding="utf-8") == "old"
