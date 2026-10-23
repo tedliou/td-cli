@@ -18,6 +18,7 @@ import uvicorn
 from td_cli import __version__
 from td_cli.cli_support import print_version
 from td_cli.daemon.runtime_files import (
+    ENDPOINT,
     configure_logging,
     data_root,
     load_or_create_token,
@@ -29,7 +30,6 @@ from td_cli.processes import LaunchError, launch_detached
 from td_cli.protocol import PROTOCOL_VERSION
 
 app = typer.Typer(no_args_is_help=True)
-ENDPOINT = "http://127.0.0.1:9982"
 
 
 class WindowsControlEvent(IntEnum):

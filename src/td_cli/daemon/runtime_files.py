@@ -10,6 +10,8 @@ from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+ENDPOINT = "http://127.0.0.1:9982"
+
 
 def data_root() -> Path:
     local = os.environ.get("LOCALAPPDATA")

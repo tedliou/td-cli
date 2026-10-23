@@ -7,13 +7,14 @@ from typing import Any
 import httpx
 from pydantic import ValidationError
 
-from td_cli.daemon.cli import ENDPOINT, ensure_running
-from td_cli.daemon.runtime_files import data_root, load_token
+from td_cli.daemon.runtime_files import ENDPOINT, data_root, load_token
 from td_cli.error_catalog import ERROR_CATALOG
 from td_cli.processes import LaunchError
 from td_cli.protocol import PROTOCOL_VERSION, RequestStatus
 
 _REQUEST_STATUSES = frozenset(RequestStatus)
+
+
 MAX_VALIDATION_ERRORS = 8
 MAX_VALIDATION_MESSAGE_CHARACTERS = 256
 MAX_VALIDATION_LOCATION_CHARACTERS = 64
@@ -60,6 +61,13 @@ def _validation_location(location: tuple[int | str, ...]) -> list[int | str]:
         part[:MAX_VALIDATION_LOCATION_CHARACTERS] if isinstance(part, str) else part
         for part in location
     ]
+
+
+def ensure_running(*, timeout: float) -> None:
+    """Start the Daemon; its server stack is imported only when a start is needed."""
+    from td_cli.daemon.cli import ensure_running as start
+
+    start(timeout=timeout)
 
 
 class ClientError(Exception):

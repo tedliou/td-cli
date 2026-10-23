@@ -1062,6 +1062,20 @@ def test_help_states_option_meaning_and_limits(argv, expected) -> None:
         assert fragment in text
 
 
+def test_cli_startup_does_not_import_the_daemon_server_stack() -> None:
+    import subprocess
+
+    probe = (
+        "import sys, td_cli.cli; "
+        "print(sorted(m for m in ('fastapi', 'uvicorn', 'socketio', 'td_cli.daemon.transport') "
+        "if m in sys.modules))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, timeout=60, check=True
+    )
+    assert result.stdout.strip() == "[]"
+
+
 def test_dat_text_get_offset_requests_a_chunk(monkeypatch) -> None:
     monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
     result = CliRunner().invoke(
