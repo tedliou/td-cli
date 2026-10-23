@@ -90,3 +90,14 @@ def test_hosted_executable_smoke_runs_the_daemon_lifecycle() -> None:
     assert 'td-daemon.exe" start' in workflow
     assert 'td-daemon.exe" status --json' in workflow
     assert 'td-daemon.exe" stop' in workflow
+
+
+def test_staged_artifact_digest_uses_the_api_form_end_to_end() -> None:
+    stage = Path(".github/workflows/stage-agent-component.yml").read_text(encoding="utf-8")
+    assert "artifact_digest=sha256:$env:ARTIFACT_DIGEST" in stage
+    release = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
+    assert "if ($expected -match '^[0-9a-f]{64}$') { $expected = \"sha256:$expected\" }" in release
+    assert "$meta.digest -ne $expected" in release
+    assert release.index("Artifact digest must be sha256:<64 hex>") < release.index(
+        "Staged artifact identity mismatch or expiry"
+    )

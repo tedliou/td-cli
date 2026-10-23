@@ -20,7 +20,9 @@ specs. The localhost diagnostic bridge is development-only and is not included.
    digest, encoding, dispatch, and temporary-file cleanup without placing the
    payload in the repository.
 4. Record the run ID, artifact ID, artifact digest, head SHA, version, and expiry
-   from the job summary. Restaging always creates a new artifact ID.
+   from the job summary. The digest is recorded in the Actions API form
+   `sha256:<hex>`, which **Publish Release** expects; a bare 64-hex digest is
+   also accepted. Restaging always creates a new artifact ID.
 
 Remove the local stage directory and encoded payload after the immutable Actions
 artifact identity is recorded. TouchDesigner validation remains local
