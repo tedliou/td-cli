@@ -1,12 +1,12 @@
 {
   "artifact": "E:\\td-cli\\.codex\\read-surface\\candidate\\td-agent.tox",
-  "artifact_sha256": "7d590a71d4ba7f79f2eae19aa6b2db5720d7c6b1a63477fd34e2355be7390e52",
+  "artifact_sha256": "45c9391630b9631f202146206346d3c5e9491d6ab13ec78c264653d59e0bb77c",
   "project": "E:\\td-cli\\.codex\\read-surface\\mlprobe.toe",
   "port": 19982,
-  "touchdesigner_pid": 28480,
+  "touchdesigner_pid": 7388,
   "touchdesigner_ready": {
     "before_redirect": {
-      "pid": 28480,
+      "pid": 7388,
       "build": "2025.32050",
       "localappdata": "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\C--Users-Ted--claude-spares-spare-Jq3cUa\\fa98c816-fd3e-4631-ab60-e409d1ad326d\\scratchpad\\acceptance\\localappdata",
       "agent_path": "/project1/td_agent",
@@ -16,7 +16,7 @@
       "socket_url": "http://127.0.0.1:9982"
     },
     "after_redirect": {
-      "pid": 28480,
+      "pid": 7388,
       "build": "2025.32050",
       "localappdata": "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\C--Users-Ted--claude-spares-spare-Jq3cUa\\fa98c816-fd3e-4631-ab60-e409d1ad326d\\scratchpad\\acceptance\\localappdata",
       "agent_path": "/project1/td_agent",
@@ -27,9 +27,9 @@
     }
   },
   "instance": {
-    "instance_id": "f89014ae-7f67-4d51-a78b-b4c4f009007f",
-    "connection_id": "42e118a7-82b8-459b-9342-555143a16994",
-    "selector": "f890",
+    "instance_id": "b8327168-0b49-4e80-be84-9b953743756d",
+    "connection_id": "f6bcb0c6-d99f-4af5-a07e-1a4dac6b6904",
+    "selector": "b832",
     "status": "online",
     "agent_version": "0.10.0",
     "protocol_version": 3,
@@ -81,7 +81,7 @@
       "project.snapshot",
       "project.snapshot:options"
     ],
-    "last_heartbeat_at": "2026-10-23T18:05:28.092Z",
+    "last_heartbeat_at": "2026-10-23T18:16:01.630Z",
     "offline_expires_at": null,
     "project": {
       "name": "mlprobe.toe",
@@ -186,7 +186,7 @@
         "tx",
         "ty"
       ],
-      "frame": 363,
+      "frame": 399,
       "non_finite_count": 0,
       "operator_path": "/project1/const",
       "values": {
@@ -198,7 +198,7 @@
       "channels": [
         "ty"
       ],
-      "frame": 369,
+      "frame": 407,
       "non_finite_count": 0,
       "operator_path": "/project1/const",
       "values": {
@@ -955,133 +955,133 @@
     {
       "step": "batch with one failing read",
       "command": "batch.execute",
-      "request_id": "01a169f0-74ae-7666-878f-61a6c4464735",
+      "request_id": "01a169fa-1f32-77a2-be0b-8b50cd7df114",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 93.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 245
     },
     {
       "step": "create iface",
       "command": "ops.create",
-      "request_id": "01a169f0-7518-7f0e-b2c2-1c0ddea44973",
+      "request_id": "01a169fa-1fae-762b-ad70-2ba61d9c985b",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 110.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 107
     },
     {
       "step": "create in1",
       "command": "ops.create",
-      "request_id": "01a169f0-757b-74b3-891a-462c1b109cf3",
+      "request_id": "01a169fa-2026-7dfa-bd82-9dcf73df6099",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 105
     },
     {
       "step": "create out1",
       "command": "ops.create",
-      "request_id": "01a169f0-75e0-7cee-8643-24593cbc0b4c",
+      "request_id": "01a169fa-20a3-72bd-8d5d-6f699c997cd2",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 110.0,
       "result_bytes": 108
     },
     {
       "step": "create out2",
       "command": "ops.create",
-      "request_id": "01a169f0-7647-77eb-9b0b-41ac0925c5db",
+      "request_id": "01a169fa-211b-762a-985d-1d0b80f86504",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 140.0,
       "result_bytes": 110
     },
     {
       "step": "custom page",
       "command": "parameters.page.create",
-      "request_id": "01a169f0-76a8-785e-966e-0e97d74cde47",
+      "request_id": "01a169fa-219c-78f7-aa78-8b5abdd3f9f0",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 110.0,
       "result_bytes": 1494
     },
     {
       "step": "inspect COMP",
       "command": "ops.inspect",
-      "request_id": "01a169f0-7710-7457-9405-0697a066e6c8",
+      "request_id": "01a169fa-2213-75f0-816c-7a046d4794f5",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 565
     },
     {
       "step": "create cb_executeDAT",
       "command": "ops.create",
-      "request_id": "01a169f0-7772-7094-b704-14210cf6ddfa",
+      "request_id": "01a169fa-2291-7d49-8498-abd1c6a7c921",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 126
     },
     {
       "step": "read executeDAT",
       "command": "dat.text.get",
-      "request_id": "01a169f0-77dd-785a-ba06-2f537730bc00",
+      "request_id": "01a169fa-2308-718a-be0d-3eedf154bb00",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 1229
     },
     {
       "step": "create cb_chopexecuteDAT",
       "command": "ops.create",
-      "request_id": "01a169f0-783e-7160-82e9-312adfa182bc",
+      "request_id": "01a169fa-237f-7f92-9303-7899fd6a6ec4",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 140.0,
       "result_bytes": 138
     },
     {
       "step": "read chopexecuteDAT",
       "command": "dat.text.get",
-      "request_id": "01a169f0-78a4-767a-9e3d-7e662b3f8550",
+      "request_id": "01a169fa-2412-76f8-9eaf-f2f7d9e8208e",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 2118
     },
     {
       "step": "create cb_parameterexecuteDAT",
       "command": "ops.create",
-      "request_id": "01a169f0-7907-71c8-ae9f-5999aa030108",
+      "request_id": "01a169fa-248a-761d-aa8f-09f8187384dd",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 110.0,
       "result_bytes": 153
     },
     {
       "step": "read parameterexecuteDAT",
       "command": "dat.text.get",
-      "request_id": "01a169f0-796c-7e0a-a674-d29ac09bc9ba",
+      "request_id": "01a169fa-2503-7d5d-a5b4-48ed5739bf7a",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 2063
     },
     {
       "step": "create table_read",
       "command": "ops.create",
-      "request_id": "01a169f0-79ce-70d0-8e5e-a9213b9bd9a9",
+      "request_id": "01a169fa-2581-7af9-82b6-e9ca55d106f7",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 116
     },
     {
       "step": "read table",
       "command": "dat.text.get",
-      "request_id": "01a169f0-7a31-74db-bd36-fda45bb8b66e",
+      "request_id": "01a169fa-25f8-715e-9728-c8a179ddc9b7",
       "status": "failed",
       "error": {
         "code": "dat_type_mismatch",
@@ -1089,85 +1089,85 @@
         "message": "dat_type_mismatch",
         "retryable": false
       },
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 4
     },
     {
       "step": "create notes",
       "command": "ops.create",
-      "request_id": "01a169f0-7a9a-7619-827f-b351eb3cb5a3",
+      "request_id": "01a169fa-2675-7bea-91fb-b9966fb53bee",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 105
     },
     {
       "step": "set notes",
       "command": "dat.text.set",
-      "request_id": "01a169f0-7afb-7012-b57a-70204017bf0b",
+      "request_id": "01a169fa-26eb-7e8a-a435-9bae33cc2af7",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 109.0,
       "result_bytes": 453
     },
     {
       "step": "chunk at 0",
       "command": "dat.text.get",
-      "request_id": "01a169f0-7b5d-7325-b95c-d9d24c9398a3",
+      "request_id": "01a169fa-2763-7946-9f90-4ff35e55f3ef",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 301
     },
     {
       "step": "chunk at 40",
       "command": "dat.text.get",
-      "request_id": "01a169f0-7bc5-79bc-a7e1-5504ff42ee67",
+      "request_id": "01a169fa-27e1-775f-a7c4-763162c7d47c",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 295
     },
     {
       "step": "chunk at 80",
       "command": "dat.text.get",
-      "request_id": "01a169f0-7c27-7984-9605-6d37a191fe09",
+      "request_id": "01a169fa-2858-7efa-abc0-480d694b27b1",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 304
     },
     {
       "step": "chunk at 120",
       "command": "dat.text.get",
-      "request_id": "01a169f0-7c91-73b1-a936-049ea5aaeaf1",
+      "request_id": "01a169fa-28d6-78f3-97e4-fc02d5488b52",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 303
     },
     {
       "step": "chunk at 160",
       "command": "dat.text.get",
-      "request_id": "01a169f0-7cf1-71df-80ca-3dc52f543e70",
+      "request_id": "01a169fa-294e-76bd-9648-af7a2c07fecd",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 302
     },
     {
       "step": "chunk at 199",
       "command": "dat.text.get",
-      "request_id": "01a169f0-7d57-75ed-b14e-55b518c2be92",
+      "request_id": "01a169fa-29ca-737a-be1d-f3d3bbd28357",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 267
     },
     {
       "step": "offset inside a character",
       "command": "dat.text.get",
-      "request_id": "01a169f0-7db9-7a67-84a1-e3dc8df01024",
+      "request_id": "01a169fa-2a47-73a3-9027-a84f466477fc",
       "status": "failed",
       "error": {
         "code": "invalid_arguments",
@@ -1175,103 +1175,103 @@
         "message": "invalid_arguments",
         "retryable": false
       },
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 110.0,
       "result_bytes": 4
     },
     {
       "step": "create const",
       "command": "ops.create",
-      "request_id": "01a169f0-7e1a-76f7-9a29-30cd8ed1fef1",
+      "request_id": "01a169fa-2abd-7647-b80d-b05ab53a371a",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 111
     },
     {
       "step": "set /project1/const.name0",
       "command": "parameters.set",
-      "request_id": "01a169f0-7e80-7d54-b690-b7c27356b7d7",
+      "request_id": "01a169fa-2b36-7572-8e44-378481ed36ba",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 148
     },
     {
       "step": "set /project1/const.value0",
       "command": "parameters.set",
-      "request_id": "01a169f0-7ee2-7eeb-8021-276c9314756a",
+      "request_id": "01a169fa-2bb6-78b7-aa66-8e095844205c",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 148
     },
     {
       "step": "set /project1/const.name1",
       "command": "parameters.set",
-      "request_id": "01a169f0-7f47-7069-937e-910815a75d0b",
+      "request_id": "01a169fa-2c2c-701c-8830-6aceef511b82",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 148
     },
     {
       "step": "set /project1/const.value1",
       "command": "parameters.set",
-      "request_id": "01a169f0-7fa9-7546-9ee1-49f9d3e9375e",
+      "request_id": "01a169fa-2ca9-76c1-90f4-b2dff26ac907",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 109.0,
       "result_bytes": 149
     },
     {
       "step": "create pattern",
       "command": "ops.create",
-      "request_id": "01a169f0-800f-7e10-9219-b5d630794225",
+      "request_id": "01a169fa-2d1e-7d18-81a6-a9fc9d19f3fe",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 114
     },
     {
       "step": "current values",
       "command": "chop.values.get",
-      "request_id": "01a169f0-8070-7b80-8aaf-e220af7ad5ce",
+      "request_id": "01a169fa-2d94-7c62-8c65-59d766b5097b",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 121
     },
     {
       "step": "selected channel",
       "command": "chop.values.get",
-      "request_id": "01a169f0-80d3-777a-bdb9-ce557b80bf3b",
+      "request_id": "01a169fa-2e13-7bb0-80e8-7c6caf3765c4",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 109.0,
       "result_bytes": 107
     },
     {
       "step": "sample window",
       "command": "chop.values.get",
-      "request_id": "01a169f0-813b-7258-8e02-e4ac1a86f28a",
+      "request_id": "01a169fa-2e8a-7dc4-b318-39a24eb7d917",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 307
     },
     {
       "step": "window past the end",
       "command": "chop.values.get",
-      "request_id": "01a169f0-819c-7b27-b75d-2a023cdfd728",
+      "request_id": "01a169fa-2f06-7b4f-8cc1-e437fe959c6d",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 164
     },
     {
       "step": "unknown channel",
       "command": "chop.values.get",
-      "request_id": "01a169f0-81ff-7a0e-acf9-2a624bd04a85",
+      "request_id": "01a169fa-2f7b-7339-9e62-557030dac20b",
       "status": "failed",
       "error": {
         "code": "chop_channel_not_found",
@@ -1279,13 +1279,13 @@
         "message": "chop_channel_not_found",
         "retryable": false
       },
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 4
     },
     {
       "step": "not a CHOP",
       "command": "chop.values.get",
-      "request_id": "01a169f0-8267-7262-b99d-9cb022df7ef2",
+      "request_id": "01a169fa-2ffc-7252-aebc-5f630649122a",
       "status": "failed",
       "error": {
         "code": "operator_family_unsupported",
@@ -1293,49 +1293,49 @@
         "message": "operator_family_unsupported",
         "retryable": false
       },
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 4
     },
     {
       "step": "full list",
       "command": "parameters.list",
-      "request_id": "01a169f0-82ca-7048-a281-c76405e10450",
+      "request_id": "01a169fa-3073-7ed3-8470-efcc8c9f6a26",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 110.0,
       "result_bytes": 14451
     },
     {
       "step": "non-default list",
       "command": "parameters.list",
-      "request_id": "01a169f0-8330-7831-8c8b-4baa825db3c2",
+      "request_id": "01a169fa-30ec-712e-8b5d-b90bda9b35f7",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 110.0,
       "result_bytes": 2739
     },
     {
       "step": "named values",
       "command": "parameters.list",
-      "request_id": "01a169f0-8392-7f70-8796-b8803be0c906",
+      "request_id": "01a169fa-3162-73d8-81da-9457aa1fad15",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 1394
     },
     {
       "step": "without menu options",
       "command": "parameters.list",
-      "request_id": "01a169f0-83f8-7c1f-ac9d-9c876935a551",
+      "request_id": "01a169fa-31dd-7ac6-889b-c0a02ec82c9b",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 14011
     },
     {
       "step": "unknown parameter name",
       "command": "parameters.list",
-      "request_id": "01a169f0-845a-77bd-8341-22f8ae0e8981",
+      "request_id": "01a169fa-3257-7ed5-9873-dc42051b946b",
       "status": "failed",
       "error": {
         "code": "parameter_not_found",
@@ -1343,49 +1343,49 @@
         "message": "parameter_not_found",
         "retryable": false
       },
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 4
     },
     {
       "step": "create graph",
       "command": "ops.create",
-      "request_id": "01a169f0-84c0-7abc-b954-1f864d7e44b2",
+      "request_id": "01a169fa-32d5-7c3e-ba70-acf2df10cadd",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 107
     },
     {
       "step": "create src0",
       "command": "ops.create",
-      "request_id": "01a169f0-8521-7c83-9a65-3aa1d2093fc8",
+      "request_id": "01a169fa-3353-72c0-9402-441b8c9bc185",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 113
     },
     {
       "step": "create src1",
       "command": "ops.create",
-      "request_id": "01a169f0-8583-7905-8ad2-98b0e6395210",
+      "request_id": "01a169fa-33cd-791c-bb99-b7cc210c391d",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 113
     },
     {
       "step": "create src2",
       "command": "ops.create",
-      "request_id": "01a169f0-85ed-79bf-bd92-96e9590cc79d",
+      "request_id": "01a169fa-344d-712b-b65b-1c9ce131cded",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 113
     },
     {
       "step": "create sink",
       "command": "ops.create",
-      "request_id": "01a169f0-864f-7839-aaa9-e3780ba44fe8",
+      "request_id": "01a169fa-34c4-7324-a92b-db2b482ce290",
       "status": "succeeded",
       "error": null,
       "elapsed_ms": 109.0,
@@ -1394,61 +1394,61 @@
     {
       "step": "wire src0 -> sink",
       "command": "ops.connect",
-      "request_id": "01a169f0-86b5-7dd7-a6a6-b809fcffd6a9",
+      "request_id": "01a169fa-3541-7867-ace5-f54b6a68e8f4",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 169
     },
     {
       "step": "page 0",
       "command": "project.snapshot",
-      "request_id": "01a169f0-8716-7653-892d-8061da6982e0",
+      "request_id": "01a169fa-35b8-790c-9c43-0520e71fa4ca",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 384
     },
     {
       "step": "page 1",
       "command": "project.snapshot",
-      "request_id": "01a169f0-8778-7d0c-a25c-50826cfab951",
+      "request_id": "01a169fa-362f-7765-8ec0-5f4eba783caa",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 465
     },
     {
       "step": "page 2",
       "command": "project.snapshot",
-      "request_id": "01a169f0-87df-7084-b6ea-41518c02e415",
+      "request_id": "01a169fa-36ab-7a52-af4d-5de848963f6a",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 109.0,
       "result_bytes": 176
     },
     {
       "step": "stale first page",
       "command": "project.snapshot",
-      "request_id": "01a169f0-8840-74c9-bda1-661f52819f30",
+      "request_id": "01a169fa-3721-7c13-81f4-c03d4cdce9fd",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 109.0,
+      "elapsed_ms": 125.0,
       "result_bytes": 350
     },
     {
       "step": "destroy next operator",
       "command": "ops.destroy",
-      "request_id": "01a169f0-88a3-76b7-8032-ae42786df9aa",
+      "request_id": "01a169fa-379a-771c-8931-4acae6189c02",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 94.0,
+      "elapsed_ms": 110.0,
       "result_bytes": 210
     },
     {
       "step": "over limit",
       "command": "project.snapshot",
-      "request_id": "01a169f0-890a-79a0-896c-fc40f66b8702",
+      "request_id": "01a169fa-3809-7b6e-9098-695fe9a77adf",
       "status": "failed",
       "error": {
         "code": "result_too_large",
@@ -1462,7 +1462,7 @@
     {
       "step": "stale cursor",
       "command": "project.snapshot",
-      "request_id": "01a169f0-896a-7bcb-a267-f011eeca6889",
+      "request_id": "01a169fa-386a-74e1-af75-ed1736d32bdd",
       "status": "failed",
       "error": {
         "code": "snapshot_cursor_stale",
@@ -1476,7 +1476,7 @@
     {
       "step": "create projection",
       "command": "ops.create",
-      "request_id": "01a169f0-89d4-7d49-b0a4-e2ae6f8ff662",
+      "request_id": "01a169fa-38d1-7069-ba26-2935e74e6b66",
       "status": "succeeded",
       "error": null,
       "elapsed_ms": 94.0,
@@ -1485,7 +1485,7 @@
     {
       "step": "create moved_parent",
       "command": "ops.create",
-      "request_id": "01a169f0-8a36-7dde-bed6-db543d49a83c",
+      "request_id": "01a169fa-3933-7d37-942c-92d4fe622cac",
       "status": "succeeded",
       "error": null,
       "elapsed_ms": 109.0,
@@ -1494,34 +1494,34 @@
     {
       "step": "import kantanMapper",
       "command": "ops.tox.import",
-      "request_id": "01a169f0-8a9d-77c2-849a-97feaaa19143",
+      "request_id": "01a169fa-3999-7035-bafd-f896139dd80f",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 1141.0,
+      "elapsed_ms": 1203.0,
       "result_bytes": 2405
     },
     {
       "step": "summary copy",
       "command": "ops.copy",
-      "request_id": "01a169f0-8f10-7b0e-9a79-5dc4075e31dc",
+      "request_id": "01a169fa-3e52-7261-a964-98ead08765d8",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 750.0,
+      "elapsed_ms": 688.0,
       "result_bytes": 2178
     },
     {
       "step": "summary move",
       "command": "ops.move",
-      "request_id": "01a169f0-91ff-7f7e-9f80-36301cf65679",
+      "request_id": "01a169fa-40fe-7613-9469-77a20f0dadde",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 500.0,
+      "elapsed_ms": 484.0,
       "result_bytes": 2192
     },
     {
       "step": "full destroy over 1000",
       "command": "ops.destroy",
-      "request_id": "01a169f0-93ed-726b-a08e-b083ea8c740f",
+      "request_id": "01a169fa-42eb-7433-aec6-f1335ee78106",
       "status": "failed",
       "error": {
         "code": "result_too_large",
@@ -1529,13 +1529,13 @@
         "message": "result_too_large",
         "retryable": false
       },
-      "elapsed_ms": 484.0,
+      "elapsed_ms": 500.0,
       "result_bytes": 4
     },
     {
       "step": "summary destroy moved",
       "command": "ops.destroy",
-      "request_id": "01a169f0-95da-74c7-bc8d-562ee8599604",
+      "request_id": "01a169fa-44d7-7460-a80a-1a82939391d3",
       "status": "succeeded",
       "error": null,
       "elapsed_ms": 156.0,
@@ -1544,25 +1544,25 @@
     {
       "step": "summary destroy original",
       "command": "ops.destroy",
-      "request_id": "01a169f0-967d-7412-8354-502bc3d6e033",
+      "request_id": "01a169fa-457b-7100-a5ab-8bc49dad5120",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 484.0,
+      "elapsed_ms": 500.0,
       "result_bytes": 2067
     },
     {
       "step": "children after",
       "command": "ops.children",
-      "request_id": "01a169f0-9869-79fe-9efd-f0a9b544b2aa",
+      "request_id": "01a169fa-4768-743d-95ac-c0e15ddf39cb",
       "status": "succeeded",
       "error": null,
-      "elapsed_ms": 360.0,
+      "elapsed_ms": 375.0,
       "result_bytes": 2
     }
   ],
   "touchdesigner_exit_code": 0,
   "td-final": {
-    "pid": 28480,
+    "pid": 7388,
     "build": "2025.32050",
     "localappdata": "C:\\Users\\Ted\\AppData\\Local\\Temp\\claude\\C--Users-Ted--claude-spares-spare-Jq3cUa\\fa98c816-fd3e-4631-ab60-e409d1ad326d\\scratchpad\\acceptance\\localappdata",
     "agent_path": "/project1/td_agent",
