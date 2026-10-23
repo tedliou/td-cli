@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import functools
 import http.server
+import os
 import shutil
 import subprocess
 import threading
@@ -74,6 +75,17 @@ def test_installer_verifies_nested_license_files_on_same_version(tmp_path: Path)
         thread.join(timeout=5)
 
 
+def _shell_environment(shell: str) -> dict[str, str]:
+    environment = dict(os.environ)
+    if shell == "powershell":
+        # A PowerShell 7 parent's PSModulePath hides the 5.1 built-in modules (Get-FileHash).
+        environment["PSModulePath"] = str(
+            Path(os.environ.get("SystemRoot", r"C:\Windows"))
+            / "System32/WindowsPowerShell/v1.0/Modules"
+        )
+    return environment
+
+
 @pytest.mark.parametrize("shell", ["powershell", "pwsh"])
 def test_installer_upgrade_replaces_current_junction_and_keeps_old_version(
     tmp_path: Path, shell: str
@@ -122,6 +134,7 @@ def test_installer_upgrade_replaces_current_junction_and_keeps_old_version(
             errors="replace",
             timeout=120,
             check=False,
+            env=_shell_environment(shell),
         )
     finally:
         server.shutdown()
