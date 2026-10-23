@@ -282,3 +282,13 @@ def test_startup_uses_visible_budget_and_http_receives_only_remaining(tmp_path, 
     monkeypatch.setattr(httpx, "request", request)
     assert instance_client.instances() == []
     assert observed == [30, 18]
+
+
+def test_client_start_reaches_the_daemon_start_routine(monkeypatch) -> None:
+    import td_cli.client
+    import td_cli.daemon.cli
+
+    observed = []
+    monkeypatch.setattr(td_cli.daemon.cli, "ensure_running", lambda **kw: observed.append(kw))
+    td_cli.client.ensure_running(timeout=3.5)
+    assert observed == [{"timeout": 3.5}]

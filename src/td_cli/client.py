@@ -15,13 +15,6 @@ from td_cli.protocol import PROTOCOL_VERSION, RequestStatus
 _REQUEST_STATUSES = frozenset(RequestStatus)
 
 
-def ensure_running(*, timeout: float) -> None:
-    """Start the Daemon; its server stack is imported only when a start is needed."""
-    from td_cli.daemon.cli import ensure_running as start
-
-    start(timeout=timeout)
-
-
 MAX_VALIDATION_ERRORS = 8
 MAX_VALIDATION_MESSAGE_CHARACTERS = 256
 MAX_VALIDATION_LOCATION_CHARACTERS = 64
@@ -68,6 +61,13 @@ def _validation_location(location: tuple[int | str, ...]) -> list[int | str]:
         part[:MAX_VALIDATION_LOCATION_CHARACTERS] if isinstance(part, str) else part
         for part in location
     ]
+
+
+def ensure_running(*, timeout: float) -> None:
+    """Start the Daemon; its server stack is imported only when a start is needed."""
+    from td_cli.daemon.cli import ensure_running as start
+
+    start(timeout=timeout)
 
 
 class ClientError(Exception):

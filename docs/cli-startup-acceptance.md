@@ -15,6 +15,8 @@
 
 ## 量測（同一台機器，PowerShell `Measure-Command`）
 
+每個指令各量 3–5 次，例如：`1..5 | % { (Measure-Command { td --version | Out-Null }).TotalSeconds }`。Daemon 已在執行，所以表中不包含首次自動啟動 Daemon 的時間；`td-daemon` 仍是 onefile，自動啟動時照舊要付一次解壓成本。
+
 | 指令 | 0.10.0（onefile） | 本分支（onedir，經 `install.ps1` 安裝） |
 | --- | --- | --- |
 | `td --version` | 2.02–2.24 秒 | 0.43–0.44 秒 |

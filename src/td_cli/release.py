@@ -12,6 +12,8 @@ from td_cli.licensing import license_files
 
 RELEASE_VERSION = version("touchdesigner-cli")
 LOCKED_TOUCHDESIGNER_VERSION = "2025.32050"
+# PyInstaller contents_directory of the td onedir bundle (packaging/td.spec).
+TD_RUNTIME_DIRECTORY = "td-runtime"
 PRE_1_RELEASE_VERSION = re.compile(
     r"^0\.(?:[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9]\d*))?$"
 )
@@ -59,19 +61,17 @@ def _write_zip(path: Path, files: dict[str, Path], source_epoch: int) -> None:
             archive.writestr(info, files[name].read_bytes(), compresslevel=9)
 
 
-TD_RUNTIME_DIRECTORY = "td-runtime"
-
-
 def _td_onedir_files(bundle: Path) -> dict[str, Path]:
-    """Map the td onedir bundle (td.exe beside its PyInstaller runtime) to archive names."""
-    runtime = bundle / TD_RUNTIME_DIRECTORY
-    runtime_files = sorted(path for path in runtime.rglob("*") if path.is_file())
-    if not runtime_files:
-        raise ValueError(f"Release input is missing: {runtime}")
-    return {
-        "td.exe": bundle / "td.exe",
-        **{path.relative_to(bundle).as_posix(): path for path in runtime_files},
+    """Map every file of the td onedir bundle (td.exe beside its runtime) to archive names."""
+    files = {
+        path.relative_to(bundle).as_posix(): path
+        for path in sorted(bundle.rglob("*"))
+        if path.is_file()
     }
+    if not any(name.startswith(f"{TD_RUNTIME_DIRECTORY}/") for name in files):
+        raise ValueError(f"Release input is missing: {bundle / TD_RUNTIME_DIRECTORY}")
+    files.setdefault("td.exe", bundle / "td.exe")
+    return files
 
 
 def package_release(
