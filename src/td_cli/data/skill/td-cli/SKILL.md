@@ -12,7 +12,8 @@ subcommand's `--help`. For operator names and support, use `td ops types --help`
 and its catalog queries. Read the actual graph/parameters before editing it.
 An operator type's existence in TouchDesigner does not imply td-cli supports every
 operation on it. Use exact absolute operator paths, and select an Instance when
-more than one is online.
+more than one is online. In Git Bash, set `MSYS_NO_PATHCONV=1` so `/project1` is
+not rewritten into a Windows path.
 
 - For starting, selecting, reconnecting, upgrading or saving, read
   [sessions.md](references/sessions.md).

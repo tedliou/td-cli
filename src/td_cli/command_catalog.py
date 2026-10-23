@@ -27,6 +27,12 @@ def _valid_operator_path(value: str) -> str:
         and any(part in {"", ".", ".."} for part in value.split("/")[1:])
         or any(character in value for character in "*?[]")
     ):
+        if re.match(r"^[A-Za-z]:[/\\]", value):
+            # Git Bash (MSYS) rewrites a leading "/project1" into "C:/Program Files/Git/project1".
+            raise ValueError(
+                "operator_path must be canonical and absolute; got a Windows path, "
+                "likely from Git Bash path conversion (set MSYS_NO_PATHCONV=1)"
+            )
         raise ValueError("operator_path must be canonical and absolute")
     return value
 

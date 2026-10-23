@@ -92,6 +92,17 @@ def test_project_save_accepts_uppercase_digest_from_get_filehash(monkeypatch) ->
     assert FakeDaemonClient.submitted["input"]["expected_sha256"] == "c68e5b03" + "ab" * 28
 
 
+def test_msys_converted_operator_path_names_the_git_bash_workaround(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+    result = CliRunner().invoke(
+        cli.app, ["--json", "ops", "children", "C:/Program Files/Git/project1/"]
+    )
+    assert result.exit_code == 2
+    error = json.loads(result.stdout)["error"]
+    assert error["code"] == "invalid_arguments"
+    assert "MSYS_NO_PATHCONV=1" in error["details"]["validation_errors"][0]["message"]
+
+
 def test_ops_get_submits_typed_command_and_emits_protocol_envelope(monkeypatch) -> None:
     monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
 
