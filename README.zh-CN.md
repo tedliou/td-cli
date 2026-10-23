@@ -242,7 +242,7 @@ connector 以 `operator_family_mismatch` 拒绝（0.10 之前两端都是 COMP �
 的形状附上每个值（`mode`、`value`、`value_type`、`source`、`unsupported_reason`；读不到的值返回
 `value_type: "unknown"` 与 `unsupported_reason: "value_unavailable"`）；`--non-default-only` 只列
 TouchDesigner 不视为默认值的 Parameter（隐含附上值）；`--names a,b` 只列指定的 Parameter（名称不存在
-时返回 `parameter_not_found`）；`--no-menu-options` 让 `menu_names` 与 `menu_labels` 返回 `null`。结果
+时返回 `parameter_not_found`）；`--no-menu-options` 让 `menu_names` 与 `menu_labels` 返回 `null`，并返回 `include_menu_options: false`。结果
 仍有上限，超过时返回 `result_too_large`，不会截断：
 
 ```powershell
@@ -252,7 +252,7 @@ td --json --instance <selector> parameters list /project1/select1 --names channa
 
 `project snapshot` 以广度优先列出子树的 `path`、`type`、`depth`（`--max-depth` 最多 8、
 `--max-operators` 最多 1000），子树较大时返回 `result_too_large`。加上 `--paginate` 则返回一页并附
-`next_cursor`；以相同 root 与 `--max-depth` 把它传给 `--cursor`，直到 `next_cursor` 为 `null`。
+`next_cursor`；以相同 root 与 `--max-depth` 把它传给 `--cursor`，直到 `next_cursor` 为 `null`（每个 snapshot 都会返回，完整结果为 `null`）。
 TouchDesigner 没有网络修改计数，所以各页不是同一时间点的一致结果：cursor 指向的下一个 Operator
 被移动或删除时返回 `snapshot_cursor_stale`（请重新开始），其他分页之间的修改则不会被检测。
 `--include-connections` 为每个 Operator 附上输出 `connections`（`target_path`、`output_index`、
@@ -473,7 +473,7 @@ td --json --instance <selector> chop values get /project1/noise1 --sample-offset
 
 未指定 sample 范围时返回每个 channel 的当前值与当前 `frame`；指定 `--sample-offset` 与
 `--sample-count`（两者须一起提供）时，每个 channel 返回该范围的 samples，并附 `sample_rate` 与
-`total_samples`。`--channels` 以完整名称选取 channel，名称不存在时返回 `chop_channel_not_found`。NaN
+`total_samples`。`channels` 依序列出返回的 channel。`--channels` 以完整名称选取 channel，名称不存在时返回 `chop_channel_not_found`。NaN
 与无限值以 `null` 表示，并计入 `non_finite_count`。每次最多返回 4096 个值，超过时返回
 `result_too_large`，不会截断。
 

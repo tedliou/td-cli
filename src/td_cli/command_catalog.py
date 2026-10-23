@@ -733,6 +733,27 @@ def _state_result(result: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _text_read_result(result: dict[str, Any]) -> dict[str, Any]:
+    if "offset" in result:
+        result.setdefault("next_offset", None)
+    return result
+
+
+def _chop_values_result(result: dict[str, Any]) -> dict[str, Any]:
+    # The Agent wire drops null dict values, so the ordered channel list restores them.
+    values = result.get("values")
+    if isinstance(result.get("channels"), list) and isinstance(values, dict):
+        result["values"] = {name: values.get(name) for name in result["channels"]}
+    if "sample_offset" not in result:
+        result.setdefault("frame", None)
+    return result
+
+
+def _snapshot_result(result: dict[str, Any]) -> dict[str, Any]:
+    result.setdefault("next_cursor", None)
+    return result
+
+
 def _inspection_result(result: dict[str, Any]) -> dict[str, Any]:
     for section, fields in {
         "cook": ("cooked_this_frame", "cooked_previous_frame"),
@@ -748,6 +769,15 @@ def _inspection_result(result: dict[str, Any]) -> dict[str, Any]:
     if isinstance(details, dict):
         if result.get("family") == "DAT":
             details.setdefault("editing_file", None)
+        if result.get("family") == "COMP":
+            for side in ("inputs", "outputs"):
+                if isinstance(details.get(side), list):
+                    details[side] = [
+                        {"operator": None, "family": None, **item}
+                        if isinstance(item, dict)
+                        else item
+                        for item in details[side]
+                    ]
         for field in ("time_slice", "export", "editable", "template", "compare"):
             if field in details:
                 details[field] = bool(details[field])
@@ -779,7 +809,16 @@ def _parameter_descriptor(item: object) -> object:
 
 def _parameter_list_result(result: dict[str, Any]) -> dict[str, Any]:
     if isinstance(result.get("parameters"), list):
-        result["parameters"] = [_parameter_descriptor(item) for item in result["parameters"]]
+        # The wire drops null menu options; the echoed option says they were left out.
+        omitted = {"menu_names": None, "menu_labels": None}
+        result["parameters"] = [
+            _parameter_descriptor(
+                {**omitted, **item}
+                if result.get("include_menu_options") is False and isinstance(item, dict)
+                else item
+            )
+            for item in result["parameters"]
+        ]
         for item in result["parameters"]:
             if isinstance(item, dict) and isinstance(item.get("value"), dict):
                 item["value"] = _parameter_result(item["value"])
@@ -994,6 +1033,7 @@ COMMAND_CATALOG = CommandCatalog(
             TextDatReadInput,
             CommandEffect.READ_ONLY,
             ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
+            _text_read_result,
             features=(("dat.text.get:offset", lambda value: value.get("offset") is not None),),
         ),
         CommandDefinition(
@@ -1001,6 +1041,7 @@ COMMAND_CATALOG = CommandCatalog(
             ChopValuesInput,
             CommandEffect.READ_ONLY,
             ExecutionClass.FAST_READ,
+            _chop_values_result,
         ),
         CommandDefinition(
             "dat.text.set", TextDatSetInput, CommandEffect.MUTATION, ExecutionClass.BOUNDED_MUTATION
@@ -1170,6 +1211,7 @@ COMMAND_CATALOG = CommandCatalog(
             SnapshotInput,
             CommandEffect.READ_ONLY,
             ExecutionClass.BOUNDED_SCAN_OR_EXPORT,
+            _snapshot_result,
             features=(
                 (
                     "project.snapshot:options",

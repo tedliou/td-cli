@@ -4423,7 +4423,7 @@ def test_snapshot_reports_each_operator_output_connection() -> None:
         {"target_path": "/project1/target", "output_index": 0, "input_index": 0}
     ]
     assert rows["/project1/target"]["connections"] == []
-    assert "next_cursor" not in result
+    assert result["next_cursor"] is None
 
 
 def test_binary_export_enforces_family_and_raw_byte_cap() -> None:
@@ -4838,6 +4838,7 @@ def test_chop_values_reads_current_values_without_mutating(monkeypatch) -> None:
     assert result == {
         "operator_path": chop.path,
         "frame": 1234,
+        "channels": ["tx", "ty"],
         "values": {"tx": 0.12, "ty": None},
         "non_finite_count": 1,
     }

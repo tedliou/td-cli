@@ -1140,3 +1140,46 @@ def test_structural_summary_inventory_admits_large_subtrees_from_advertising_age
         Command.model_validate(
             {"name": name, "input": {**identity, "max_operators": 10_001, "inventory": "summary"}}
         )
+
+
+def _normalized(name: str, result: dict[str, object]) -> dict[str, object]:
+    return COMMAND_CATALOG.normalize_result({"name": name, "input": {}}, result)
+
+
+def test_read_results_restore_nulls_the_agent_wire_drops() -> None:
+    last_chunk = _normalized("dat.text.get", {"text": "end", "offset": 40, "utf8_bytes": 3})
+    assert last_chunk["next_offset"] is None
+    whole = _normalized("dat.text.get", {"text": "all", "utf8_bytes": 3})
+    assert "next_offset" not in whole
+    current = _normalized(
+        "chop.values.get",
+        {"channels": ["tx", "ty"], "values": {"tx": 1.5}, "non_finite_count": 1},
+    )
+    assert current["values"] == {"tx": 1.5, "ty": None}
+    assert current["frame"] is None
+    ranged = _normalized(
+        "chop.values.get",
+        {"channels": ["tx"], "values": {"tx": [1.0, None]}, "sample_offset": 0},
+    )
+    assert "frame" not in ranged
+    assert _normalized("project.snapshot", {"operators": []})["next_cursor"] is None
+    comp = _normalized(
+        "ops.inspect",
+        {"family": "COMP", "details": {"inputs": [{"index": 0}], "outputs": []}},
+    )
+    assert comp["details"]["inputs"] == [{"index": 0, "operator": None, "family": None}]
+
+
+def test_parameter_list_keeps_omitted_menu_options_null() -> None:
+    result = _normalized(
+        "parameters.list",
+        {
+            "operator_path": "/project1/a",
+            "include_menu_options": False,
+            "parameters": [{"name": "extend", "value_kind": "menu"}],
+        },
+    )
+    assert result["parameters"][0]["menu_names"] is None
+    assert result["parameters"][0]["menu_labels"] is None
+    listed = _normalized("parameters.list", {"parameters": [{"name": "m", "value_kind": "menu"}]})
+    assert listed["parameters"][0]["menu_names"] == []

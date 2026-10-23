@@ -289,7 +289,7 @@ reports `value_type: "unknown"` with `unsupported_reason: "value_unavailable"`),
 `--non-default-only` lists only Parameters TouchDesigner does not report as default
 (it implies values), `--names a,b` lists only those Parameters (an unknown name fails
 with `parameter_not_found`), and `--no-menu-options` reports `menu_names` and
-`menu_labels` as `null`. Results stay bounded and fail with `result_too_large`
+`menu_labels` as `null` and echoes `include_menu_options: false`. Results stay bounded and fail with `result_too_large`
 instead of truncating:
 
 ```powershell
@@ -301,7 +301,8 @@ td --json --instance <selector> parameters list /project1/select1 --names channa
 (`--max-depth` up to 8, `--max-operators` up to 1000) and fails with
 `result_too_large` when the subtree is larger. `--paginate` instead returns one
 page with `next_cursor`; pass it to `--cursor` with the same root and
-`--max-depth` until `next_cursor` is `null`. TouchDesigner has no network revision
+`--max-depth` until `next_cursor` is `null` (every snapshot reports it; a complete
+result has `null`). TouchDesigner has no network revision
 counter, so pages are not one consistent view: a cursor whose next Operator moved
 or disappeared fails with `snapshot_cursor_stale` (start again), but other edits
 between pages are not detected. `--include-connections` adds each Operator's
@@ -585,7 +586,7 @@ td --json --instance <selector> chop values get /project1/noise1 --sample-offset
 Without a sample range the result holds the current value of each channel plus
 the current `frame`; with `--sample-offset` and `--sample-count` (always given
 together) each channel holds that window of samples plus `sample_rate` and
-`total_samples`. `--channels` selects channels by exact name; an unknown name fails
+`total_samples`. `channels` lists the returned channels in order. `--channels` selects channels by exact name; an unknown name fails
 with `chop_channel_not_found`. NaN and infinite samples become `null`, counted in
 `non_finite_count`. At most 4096 values are returned per call; a larger request
 fails with `result_too_large` instead of truncating.

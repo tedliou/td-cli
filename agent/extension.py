@@ -400,10 +400,12 @@ class OperatorControl:
         if offset is None:
             self._require_inspection_bound(len(channels), self.MAX_CHOP_VALUES)
             values = {str(channel.name): number(channel.eval()) for channel in channels}
-            frame = getattr(getattr(builtins, "absTime", None), "frame", None)
+            clock = getattr(_td_runtime, "absTime", None) or getattr(builtins, "absTime", None)
+            frame = getattr(clock, "frame", None)
             return {
                 "operator_path": str(operator.path),
                 "frame": frame,
+                "channels": list(values),
                 "values": values,
                 "non_finite_count": non_finite,
             }
@@ -415,6 +417,7 @@ class OperatorControl:
             "sample_offset": offset,
             "sample_rate": float(operator.rate),
             "total_samples": total,
+            "channels": [str(channel.name) for channel in channels],
             "values": {
                 str(channel.name): [number(channel[index]) for index in indexes]
                 for channel in channels
@@ -1904,6 +1907,7 @@ class OperatorControl:
             parameters.append(item)
         return {
             "operator_path": str(operator.path),
+            **({} if include_menu_options else {"include_menu_options": False}),
             "parameters": sorted(parameters, key=lambda item: item["name"]),
         }
 
@@ -3436,10 +3440,7 @@ class AgentExt:
         if offset and index <= offset:
             # The operator the cursor pointed at is gone: the network shrank between pages.
             raise AgentCommandError("snapshot_cursor_stale")
-        result = {"root_path": root_path, "operators": rows}
-        if paginate:
-            result["next_cursor"] = None
-        return result
+        return {"root_path": root_path, "operators": rows, "next_cursor": None}
 
     @staticmethod
     def _encode_snapshot_cursor(root_path, max_depth, offset, next_path):
