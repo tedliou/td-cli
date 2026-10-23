@@ -524,4 +524,4 @@ read-only Command 使用。
 終態 snapshot。請保存輸出；中斷或 outcome unknown 後先查詢已記錄的 Request，
 不要盲目重跑整份計畫。不接受巢狀 `batch.execute`。
 
-0.10.0 離線升級除既有來源（含 0.7.0、0.7.1、0.8.0）外，新增精確 canonical 0.9.0 Agent 白名單，保留 Connectionstate 定義。Trusted TOX Import 可匯入官方 Palette 元件（`--root-child`、`--inventory summary`、可診斷的 `details`），`ops connect` 依 In／Out Operator 的 family 把 TOP 接進或接出元件。這些需要 0.10.0 Agent；內嵌較舊 Agent 時，CLI 與 Daemon 會以 `command_unsupported` 拒絕新選項。
+0.11.0 離線升級除既有來源（含 0.7.0、0.7.1、0.8.0、0.9.0）外，新增精確 canonical 0.10.0 Agent 白名單，保留 Connectionstate 定義。Agent 讀取介面新增：`batch execute` 逐項結果、Instance 的 `project`、`ops inspect` 的 COMP 介面摘要、Execute 系列與 byte offset 的 `dat text get`、`chop values get`、`parameters list` 的值與篩選選項、可分頁的 `project snapshot`，以及 `ops destroy`／`copy`／`move` 的 `--inventory summary`。`td` 改以 onedir 發佈，啟動約 0.4 秒。新選項需要 0.11.0 Agent；內嵌較舊 Agent 時，CLI 與 Daemon 會以 `command_unsupported` 拒絕。
