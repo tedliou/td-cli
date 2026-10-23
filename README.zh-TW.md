@@ -43,6 +43,10 @@ td --json instances list
 td --json --instance <selector> ops create /project1 constantTOP source
 ```
 
+列出的每個 Instance 都會以 `project: {"name", "folder"}` 回報目前開啟的專案（另存新檔或開啟別的
+`.toe` 後，下一次 heartbeat 就會更新），不必對每個 Instance 呼叫 `project metadata` 就能選對 selector。
+比本 Release 舊的 Agent 會回報 `project: null`。
+
 升級時再次執行相同安裝命令並重新啟動 Daemon。解除安裝會保留 Daemon 資料與 TouchDesigner
 專案：
 
@@ -152,6 +156,11 @@ Command 或 `commands execute` 計畫的欄位在送出前驗證失敗時，`--j
 與 `commands execute` 計畫（1–256 個 Command）所需的格式。在 Git Bash 中請設定
 `MSYS_NO_PATHCONV=1`，否則開頭的 `/project1` 會被改寫成 Windows 路徑而遭拒絕。
 
+`batch execute` 會依序回報每一項讀取：`results[i]` 為 `{"ok":true,"result":{...}}` 或
+`{"ok":false,"error":{"code":...}}`，`failed_count` 是失敗的項數。部分讀取失敗時 Request 仍為
+成功，所以請看 `failed_count`，而不是 Request 狀態。Agent 若不支援這種回報方式，Daemon 會在送出前
+以 `command_unsupported` 拒絕整批。
+
 <!-- doc-section: agent-component -->
 
 ## Agent Component
@@ -229,9 +238,38 @@ family，所以 TOP 可以接進輸入為 In TOP 的元件，元件的 Out TOP �
 COMP 也依同一規則：Out TOP connector 不能接 In CHOP connector，沒有 In／Out Operator 的 COMP
 connector 以 `operator_family_mismatch` 拒絕（0.10 之前兩端都是 COMP 時一律接受）。
 
-`ops.inspect` 是 CHOP、DAT、TOP、SOP、POP、MAT 的被動有界讀取。它不下載 pixels、geometry、
+`parameters list` 描述每個 Parameter，可用選項縮小範圍：`--include-values` 以 `parameters get`
+的形狀附上每個值（`mode`、`value`、`value_type`、`source`、`unsupported_reason`；讀不到的值回報
+`value_type: "unknown"` 與 `unsupported_reason: "value_unavailable"`）；`--non-default-only` 只列
+TouchDesigner 不視為預設值的 Parameter（隱含附上值）；`--names a,b` 只列指定的 Parameter（名稱不存在
+時回 `parameter_not_found`）；`--no-menu-options` 讓 `menu_names` 與 `menu_labels` 回報為 `null`，並回傳 `include_menu_options: false`。結果
+仍有上限，超過時回 `result_too_large`，不會截斷：
+
+```powershell
+td --json --instance <selector> parameters list /project1/select1 --non-default-only --no-menu-options
+td --json --instance <selector> parameters list /project1/select1 --names channames,renamefrom --include-values
+```
+
+`project snapshot` 以廣度優先列出子樹的 `path`、`type`、`depth`（`--max-depth` 最多 8、
+`--max-operators` 最多 1000），子樹較大時回 `result_too_large`。加上 `--paginate` 則回傳一頁並附
+`next_cursor`；以相同 root 與 `--max-depth` 把它傳給 `--cursor`，直到 `next_cursor` 為 `null`（每個 snapshot 都會回報，完整結果為 `null`）。
+TouchDesigner 沒有網路修改計數，所以各頁不是同一時間點的一致結果：cursor 指向的下一個 Operator
+被移動或刪除時回 `snapshot_cursor_stale`（請重新開始），其他分頁之間的修改則不會被偵測。
+`--include-connections` 為每個 Operator 附上輸出 `connections`（`target_path`、`output_index`、
+`input_index`）。Parameter 值請用 `parameters list --non-default-only`：
+
+```powershell
+td --json --instance <selector> project snapshot /project1 --paginate --include-connections
+td --json --instance <selector> project snapshot /project1 --cursor <next_cursor> --include-connections
+```
+
+`ops.inspect` 是 CHOP、DAT、TOP、SOP、POP、MAT、COMP 的被動有界讀取。它不下載 pixels、geometry、
 POP buffers、DAT content 或 Python objects，也不主動 cook。可變長度資料受 `--max-items`
-限制（預設 100、最高 1000），溢位會失敗而不截斷。
+限制（預設 100、最高 1000），溢位會失敗而不截斷。COMP 的 `details` 摘要其介面：`child_count`
+（直屬子節點數，清單請用 `ops children`）、`inputs`／`outputs` 以 `{index, operator, family}` 指出每個
+一般 connector 背後的 In／Out Operator、`hierarchy_inputs`／`hierarchy_outputs` 數量，以及只列參數名稱的
+`custom_pages`（`{name, parameters}`）。connector、page 與參數名稱合計受 `--max-items` 限制。比本 Release
+舊的 Agent 會以 `operator_family_unsupported` 拒絕 COMP。
 
 以 `ops state set /project1/geo/shape --display --render` 啟用 SOP 幾何旗標，`--no-display` 與 `--no-render` 關閉。`ops state get` 可讀回兩者。Display 選擇檢視內容，Render 選擇算圖幾何；仍須設定 Geometry COMP 與 Render TOP。這些旗標本身不會停止 cook 或釋放記憶體。
 
@@ -272,7 +310,7 @@ td --json --instance <selector> parameters list /project1/controls
 {"operator_path":"/project1/controls","page":"Controls","parameters":[{"name":"Gyrox","label":"Gyro X","kind":"float","default":0,"minimum":-1,"maximum":1},{"name":"Manual","label":"Manual","kind":"toggle","default":true},{"name":"Source","label":"Source","kind":"menu","default":"manual","menu_names":["manual","device"],"menu_labels":["Manual","Device"]}]}
 ```
 
-使用 `parameters menu-set`（Command `parameters.menu.set`）替換既有自訂 `Menu` 參數的選項。輸入 1–256 個唯一且非空的名稱、等量的非空標籤（每項最多 128 字元；`len(json.dumps(names + labels, ensure_ascii=True))` 不得超過 65,536，所以引號、分隔符與跳脫都計入，非 ASCII 字元每個算 6 bytes，基本多文種平面以外的字元算 12 bytes），以及必填的 `--preserve`：`index` 保留目前選取的位置，`name` 保留目前選取的名稱。選單 default 依同一規則對應；原本就不對應任何選項的 default 保持不變。從未指定過的 default 會回報第一個選項；規則需要移動它時會明確寫入，而 TouchDesigner 無法把它還原成未指定，所以只要已經嘗試寫入它（包括寫入 default 本身被拒絕，因為 TouchDesigner 可能已套用），之後的失敗即使讀回與原本相同，也回報 `parameter_rollback_failed`。只接受自訂、constant mode、選項不由 `menuSource` 產生的 `Menu` 參數；內建、`menuSource` 與 expression／export／bind 參數回傳 `parameter_menu_not_writable`，其他樣式（含 StrMenu）回傳 `parameter_type_unsupported`，目前值或 default 無法依規則對應時回傳 `parameter_value_invalid`，以上都在修改前拒絕。結果回傳新的名稱與標籤，以及修改前後的值、索引與 default。被拒絕的寫入會復原並驗證（`parameter_write_rejected`）；`parameter_rollback_failed` 或 `parameter_outcome_unknown` 須先查詢再執行下一次修改。此 Command 屬於 mutation，可放入 `commands execute` 計畫，不可放入 `batch execute`。選單較大時請用 `--input-file`，過長的 `--names-json`／`--labels-json` 可能超過 Windows 命令列長度上限。`parameters list` 會回傳每個 menu 的全部選項，所以一個 Operator 若有數個接近預算的 menu，結果可能超過上限；這個讀取會以 `result_too_large` 失敗且不改變任何狀態，`parameters get` 仍可讀取單一值。
+使用 `parameters menu-set`（Command `parameters.menu.set`）替換既有自訂 `Menu` 參數的選項。輸入 1–256 個唯一且非空的名稱、等量的非空標籤（每項最多 128 字元；`len(json.dumps(names + labels, ensure_ascii=True))` 不得超過 65,536，所以引號、分隔符與跳脫都計入，非 ASCII 字元每個算 6 bytes，基本多文種平面以外的字元算 12 bytes），以及必填的 `--preserve`：`index` 保留目前選取的位置，`name` 保留目前選取的名稱。選單 default 依同一規則對應；原本就不對應任何選項的 default 保持不變。從未指定過的 default 會回報第一個選項；規則需要移動它時會明確寫入，而 TouchDesigner 無法把它還原成未指定，所以只要已經嘗試寫入它（包括寫入 default 本身被拒絕，因為 TouchDesigner 可能已套用），之後的失敗即使讀回與原本相同，也回報 `parameter_rollback_failed`。只接受自訂、constant mode、選項不由 `menuSource` 產生的 `Menu` 參數；內建、`menuSource` 與 expression／export／bind 參數回傳 `parameter_menu_not_writable`，其他樣式（含 StrMenu）回傳 `parameter_type_unsupported`，目前值或 default 無法依規則對應時回傳 `parameter_value_invalid`，以上都在修改前拒絕。結果回傳新的名稱與標籤，以及修改前後的值、索引與 default。被拒絕的寫入會復原並驗證（`parameter_write_rejected`）；`parameter_rollback_failed` 或 `parameter_outcome_unknown` 須先查詢再執行下一次修改。此 Command 屬於 mutation，可放入 `commands execute` 計畫，不可放入 `batch execute`。選單較大時請用 `--input-file`，過長的 `--names-json`／`--labels-json` 可能超過 Windows 命令列長度上限。`parameters list` 會回傳每個 menu 的全部選項，所以一個 Operator 若有數個接近預算的 menu，結果可能超過上限；這個讀取會以 `result_too_large` 失敗且不改變任何狀態。`parameters list --no-menu-options` 仍可列出描述，`parameters get` 可讀取單一值。
 
 ```powershell
 td --json --instance <selector> parameters menu-set /project1/controls Source --names-json '["manual","device","replay"]' --labels-json '["Manual","Device","Replay"]' --preserve index
@@ -328,6 +366,18 @@ td --json --instance <selector> ops destroy /project1/group/moved --recursive --
 
 三種操作預設最多影響 256 Operators（最高 1000）。Copy／move 會驗證精確結果，並在失敗時移除
 新 copy；無法證明最終狀態時回傳獨立 rollback／uncertain-outcome error。
+
+更大的子樹（例如以 `ops tox import --inventory summary` 安裝的元件）在 destroy、copy、move 時需加
+`--inventory summary`（`--max-operators` 最高 10000）。結果改為 `operator_count`、`type_counts` 與
+`inventory_sha256`（`{path, op_type}` 各列依 `path` 排序後，以 canonical JSON（排序 key、無空白、ASCII）
+計算的 SHA-256；path 相對於被刪除 Operator 或新 copy 的 parent）。只列出跨越子樹邊界的連線：destroy 的
+`detached_connections` 不含子樹內部的連線。邊界連線超過 512 條時，在任何修改之前回
+`result_too_large`。各 Command 需要 Agent 宣告 `ops.destroy:inventory_summary`、
+`ops.copy:inventory_summary` 或 `ops.move:inventory_summary`：
+
+```powershell
+td --json --instance <selector> ops destroy /project1/projection/kantanMapper --recursive --allow-connected --inventory summary --max-operators 5000
+```
 
 <!-- doc-section: trusted-tox-import -->
 
@@ -407,10 +457,25 @@ td --json --instance <selector> dat table replace /project1/grid '[["name","valu
 td --json --instance <selector> dat table patch /project1/grid '[["updated"]]' --row-offset 1 --column-offset 1
 ```
 
-文字存取限 `textDAT`，表格寫入限 `tableDAT`；有界表格讀取接受 `isTable` 為真的 DAT，包含用於讀取實際 CHOP 輸出值的 CHOP to DAT。讀取遵循一般相依 cook，不強制 cook。外部 File／Sync File、protected path、非 rectangular／非 string
+文字讀取接受內容為文字（`isText`）的任何 DAT，包括 Execute 系列與 Script DAT 的 callback，並回報其 `op_type`；文字寫入限 `textDAT`，表格寫入限 `tableDAT`；有界表格讀取接受 `isTable` 為真的 DAT，包含用於讀取實際 CHOP 輸出值的 CHOP to DAT。讀取遵循一般相依 cook，不強制 cook。外部 File／Sync File、protected path、非 rectangular／非 string
 cell 及越界 patch 都會被拒絕。Content 上限 32 KiB UTF-8、256 rows、256 columns、4096 cells、每
-cell 16 KiB。Mutation 會 read back 完整內容與尺寸，失敗時復原整份 DAT。這些 Command 不執行
+cell 16 KiB。較大的文字可用 `dat text get --offset N`（UTF-8 byte）分段讀取：每次最多回傳 `--max-bytes`
+bytes 的完整字元，並附 `offset`、`next_offset`（讀到結尾時為 `null`）、`total_utf8_bytes`，以及整份內容的
+`text_sha256`；分段之間內容被修改時 sha256 會改變。offset 落在字元中間時回 `invalid_arguments`。Mutation 會 read back 完整內容與尺寸，失敗時復原整份 DAT。這些 Command 不執行
 DAT、不 import module、不 evaluate content，也不接受 filesystem path。
+
+CHOP channel 值可直接讀取，不需暫時建立 CHOP to DAT：
+
+```powershell
+td --json --instance <selector> chop values get /project1/noise1 --channels tx,ty
+td --json --instance <selector> chop values get /project1/noise1 --sample-offset 0 --sample-count 64
+```
+
+未指定 sample 範圍時回傳每個 channel 的目前值與目前 `frame`；指定 `--sample-offset` 與
+`--sample-count`（兩者須一起提供）時，每個 channel 回傳該範圍的 samples，並附 `sample_rate` 與
+`total_samples`。`channels` 依序列出回傳的 channel。`--channels` 以完整名稱選取 channel，名稱不存在時回 `chop_channel_not_found`。NaN
+與無限值以 `null` 表示，並計入 `non_finite_count`。每次最多回傳 4096 個值，超過時回
+`result_too_large`，不會截斷。
 
 <!-- doc-section: project-save -->
 ## 保存目前專案

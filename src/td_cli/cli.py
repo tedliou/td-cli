@@ -36,6 +36,8 @@ ops_state_app = typer.Typer()
 ops_hierarchy_app = typer.Typer()
 ops_tox_app = typer.Typer()
 dat_app = typer.Typer()
+chop_app = typer.Typer()
+chop_values_app = typer.Typer()
 dat_text_app = typer.Typer()
 dat_table_app = typer.Typer()
 parameters_app = typer.Typer()
@@ -51,6 +53,8 @@ ops_app.add_typer(ops_state_app, name="state")
 ops_app.add_typer(ops_hierarchy_app, name="hierarchy")
 ops_app.add_typer(ops_tox_app, name="tox")
 app.add_typer(dat_app, name="dat")
+app.add_typer(chop_app, name="chop")
+chop_app.add_typer(chop_values_app, name="values")
 dat_app.add_typer(dat_text_app, name="text")
 dat_app.add_typer(dat_table_app, name="table")
 app.add_typer(parameters_app, name="parameters")
@@ -336,6 +340,7 @@ def _structural_destination_input(
     node_x: int | None,
     node_y: int | None,
     max_operators: int | None,
+    inventory: str | None,
     *,
     specific_requested: bool,
     specific_input: dict[str, Any],
@@ -346,7 +351,11 @@ def _structural_destination_input(
     ):
         _fail(ctx, ClientError("invalid_arguments"))
     if (
-        node_x is not None or node_y is not None or specific_requested or max_operators is not None
+        node_x is not None
+        or node_y is not None
+        or specific_requested
+        or max_operators is not None
+        or inventory is not None
     ) and source_path is None:
         _fail(ctx, ClientError("invalid_arguments"))
     if source_path is None or target_parent_path is None or new_name is None:
@@ -358,6 +367,7 @@ def _structural_destination_input(
         "node_x": node_x,
         "node_y": node_y,
         "max_operators": max_operators if max_operators is not None else 256,
+        **({"inventory": inventory} if inventory is not None else {}),
         **specific_input,
     }
 
@@ -531,22 +541,56 @@ def ops_state_set(
     _command(ctx, "ops.state.set", dedicated, input, input_file, no_wait, request_id)
 
 
-@dat_text_app.command("get")
-def dat_text_get(
+@chop_values_app.command("get")
+def chop_values_get(
     ctx: typer.Context,
     operator_path: Annotated[str | None, typer.Argument()] = None,
-    max_bytes: Annotated[int | None, typer.Option("--max-bytes")] = None,
+    channels: Annotated[
+        str | None, typer.Option("--channels", help="Comma-separated channel names to read.")
+    ] = None,
+    sample_offset: Annotated[int | None, typer.Option("--sample-offset")] = None,
+    sample_count: Annotated[int | None, typer.Option("--sample-count")] = None,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
     request_id: Annotated[str | None, typer.Option("--request-id")] = None,
 ) -> None:
-    if max_bytes is not None and operator_path is None:
+    options = {
+        "channels": channels.split(",") if channels is not None else None,
+        "sample_offset": sample_offset,
+        "sample_count": sample_count,
+    }
+    if any(value is not None for value in options.values()) and operator_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = (
+        {
+            "operator_path": operator_path,
+            **{key: value for key, value in options.items() if value is not None},
+        }
+        if operator_path is not None
+        else None
+    )
+    _command(ctx, "chop.values.get", dedicated, input, input_file, no_wait, request_id)
+
+
+@dat_text_app.command("get")
+def dat_text_get(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    max_bytes: Annotated[int | None, typer.Option("--max-bytes")] = None,
+    offset: Annotated[int | None, typer.Option("--offset")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    if (max_bytes is not None or offset is not None) and operator_path is None:
         _fail(ctx, ClientError("invalid_arguments"))
     dedicated = (
         {
             "operator_path": operator_path,
             "max_bytes": max_bytes if max_bytes is not None else MAX_DAT_CONTENT_BYTES,
+            **({"offset": offset} if offset is not None else {}),
         }
         if operator_path is not None
         else None
@@ -834,12 +878,15 @@ def ops_destroy(
     recursive: Annotated[bool, typer.Option("--recursive")] = False,
     allow_connected: Annotated[bool, typer.Option("--allow-connected")] = False,
     max_operators: Annotated[int | None, typer.Option("--max-operators")] = None,
+    inventory: Annotated[str | None, typer.Option("--inventory")] = None,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
     request_id: Annotated[str | None, typer.Option("--request-id")] = None,
 ) -> None:
-    if (recursive or allow_connected or max_operators is not None) and operator_path is None:
+    if (
+        recursive or allow_connected or max_operators is not None or inventory is not None
+    ) and operator_path is None:
         _fail(ctx, ClientError("invalid_arguments"))
     dedicated = (
         {
@@ -847,6 +894,7 @@ def ops_destroy(
             "recursive": recursive,
             "allow_connected": allow_connected,
             "max_operators": max_operators if max_operators is not None else 256,
+            **({"inventory": inventory} if inventory is not None else {}),
         }
         if operator_path is not None
         else None
@@ -864,6 +912,7 @@ def ops_copy(
     node_y: Annotated[int | None, typer.Option("--node-y")] = None,
     include_docked: Annotated[bool, typer.Option("--include-docked")] = False,
     max_operators: Annotated[int | None, typer.Option("--max-operators")] = None,
+    inventory: Annotated[str | None, typer.Option("--inventory")] = None,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
@@ -877,6 +926,7 @@ def ops_copy(
         node_x,
         node_y,
         max_operators,
+        inventory,
         specific_requested=include_docked,
         specific_input={"include_docked": include_docked},
     )
@@ -893,6 +943,7 @@ def ops_move(
     node_y: Annotated[int | None, typer.Option("--node-y")] = None,
     allow_connected: Annotated[bool, typer.Option("--allow-connected")] = False,
     max_operators: Annotated[int | None, typer.Option("--max-operators")] = None,
+    inventory: Annotated[str | None, typer.Option("--inventory")] = None,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
@@ -906,6 +957,7 @@ def ops_move(
         node_x,
         node_y,
         max_operators,
+        inventory,
         specific_requested=allow_connected,
         specific_input={"allow_connected": allow_connected},
     )
@@ -1010,15 +1062,34 @@ def parameters_get(
 def parameters_list(
     ctx: typer.Context,
     operator_path: Annotated[str | None, typer.Argument()] = None,
+    names: Annotated[
+        str | None, typer.Option("--names", help="Comma-separated parameter names to list.")
+    ] = None,
+    include_values: Annotated[bool, typer.Option("--include-values")] = False,
+    non_default_only: Annotated[bool, typer.Option("--non-default-only")] = False,
+    no_menu_options: Annotated[
+        bool, typer.Option("--no-menu-options", help="Report menu_names and menu_labels as null.")
+    ] = False,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
     request_id: Annotated[str | None, typer.Option("--request-id")] = None,
 ) -> None:
+    options: dict[str, object] = {}
+    if names is not None:
+        options["names"] = names.split(",")
+    if include_values:
+        options["include_values"] = True
+    if non_default_only:
+        options["non_default_only"] = True
+    if no_menu_options:
+        options["include_menu_options"] = False
+    if options and operator_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
     _command(
         ctx,
         "parameters.list",
-        {"operator_path": operator_path} if operator_path is not None else None,
+        {"operator_path": operator_path, **options} if operator_path is not None else None,
         input,
         input_file,
         no_wait,
@@ -1290,13 +1361,30 @@ def project_snapshot(
     operator_path: Annotated[str | None, typer.Argument()] = None,
     max_depth: Annotated[int, typer.Option("--max-depth")] = 4,
     max_operators: Annotated[int, typer.Option("--max-operators")] = 256,
+    paginate: Annotated[bool, typer.Option("--paginate")] = False,
+    cursor: Annotated[str | None, typer.Option("--cursor")] = None,
+    include_connections: Annotated[bool, typer.Option("--include-connections")] = False,
     input: Annotated[str | None, typer.Option("--input")] = None,
     input_file: Annotated[str | None, typer.Option("--input-file")] = None,
     no_wait: bool = False,
     request_id: str | None = None,
 ) -> None:
+    options: dict[str, object] = {}
+    if paginate:
+        options["paginate"] = True
+    if cursor is not None:
+        options["cursor"] = cursor
+    if include_connections:
+        options["include_connections"] = True
+    if options and operator_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
     dedicated = (
-        {"operator_path": operator_path, "max_depth": max_depth, "max_operators": max_operators}
+        {
+            "operator_path": operator_path,
+            "max_depth": max_depth,
+            "max_operators": max_operators,
+            **options,
+        }
         if operator_path is not None
         else None
     )

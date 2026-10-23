@@ -47,21 +47,36 @@ def test_command_catalog_normalizes_locked_transport_results() -> None:
                     {
                         "name": "parameters.get",
                         "input": {"operator_path": "/project1", "parameter": "display"},
-                    }
+                    },
+                    {
+                        "name": "parameters.get",
+                        "input": {"operator_path": "/project1/missing", "parameter": "display"},
+                    },
                 ]
             },
         },
-        {"results": [{"value_type": "operator"}]},
+        {
+            "results": [
+                {"ok": True, "result": {"value_type": "operator"}},
+                {"ok": False, "error": {"code": "operator_not_found"}},
+            ],
+            "failed_count": 1,
+        },
     )
     assert nested == {
         "results": [
             {
-                "value_type": "operator",
-                "source": None,
-                "unsupported_reason": None,
-                "value": None,
-            }
-        ]
+                "ok": True,
+                "result": {
+                    "value_type": "operator",
+                    "source": None,
+                    "unsupported_reason": None,
+                    "value": None,
+                },
+            },
+            {"ok": False, "error": {"code": "operator_not_found"}},
+        ],
+        "failed_count": 1,
     }
 
 
@@ -996,3 +1011,165 @@ def test_default_tox_import_options_stay_off_the_wire_for_older_daemons() -> Non
     assert featured["input"]["root_child"] == "asset"
     assert featured["input"]["inventory"] == "summary"
     assert Command.model_validate(plain).model_dump(mode="json") == plain
+
+
+def test_every_batch_requires_agents_that_report_each_read() -> None:
+    batch = {
+        "name": "batch.execute",
+        "input": {"commands": [{"name": "ops.get", "input": {"operator_path": "/project1"}}]},
+    }
+    assert COMMAND_CATALOG.required_capabilities(batch) == {
+        "batch.execute",
+        "batch.execute:item_results",
+        "ops.get",
+    }
+
+
+def test_chop_values_is_a_bounded_batchable_read() -> None:
+    assert COMMAND_CATALOG.effect("chop.values.get") == "read_only"
+    assert "chop.values.get" in COMMAND_CATALOG.batch_names
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {"name": "chop.values.get", "input": {"operator_path": "/p", "sample_offset": 0}}
+        )
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {
+                "name": "chop.values.get",
+                "input": {"operator_path": "/p", "sample_offset": 0, "sample_count": 4097},
+            }
+        )
+
+
+def test_parameter_list_normalizes_attached_values() -> None:
+    result = COMMAND_CATALOG.normalize_result(
+        {"name": "parameters.list", "input": {"operator_path": "/project1/a"}},
+        {
+            "operator_path": "/project1/a",
+            "parameters": [
+                {
+                    "name": "gain",
+                    "value_kind": "number",
+                    "value": {"mode": "constant", "value": 0.5, "value_type": "number"},
+                }
+            ],
+        },
+    )
+    assert result["parameters"][0]["value"]["source"] is None
+    assert result["parameters"][0]["value"]["unsupported_reason"] is None
+
+
+_STRUCTURAL_IDENTITIES = {
+    "ops.destroy": {"operator_path": "/project1/big", "recursive": True},
+    "ops.copy": {
+        "source_path": "/project1/big",
+        "target_parent_path": "/project1",
+        "new_name": "c",
+    },
+    "ops.move": {
+        "source_path": "/project1/big",
+        "target_parent_path": "/project1",
+        "new_name": "m",
+    },
+}
+
+
+@pytest.mark.parametrize(
+    ("name", "identity", "option", "capability"),
+    [
+        ("dat.text.get", {"operator_path": "/p"}, {"offset": 0}, "dat.text.get:offset"),
+        *(
+            ("parameters.list", {"operator_path": "/p"}, option, "parameters.list:options")
+            for option in (
+                {"names": ["gain"]},
+                {"include_values": True},
+                {"non_default_only": True},
+                {"include_menu_options": False},
+            )
+        ),
+        *(
+            ("project.snapshot", {"operator_path": "/p"}, option, "project.snapshot:options")
+            for option in ({"paginate": True}, {"cursor": "abc"}, {"include_connections": True})
+        ),
+        *(
+            (name, identity, {"inventory": "summary"}, f"{name}:inventory_summary")
+            for name, identity in _STRUCTURAL_IDENTITIES.items()
+        ),
+    ],
+)
+def test_new_options_stay_off_the_wire_unless_set_and_need_an_advertising_agent(
+    name: str, identity: dict[str, object], option: dict[str, object], capability: str
+) -> None:
+    plain = Command.model_validate({"name": name, "input": identity}).model_dump(mode="json")
+    assert not set(option) & set(plain["input"])
+    assert capability not in COMMAND_CATALOG.required_capabilities(plain)
+    command = Command.model_validate({"name": name, "input": {**identity, **option}}).model_dump(
+        mode="json"
+    )
+    assert {**command["input"], **option} == command["input"]
+    assert capability in COMMAND_CATALOG.required_capabilities(command)
+
+
+@pytest.mark.parametrize(("name", "identity"), list(_STRUCTURAL_IDENTITIES.items()))
+def test_structural_summary_inventory_admits_up_to_ten_thousand_operators(
+    name: str, identity: dict[str, object]
+) -> None:
+    with pytest.raises(ValidationError, match="requires inventory 'summary'"):
+        Command.model_validate({"name": name, "input": {**identity, "max_operators": 1001}})
+    Command.model_validate(
+        {"name": name, "input": {**identity, "max_operators": 10_000, "inventory": "summary"}}
+    )
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {"name": name, "input": {**identity, "max_operators": 10_001, "inventory": "summary"}}
+        )
+
+
+def test_parameter_list_rejects_an_empty_name_selection() -> None:
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {"name": "parameters.list", "input": {"operator_path": "/p", "names": []}}
+        )
+
+
+def _normalized(name: str, result: dict[str, object]) -> dict[str, object]:
+    return COMMAND_CATALOG.normalize_result({"name": name, "input": {}}, result)
+
+
+def test_read_results_restore_nulls_the_agent_wire_drops() -> None:
+    last_chunk = _normalized("dat.text.get", {"text": "end", "offset": 40, "utf8_bytes": 3})
+    assert last_chunk["next_offset"] is None
+    whole = _normalized("dat.text.get", {"text": "all", "utf8_bytes": 3})
+    assert "next_offset" not in whole
+    current = _normalized(
+        "chop.values.get",
+        {"channels": ["tx", "ty"], "values": {"tx": 1.5}, "non_finite_count": 1},
+    )
+    assert current["values"] == {"tx": 1.5, "ty": None}
+    assert current["frame"] is None
+    ranged = _normalized(
+        "chop.values.get",
+        {"channels": ["tx"], "values": {"tx": [1.0, None]}, "sample_offset": 0},
+    )
+    assert "frame" not in ranged
+    assert _normalized("project.snapshot", {"operators": []})["next_cursor"] is None
+    comp = _normalized(
+        "ops.inspect",
+        {"family": "COMP", "details": {"inputs": [{"index": 0}], "outputs": []}},
+    )
+    assert comp["details"]["inputs"] == [{"index": 0, "operator": None, "family": None}]
+
+
+def test_parameter_list_keeps_omitted_menu_options_null() -> None:
+    result = _normalized(
+        "parameters.list",
+        {
+            "operator_path": "/project1/a",
+            "include_menu_options": False,
+            "parameters": [{"name": "extend", "value_kind": "menu"}],
+        },
+    )
+    assert result["parameters"][0]["menu_names"] is None
+    assert result["parameters"][0]["menu_labels"] is None
+    listed = _normalized("parameters.list", {"parameters": [{"name": "m", "value_kind": "menu"}]})
+    assert listed["parameters"][0]["menu_names"] == []
