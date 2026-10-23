@@ -1355,8 +1355,41 @@ def test_family_inspection_returns_discriminated_results_for_all_six_families() 
     )
 
 
+def test_comp_inspection_summarizes_connectors_children_and_custom_pages() -> None:
+    comp = inspection_operator("/project1/muse_input", "COMP")
+    in_top = FakeOperator("/project1/muse_input/in1", op_type="inTOP", family="TOP")
+    out_chop = FakeOperator("/project1/muse_input/out1", op_type="outCHOP", family="CHOP")
+    comp.children = [in_top, out_chop, FakeOperator("/project1/muse_input/osc")]
+    comp.inputConnectors = [SimpleNamespace(index=0, inOP=in_top, isInput=True)]
+    comp.outputConnectors = [SimpleNamespace(index=0, outOP=out_chop, isInput=False)]
+    comp.inputCOMPConnectors = [SimpleNamespace(index=0)]
+    comp.outputCOMPConnectors = []
+    comp.customPages = [
+        SimpleNamespace(name="Controls", pars=[SimpleNamespace(name="Speed")]),
+    ]
+    control = make_control({comp.path: comp}.get)
+
+    result = control.execute(
+        {"name": "ops.inspect", "input": {"operator_path": comp.path, "max_items": 8}}
+    )
+
+    assert result["family"] == "COMP"
+    assert result["details"] == {
+        "child_count": 3,
+        "inputs": [{"index": 0, "operator": "in1", "family": "TOP"}],
+        "outputs": [{"index": 0, "operator": "out1", "family": "CHOP"}],
+        "hierarchy_inputs": 1,
+        "hierarchy_outputs": 0,
+        "custom_pages": [{"name": "Controls", "parameters": ["Speed"]}],
+    }
+    with pytest.raises(module.AgentCommandError, match="result_too_large"):
+        control.execute(
+            {"name": "ops.inspect", "input": {"operator_path": comp.path, "max_items": 3}}
+        )
+
+
 def test_family_inspection_rejects_unsupported_unavailable_and_overflow() -> None:
-    comp = inspection_operator("/project1/comp", "COMP")
+    comp = inspection_operator("/project1/comp", "UNKNOWN")
     chop = inspection_operator("/project1/chop", "CHOP")
     chop.numChans, chop.numSamples, chop.rate = 2, 1, 60.0
     chop.start, chop.end, chop.isTimeSlice, chop.export = 0.0, 0.0, False, False

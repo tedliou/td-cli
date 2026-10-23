@@ -107,7 +107,7 @@ class OperatorControl:
     MAX_HIERARCHY_TRAVERSAL = 1000
     MAX_INSPECTION_STRING_BYTES = 4096
     MAX_TOX_FILE_BYTES = 67_108_864
-    INSPECTION_FAMILIES = ("CHOP", "DAT", "TOP", "SOP", "POP", "MAT")
+    INSPECTION_FAMILIES = ("CHOP", "DAT", "TOP", "SOP", "POP", "MAT", "COMP")
 
     def __init__(self, operator_lookup, operator_catalog, protected_path=None, passive_lookup=None):
         self.operator_lookup = operator_lookup
@@ -260,6 +260,44 @@ class OperatorControl:
     @staticmethod
     def _inspect_mat(_operator, _max_items):
         return {}
+
+    def _inspect_comp(self, operator, max_items):
+        """Summarize a COMP's interface: connectors by In/Out Operator, children, custom pages."""
+
+        def connectors(items, inner_name):
+            result = []
+            for connector in items:
+                inner = getattr(connector, inner_name, None)
+                result.append(
+                    {
+                        "index": self._nonnegative_integer(connector.index),
+                        "operator": None if inner is None else self._inspection_string(inner.name),
+                        "family": None if inner is None else str(inner.family),
+                    }
+                )
+            return result
+
+        inputs = list(operator.inputConnectors)
+        outputs = list(operator.outputConnectors)
+        pages = list(operator.customPages)
+        page_parameters = [list(page.pars) for page in pages]
+        self._require_inspection_bound(
+            len(inputs) + len(outputs) + len(pages) + sum(map(len, page_parameters)), max_items
+        )
+        return {
+            "child_count": len(operator.children),
+            "inputs": connectors(inputs, "inOP"),
+            "outputs": connectors(outputs, "outOP"),
+            "hierarchy_inputs": len(operator.inputCOMPConnectors),
+            "hierarchy_outputs": len(operator.outputCOMPConnectors),
+            "custom_pages": [
+                {
+                    "name": self._inspection_string(page.name),
+                    "parameters": [self._inspection_string(item.name) for item in parameters],
+                }
+                for page, parameters in zip(pages, page_parameters, strict=True)
+            ],
+        }
 
     @classmethod
     def _inspection_bounds(cls, operator):

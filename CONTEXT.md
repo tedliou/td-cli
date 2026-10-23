@@ -57,7 +57,7 @@ A top-to-bottom parent/child connection between compatible Object COMPs or compa
 _Avoid_: regular wire, COMP data connection
 
 **Operator Family Inspection**:
-A bounded, read-only snapshot of the latest cached CHOP, DAT, TOP, SOP, POP, or MAT family metadata for one Operator. It does not force a cook, return family content, or replace common Operator state, Parameter, connection, or DAT content Commands.
+A bounded, read-only snapshot of the latest cached CHOP, DAT, TOP, SOP, POP, MAT, or COMP family metadata for one Operator. It does not force a cook, return family content, or replace common Operator state, Parameter, connection, or DAT content Commands.
 _Avoid_: Operator dump, arbitrary attribute inspection, family content preview
 
 **Trusted TOX Import**:

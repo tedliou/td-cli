@@ -283,13 +283,20 @@ is rejected with `operator_family_mismatch` (before 0.10 such COMP pairs were
 accepted because both ends were COMPs).
 
 `ops.inspect` is a passive, batchable Operator Family Inspection for CHOP, DAT,
-TOP, SOP, POP, and MAT. Its `family` discriminator selects a strict typed
+TOP, SOP, POP, MAT, and COMP. Its `family` discriminator selects a strict typed
 `details` object; common cached memory, cook timing, Display, and Render
 metadata is returned alongside it. Variable-length CHOP channel and SOP
 attribute/group names are bounded by `--max-items` (default 100, maximum 1000)
 and overflow fails without truncation. It never downloads pixels, geometry, POP
 buffers, DAT content, or arbitrary Python objects and never explicitly cooks an
 Operator. Existing dedicated Commands remain the content and mutation seams.
+For a COMP, `details` summarizes its interface: `child_count` (direct children;
+list them with `ops children`), `inputs` and `outputs` as `{index, operator,
+family}` naming the In or Out Operator behind each regular connector,
+`hierarchy_inputs`/`hierarchy_outputs` counts, and `custom_pages` as `{name,
+parameters}` with parameter names only. Connectors, pages, and their parameter
+names together count against `--max-items`. Agents older than this Release
+reject COMPs with `operator_family_unsupported`.
 
 Use `ops state set /project1/geo/shape --display --render` to enable SOP geometry flags; `--no-display` and `--no-render` clear them. `ops state get` reads both flags back. Display selects viewer content; Render selects geometry for rendering. The Geometry COMP and Render TOP must also be configured. These flags do not themselves stop cooking or free memory.
 

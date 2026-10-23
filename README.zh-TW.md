@@ -238,9 +238,13 @@ family，所以 TOP 可以接進輸入為 In TOP 的元件，元件的 Out TOP �
 COMP 也依同一規則：Out TOP connector 不能接 In CHOP connector，沒有 In／Out Operator 的 COMP
 connector 以 `operator_family_mismatch` 拒絕（0.10 之前兩端都是 COMP 時一律接受）。
 
-`ops.inspect` 是 CHOP、DAT、TOP、SOP、POP、MAT 的被動有界讀取。它不下載 pixels、geometry、
+`ops.inspect` 是 CHOP、DAT、TOP、SOP、POP、MAT、COMP 的被動有界讀取。它不下載 pixels、geometry、
 POP buffers、DAT content 或 Python objects，也不主動 cook。可變長度資料受 `--max-items`
-限制（預設 100、最高 1000），溢位會失敗而不截斷。
+限制（預設 100、最高 1000），溢位會失敗而不截斷。COMP 的 `details` 摘要其介面：`child_count`
+（直屬子節點數，清單請用 `ops children`）、`inputs`／`outputs` 以 `{index, operator, family}` 指出每個
+一般 connector 背後的 In／Out Operator、`hierarchy_inputs`／`hierarchy_outputs` 數量，以及只列參數名稱的
+`custom_pages`（`{name, parameters}`）。connector、page 與參數名稱合計受 `--max-items` 限制。比本 Release
+舊的 Agent 會以 `operator_family_unsupported` 拒絕 COMP。
 
 以 `ops state set /project1/geo/shape --display --render` 啟用 SOP 幾何旗標，`--no-display` 與 `--no-render` 關閉。`ops state get` 可讀回兩者。Display 選擇檢視內容，Render 選擇算圖幾何；仍須設定 Geometry COMP 與 Render TOP。這些旗標本身不會停止 cook 或釋放記憶體。
 
