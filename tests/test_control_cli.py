@@ -81,6 +81,17 @@ def test_project_save_submits_explicit_path_and_digest(monkeypatch) -> None:
     }
 
 
+def test_project_save_accepts_uppercase_digest_from_get_filehash(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+    digest = "C68E5B03" + "AB" * 28
+    result = CliRunner().invoke(
+        cli.app,
+        ["--json", "project", "save", "E:/work/project.toe", "--expected-sha256", digest],
+    )
+    assert result.exit_code == 0, result.output
+    assert FakeDaemonClient.submitted["input"]["expected_sha256"] == "c68e5b03" + "ab" * 28
+
+
 def test_ops_get_submits_typed_command_and_emits_protocol_envelope(monkeypatch) -> None:
     monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
 

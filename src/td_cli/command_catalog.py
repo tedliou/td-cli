@@ -548,6 +548,12 @@ class ProjectSaveInput(StrictModel):
     expected_path: str
     expected_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
 
+    @field_validator("expected_sha256", mode="before")
+    @classmethod
+    def lowercase_digest(cls, value: Any) -> Any:
+        # PowerShell Get-FileHash prints uppercase hex; the digest itself is case-insensitive.
+        return value.lower() if isinstance(value, str) else value
+
     @field_validator("expected_path")
     @classmethod
     def current_local_toe(cls, value: str) -> str:
