@@ -10,7 +10,7 @@
 ## 變更
 
 - `td_cli.client.ensure_running` 只在需要啟動 Daemon 時才 import Daemon。`ENDPOINT` 移到 `td_cli.daemon.runtime_files`。`test_cli_startup_does_not_import_the_daemon_server_stack` 會守住「import CLI 時不載入 Daemon 伺服器套件」這件事。
-- `td` 改用 onedir 打包：`versions\<版本>\td.exe` 與 `td-runtime\` 並存。`td-daemon`、`td-agent` 不會頻繁啟動，維持 onefile。release zip 會收錄 `td-runtime\` 下的所有檔案，`install.ps1` 照常逐檔驗證。
+- `td` 改用 onedir 打包：`versions\<版本>\td.exe` 與 `td-runtime\` 並存。`td-daemon`、`td-agent` 不會頻繁啟動，維持 onefile。release zip 會收錄整個 td bundle（`td.exe` 與 `td-runtime\`），`install.ps1` 照常逐檔驗證。
 - 指令的輸入與輸出不變。
 
 ## 量測（同一台機器，PowerShell `Measure-Command`）
