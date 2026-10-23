@@ -314,8 +314,13 @@ class RenameOperatorInput(OperatorInput):
 
 
 class DestroyOperatorInput(OperatorInput):
-    recursive: bool = False
-    allow_connected: bool = False
+    recursive: bool = Field(
+        default=False, description="Also destroy a non-empty COMP and its whole subtree."
+    )
+    allow_connected: bool = Field(
+        default=False,
+        description="Destroy even when wired; the result lists the removed detached_connections.",
+    )
     max_operators: int = Field(default=256, ge=1, le=1000)
 
 
@@ -337,7 +342,10 @@ class CopyOperatorInput(StructuralDestinationInput):
 
 
 class MoveOperatorInput(StructuralDestinationInput):
-    allow_connected: bool = False
+    allow_connected: bool = Field(
+        default=False,
+        description="Move even when wired across the boundary; the result lists detached_connections.",
+    )
 
 
 def _valid_local_windows_path(value: str) -> str:
@@ -552,7 +560,9 @@ class ProjectMetadataInput(StrictModel):
 
 class ProjectSaveInput(StrictModel):
     expected_path: str
-    expected_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    expected_sha256: str = Field(
+        pattern=r"^[0-9a-f]{64}$", description="SHA-256 hex of the current .toe on disk."
+    )
 
     @field_validator("expected_sha256", mode="before")
     @classmethod
@@ -590,8 +600,11 @@ class BatchItem(StrictModel):
         return self
 
 
+BATCH_MAX_COMMANDS = 16
+
+
 class BatchExecuteInput(StrictModel):
-    commands: list[BatchItem] = Field(min_length=1, max_length=16)
+    commands: list[BatchItem] = Field(min_length=1, max_length=BATCH_MAX_COMMANDS)
 
 
 def _identity_result(result: dict[str, Any]) -> dict[str, Any]:
