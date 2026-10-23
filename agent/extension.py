@@ -100,6 +100,7 @@ class OperatorControl:
     )
     MAX_DAT_CONTENT_BYTES = 32_768
     MAX_CHOP_VALUES = 4096
+    MAX_SUMMARY_BOUNDARY_CONNECTIONS = 512
     MAX_TABLE_ROWS = 256
     MAX_TABLE_COLUMNS = 256
     MAX_TABLE_CELLS = 4096
@@ -1127,6 +1128,11 @@ class OperatorControl:
         connections = self._subtree_connections(subtree)
         if connections and not payload["allow_connected"]:
             raise AgentCommandError("operator_connected")
+        summary = None
+        if payload.get("inventory") == "summary":
+            connections = self._outside_connections(subtree, connections)
+            self._require_summary_boundary(connections)
+            summary = self._inventory_summary(subtree, operator)
         try:
             operator.destroy()
         except Exception as error:
@@ -1138,6 +1144,7 @@ class OperatorControl:
         return {
             "operator_path": path,
             "operator_count": len(subtree),
+            **(summary or {}),
             "detached_connections": connections,
             "destroyed": True,
         }
@@ -1158,6 +1165,9 @@ class OperatorControl:
         if source.docked and not payload["include_docked"]:
             raise AgentCommandError("operator_docked")
         unreplicated = self._boundary_connections(source_subtree)
+        summary = payload.get("inventory") == "summary"
+        if summary:
+            self._require_summary_boundary(unreplicated)
         before = {str(child.path) for child in target_parent.children}
         created = None
         created_roots = []
@@ -1203,6 +1213,7 @@ class OperatorControl:
             "source_path": str(source.path),
             **self._operator_result(created),
             "operator_count": len(affected),
+            **(self._inventory_summary(affected, created) if summary else {}),
             "include_docked": payload["include_docked"],
             "unreplicated_connections": unreplicated,
         }
@@ -1219,6 +1230,9 @@ class OperatorControl:
         detached = self._boundary_connections(source_subtree)
         if detached and not payload["allow_connected"]:
             raise AgentCommandError("operator_connected")
+        summary = payload.get("inventory") == "summary"
+        if summary:
+            self._require_summary_boundary(detached)
         copied = self._copy_operator(
             {
                 "source_path": old_path,
@@ -1228,6 +1242,7 @@ class OperatorControl:
                 "node_y": payload.get("node_y"),
                 "include_docked": False,
                 "max_operators": payload["max_operators"],
+                "inventory": payload.get("inventory", "full"),
             }
         )
         created = self.operator_lookup(copied["path"])
@@ -1251,6 +1266,9 @@ class OperatorControl:
             "op_type": copied["op_type"],
             "family": copied["family"],
             "operator_count": copied["operator_count"],
+            **(
+                {key: copied[key] for key in ("inventory_sha256", "type_counts")} if summary else {}
+            ),
             "detached_connections": detached,
             "identity_preserved": False,
             "moved": True,
@@ -1792,12 +1810,36 @@ class OperatorControl:
 
     @classmethod
     def _boundary_connections(cls, subtree):
+        return cls._outside_connections(subtree, cls._subtree_connections(subtree))
+
+    @staticmethod
+    def _outside_connections(subtree, connections):
         paths = {str(operator.path) for operator in subtree}
         return [
             edge
-            for edge in cls._subtree_connections(subtree)
+            for edge in connections
             if (edge["source_path"] in paths) != (edge["target_path"] in paths)
         ]
+
+    def _require_summary_boundary(self, connections):
+        # A summary lists boundary connections in full, so it must fit before anything changes.
+        if len(connections) > self.MAX_SUMMARY_BOUNDARY_CONNECTIONS:
+            raise AgentCommandError("result_too_large")
+
+    @staticmethod
+    def _inventory_summary(operators, root):
+        """Digest the affected Operators by path relative to the root's parent and type."""
+        prefix = str(root.path).rsplit("/", 1)[0] + "/"
+        rows = sorted(
+            (str(operator.path)[len(prefix) :], str(operator.OPType)) for operator in operators
+        )
+        inventory = [{"path": path, "op_type": op_type} for path, op_type in rows]
+        canonical = json.dumps(inventory, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+        counts = collections.Counter(row["op_type"] for row in inventory)
+        return {
+            "inventory_sha256": hashlib.sha256(canonical.encode("ascii")).hexdigest(),
+            "type_counts": dict(sorted(counts.items())),
+        }
 
     def _rollback_created(self, roots):
         paths = [str(root.path) for root in roots]
@@ -2883,6 +2925,9 @@ class AgentExt:
         "project.save",
         "ops.tox.import:root_child",
         "ops.tox.import:inventory_summary",
+        "ops.destroy:inventory_summary",
+        "ops.copy:inventory_summary",
+        "ops.move:inventory_summary",
     )
 
     def __init__(self, owner_comp, operator_lookup=None, project_info=None, app_info=None):

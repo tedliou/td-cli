@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import PureWindowsPath
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -139,8 +139,8 @@ class ConnectionsInput(OperatorInput):
 MAX_INSPECTION_ITEMS = 100
 MAX_INSPECTION_STRING_BYTES = 4096
 MAX_TOX_FILE_BYTES = 67_108_864
-MAX_TOX_FULL_INVENTORY_OPERATORS = 1000
-MAX_TOX_OPERATORS = 10_000
+MAX_FULL_INVENTORY_OPERATORS = 1000
+MAX_SUMMARY_INVENTORY_OPERATORS = 10_000
 
 
 class InspectOperatorInput(OperatorInput):
@@ -347,7 +347,25 @@ class RenameOperatorInput(OperatorInput):
     _new_name = field_validator("new_name")(_valid_operator_name)
 
 
-class DestroyOperatorInput(OperatorInput):
+class InventoryModeInput(StrictModel):
+    max_operators: int = Field(default=256, ge=1, le=MAX_SUMMARY_INVENTORY_OPERATORS)
+    # Defaults are omitted from the wire so a newer CLI still talks to an older Daemon.
+    inventory: Literal["full", "summary"] = Field(
+        default="full",
+        exclude_if=lambda value: value == "full",
+        description="summary: report a digest and type counts instead of every Operator.",
+    )
+
+    @model_validator(mode="after")
+    def full_inventory_fits_one_outcome(self) -> Self:
+        if self.inventory == "full" and self.max_operators > MAX_FULL_INVENTORY_OPERATORS:
+            raise ValueError(
+                f"max_operators above {MAX_FULL_INVENTORY_OPERATORS} requires inventory 'summary'"
+            )
+        return self
+
+
+class DestroyOperatorInput(OperatorInput, InventoryModeInput):
     recursive: bool = Field(
         default=False, description="Also destroy a non-empty COMP and its whole subtree."
     )
@@ -355,16 +373,14 @@ class DestroyOperatorInput(OperatorInput):
         default=False,
         description="Destroy even when wired; the result lists the removed detached_connections.",
     )
-    max_operators: int = Field(default=256, ge=1, le=1000)
 
 
-class StructuralDestinationInput(StrictModel):
+class StructuralDestinationInput(InventoryModeInput):
     source_path: str
     target_parent_path: str
     new_name: str
     node_x: int | None = Field(default=None, ge=-32768, le=32767)
     node_y: int | None = Field(default=None, ge=-32768, le=32767)
-    max_operators: int = Field(default=256, ge=1, le=1000)
 
     _source_path = field_validator("source_path")(_valid_operator_path)
     _target_parent_path = field_validator("target_parent_path")(_valid_operator_path)
@@ -395,7 +411,7 @@ def _valid_local_windows_path(value: str) -> str:
     return value
 
 
-class ImportToxInput(StrictModel):
+class ImportToxInput(InventoryModeInput):
     parent_path: str
     tox_path: str
     allowlist_root: str
@@ -403,12 +419,7 @@ class ImportToxInput(StrictModel):
     trusted: Literal[True]
     replace: bool = False
     max_file_bytes: int = Field(default=MAX_TOX_FILE_BYTES, ge=1, le=MAX_TOX_FILE_BYTES)
-    max_operators: int = Field(default=256, ge=1, le=MAX_TOX_OPERATORS)
-    # Defaults are omitted from the wire so a newer CLI still talks to an older Daemon.
     root_child: str | None = Field(default=None, exclude_if=lambda value: value is None)
-    inventory: Literal["full", "summary"] = Field(
-        default="full", exclude_if=lambda value: value == "full"
-    )
 
     _parent_path = field_validator("parent_path")(_valid_operator_path)
     _tox_path = field_validator("tox_path")(_valid_local_windows_path)
@@ -426,15 +437,6 @@ class ImportToxInput(StrictModel):
     @classmethod
     def root_child_is_an_operator_name(cls, value: str | None) -> str | None:
         return None if value is None else _valid_operator_name(value)
-
-    @model_validator(mode="after")
-    def full_inventory_fits_one_outcome(self) -> ImportToxInput:
-        if self.inventory == "full" and self.max_operators > MAX_TOX_FULL_INVENTORY_OPERATORS:
-            raise ValueError(
-                f"max_operators above {MAX_TOX_FULL_INVENTORY_OPERATORS} requires "
-                "inventory 'summary'"
-            )
-        return self
 
 
 class ConnectOperatorsInput(StrictModel):
@@ -702,6 +704,10 @@ def _connections_result(result: dict[str, Any]) -> dict[str, Any]:
             for item in result["inputs"]
         ]
     return result
+
+
+def _inventory_summary_feature(name: str) -> tuple[str, Callable[[dict[str, Any]], bool]]:
+    return (f"{name}:inventory_summary", lambda value: value.get("inventory") == "summary")
 
 
 def _copy_result(result: dict[str, Any]) -> dict[str, Any]:
@@ -1102,6 +1108,7 @@ COMMAND_CATALOG = CommandCatalog(
             DestroyOperatorInput,
             CommandEffect.MUTATION,
             ExecutionClass.BOUNDED_MUTATION,
+            features=(_inventory_summary_feature("ops.destroy"),),
         ),
         CommandDefinition(
             "ops.copy",
@@ -1109,9 +1116,14 @@ COMMAND_CATALOG = CommandCatalog(
             CommandEffect.MUTATION,
             ExecutionClass.BOUNDED_MUTATION,
             _copy_result,
+            features=(_inventory_summary_feature("ops.copy"),),
         ),
         CommandDefinition(
-            "ops.move", MoveOperatorInput, CommandEffect.MUTATION, ExecutionClass.BOUNDED_MUTATION
+            "ops.move",
+            MoveOperatorInput,
+            CommandEffect.MUTATION,
+            ExecutionClass.BOUNDED_MUTATION,
+            features=(_inventory_summary_feature("ops.move"),),
         ),
         CommandDefinition(
             "ops.tox.import",

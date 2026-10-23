@@ -1158,3 +1158,49 @@ def test_project_snapshot_submits_paging_and_connections(monkeypatch) -> None:
             "include_connections": True,
         },
     }
+
+
+def test_structural_commands_submit_a_summary_inventory(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+    destroy = CliRunner().invoke(
+        cli.app,
+        [
+            "--json",
+            "ops",
+            "destroy",
+            "/project1/big",
+            "--recursive",
+            "--max-operators",
+            "5000",
+            "--inventory",
+            "summary",
+        ],
+    )
+    assert destroy.exit_code == 0, destroy.output
+    assert FakeDaemonClient.submitted["input"] == {
+        "operator_path": "/project1/big",
+        "recursive": True,
+        "allow_connected": False,
+        "max_operators": 5000,
+        "inventory": "summary",
+    }
+    move = CliRunner().invoke(
+        cli.app,
+        [
+            "--json",
+            "ops",
+            "move",
+            "/project1/big",
+            "/project1/group",
+            "big",
+            "--inventory",
+            "summary",
+        ],
+    )
+    assert move.exit_code == 0, move.output
+    assert FakeDaemonClient.submitted["input"]["inventory"] == "summary"
+    copy = CliRunner().invoke(
+        cli.app, ["--json", "ops", "copy", "/project1/big", "/project1/group", "big2"]
+    )
+    assert copy.exit_code == 0, copy.output
+    assert "inventory" not in FakeDaemonClient.submitted["input"]

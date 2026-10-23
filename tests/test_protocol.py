@@ -1107,3 +1107,36 @@ def test_snapshot_paging_and_connections_need_an_advertising_agent() -> None:
         ).model_dump(mode="json")
         assert {**command["input"], **option} == command["input"]
         assert "project.snapshot:options" in COMMAND_CATALOG.required_capabilities(command)
+
+
+@pytest.mark.parametrize(
+    ("name", "identity"),
+    [
+        ("ops.destroy", {"operator_path": "/project1/big", "recursive": True}),
+        (
+            "ops.copy",
+            {"source_path": "/project1/big", "target_parent_path": "/project1", "new_name": "c"},
+        ),
+        (
+            "ops.move",
+            {"source_path": "/project1/big", "target_parent_path": "/project1", "new_name": "m"},
+        ),
+    ],
+)
+def test_structural_summary_inventory_admits_large_subtrees_from_advertising_agents(
+    name: str, identity: dict[str, object]
+) -> None:
+    plain = Command.model_validate({"name": name, "input": identity}).model_dump(mode="json")
+    assert "inventory" not in plain["input"]
+    assert f"{name}:inventory_summary" not in COMMAND_CATALOG.required_capabilities(plain)
+    with pytest.raises(ValidationError, match="requires inventory 'summary'"):
+        Command.model_validate({"name": name, "input": {**identity, "max_operators": 1001}})
+    summary = Command.model_validate(
+        {"name": name, "input": {**identity, "max_operators": 10_000, "inventory": "summary"}}
+    ).model_dump(mode="json")
+    assert summary["input"]["inventory"] == "summary"
+    assert f"{name}:inventory_summary" in COMMAND_CATALOG.required_capabilities(summary)
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {"name": name, "input": {**identity, "max_operators": 10_001, "inventory": "summary"}}
+        )

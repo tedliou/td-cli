@@ -367,6 +367,18 @@ td --json --instance <selector> ops destroy /project1/group/moved --recursive --
 三种操作默认最多影响 256 Operators（最高 1000）。Copy／move 会验证精确结果，并在失败时移除
 新 copy；无法证明最终状态时回传独立 rollback／uncertain-outcome error。
 
+更大的子树（例如以 `ops tox import --inventory summary` 安装的组件）在 destroy、copy、move 时需加
+`--inventory summary`（`--max-operators` 最高 10000）。结果改为 `operator_count`、`type_counts` 与
+`inventory_sha256`（`{path, op_type}` 各行按 `path` 排序后，以 canonical JSON（排序 key、无空白、ASCII）
+计算的 SHA-256；path 相对于被删除 Operator 或新 copy 的 parent）。只列出跨越子树边界的连线：destroy 的
+`detached_connections` 不含子树内部的连线。边界连线超过 512 条时，在任何修改之前返回
+`result_too_large`。各 Command 需要 Agent 声明 `ops.destroy:inventory_summary`、
+`ops.copy:inventory_summary` 或 `ops.move:inventory_summary`：
+
+```powershell
+td --json --instance <selector> ops destroy /project1/projection/kantanMapper --recursive --allow-connected --inventory summary --max-operators 5000
+```
+
 <!-- doc-section: trusted-tox-import -->
 
 ## Trusted TOX Import

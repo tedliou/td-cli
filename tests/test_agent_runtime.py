@@ -2525,6 +2525,74 @@ def test_destroy_requires_explicit_subtree_and_connection_authorization() -> Non
     }
 
 
+def _wired_group():
+    root = FakeOperator("/project1/group")
+    child = FakeOperator("/project1/group/child", op_type="noiseTOP", family="TOP", outputs=1)
+    target = FakeOperator("/project1/group/target", op_type="nullTOP", family="TOP", inputs=1)
+    outside = FakeOperator("/project1/outside", family="TOP", inputs=1)
+    child.outputConnectors[0].connect(target.inputConnectors[0])
+    child.outputConnectors[0].connect(outside.inputConnectors[0])
+    root.children = [child, target]
+    operators = {item.path: item for item in (root, child, target, outside)}
+    lookup = lambda path: (
+        operators.get(path)
+        if operators.get(path) is not None and not operators[path].destroyed
+        else None
+    )
+    control = OperatorControl(lookup, RUNTIME_OPERATOR_CATALOG, protected_path="/project1/td_agent")
+    return control, lookup
+
+
+def _summary_destroy(control):
+    return control.execute(
+        {
+            "name": "ops.destroy",
+            "input": {
+                "operator_path": "/project1/group",
+                "recursive": True,
+                "allow_connected": True,
+                "max_operators": 10,
+                "inventory": "summary",
+            },
+        }
+    )
+
+
+def test_summary_destroy_reports_a_digest_and_only_boundary_connections() -> None:
+    control, lookup = _wired_group()
+    result = _summary_destroy(control)
+    inventory = [
+        {"path": "group", "op_type": "base"},
+        {"path": "group/child", "op_type": "noiseTOP"},
+        {"path": "group/target", "op_type": "nullTOP"},
+    ]
+    canonical = json.dumps(inventory, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+    assert result == {
+        "operator_path": "/project1/group",
+        "operator_count": 3,
+        "inventory_sha256": hashlib.sha256(canonical.encode("ascii")).hexdigest(),
+        "type_counts": {"base": 1, "noiseTOP": 1, "nullTOP": 1},
+        "detached_connections": [
+            {
+                "source_path": "/project1/group/child",
+                "output_index": 0,
+                "target_path": "/project1/outside",
+                "input_index": 0,
+            }
+        ],
+        "destroyed": True,
+    }
+    assert lookup("/project1/group") is None
+
+
+def test_summary_destroy_fails_before_mutation_when_boundary_connections_overflow() -> None:
+    control, lookup = _wired_group()
+    control.MAX_SUMMARY_BOUNDARY_CONNECTIONS = 0
+    with pytest.raises(module.AgentCommandError, match="result_too_large"):
+        _summary_destroy(control)
+    assert lookup("/project1/group") is not None
+
+
 @pytest.mark.parametrize("path", ["/", "/project1", "/project1/td_agent"])
 def test_destroy_protects_root_agent_component_and_its_ancestors(path: str) -> None:
     operator = FakeOperator(path)
@@ -2801,6 +2869,46 @@ def test_move_copies_then_destroys_and_reports_detached_boundary_connections() -
     }
     assert lookup("/project1/source") is None
     assert lookup("/project1/group/moved") is not None
+
+
+def test_summary_move_reports_the_new_location_digest() -> None:
+    source = FakeOperator("/project1/source", op_type="constant", family="TOP")
+    target_parent = FakeOperator("/project1/group")
+    operators = {item.path: item for item in (source, target_parent)}
+
+    def copy(source_operator, *, name, includeDocked):
+        created = FakeOperator(
+            f"{target_parent.path}/{name}", op_type=source_operator.OPType, family="TOP"
+        )
+        operators[created.path] = created
+        target_parent.children.append(created)
+        return created
+
+    target_parent.copy = copy
+    lookup = lambda path: (
+        operators.get(path)
+        if operators.get(path) is not None and not operators[path].destroyed
+        else None
+    )
+    control = OperatorControl(lookup, RUNTIME_OPERATOR_CATALOG, protected_path="/project1/td_agent")
+    result = control.execute(
+        {
+            "name": "ops.move",
+            "input": {
+                "source_path": source.path,
+                "target_parent_path": target_parent.path,
+                "new_name": "moved",
+                "allow_connected": False,
+                "max_operators": 10,
+                "inventory": "summary",
+            },
+        }
+    )
+    canonical = '[{"op_type":"constant","path":"moved"}]'
+    assert result["inventory_sha256"] == hashlib.sha256(canonical.encode("ascii")).hexdigest()
+    assert result["type_counts"] == {"constant": 1}
+    assert result["detached_connections"] == []
+    assert result["moved"] is True
 
 
 def test_copy_rolls_back_an_inexact_touchdesigner_result() -> None:

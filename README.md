@@ -436,6 +436,22 @@ error is returned when the requested final state cannot be proven. Neither
 operation promises to rewrite DAT string literals, external systems, or every
 path-bearing expression/reference.
 
+Larger subtrees, such as a component installed with `ops tox import --inventory
+summary`, need `--inventory summary` on destroy, copy, or move (`--max-operators`
+up to 10000). The result then carries `operator_count`, `type_counts`, and
+`inventory_sha256` (the SHA-256 of the canonical JSON, sorted keys with no
+whitespace and ASCII, of `{path, op_type}` rows sorted by `path`, each path
+relative to the parent of the destroyed Operator or of the new copy). Only boundary
+connections are listed: destroy's `detached_connections` omits wires inside the
+subtree. More than 512 boundary connections fail with `result_too_large` before
+anything changes. Each command needs an Agent advertising
+`ops.destroy:inventory_summary`, `ops.copy:inventory_summary`, or
+`ops.move:inventory_summary`:
+
+```powershell
+td --json --instance <selector> ops destroy /project1/projection/kantanMapper --recursive --allow-connected --inventory summary --max-operators 5000
+```
+
 <!-- doc-section: trusted-tox-import -->
 
 Trusted TOX Import accepts one existing absolute local `.tox` beneath an
