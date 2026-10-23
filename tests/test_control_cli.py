@@ -1072,3 +1072,33 @@ def test_dat_text_get_offset_requests_a_chunk(monkeypatch) -> None:
         "name": "dat.text.get",
         "input": {"operator_path": "/project1/config", "max_bytes": 32768, "offset": 32768},
     }
+
+
+def test_chop_values_get_submits_channels_and_sample_range(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "DaemonClient", FakeDaemonClient)
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "--json",
+            "chop",
+            "values",
+            "get",
+            "/project1/osc",
+            "--channels",
+            "tx,ty",
+            "--sample-offset",
+            "0",
+            "--sample-count",
+            "8",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert FakeDaemonClient.submitted == {
+        "name": "chop.values.get",
+        "input": {
+            "operator_path": "/project1/osc",
+            "channels": ["tx", "ty"],
+            "sample_offset": 0,
+            "sample_count": 8,
+        },
+    }

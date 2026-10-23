@@ -1036,3 +1036,19 @@ def test_text_get_offset_is_optional_on_the_wire_and_needs_an_advertising_agent(
     assert chunked["input"]["offset"] == 0
     assert "dat.text.get:offset" in COMMAND_CATALOG.required_capabilities(chunked)
     assert "dat.text.get:offset" not in COMMAND_CATALOG.required_capabilities(plain)
+
+
+def test_chop_values_is_a_bounded_batchable_read() -> None:
+    assert COMMAND_CATALOG.effect("chop.values.get") == "read_only"
+    assert "chop.values.get" in COMMAND_CATALOG.batch_names
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {"name": "chop.values.get", "input": {"operator_path": "/p", "sample_offset": 0}}
+        )
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {
+                "name": "chop.values.get",
+                "input": {"operator_path": "/p", "sample_offset": 0, "sample_count": 4097},
+            }
+        )

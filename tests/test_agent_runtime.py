@@ -4572,3 +4572,67 @@ def test_text_get_with_offset_reads_large_text_in_whole_character_chunks() -> No
         read(3, 32)
     with pytest.raises(module.AgentCommandError, match="result_too_large"):
         read(2, 2)
+
+
+class FakeChannel:
+    def __init__(self, name: str, samples: list[float]) -> None:
+        self.name = name
+        self._samples = samples
+
+    def eval(self):
+        return self._samples[-1]
+
+    def __getitem__(self, index: int) -> float:
+        return self._samples[index]
+
+
+def chop_with(path: str, channels: dict[str, list[float]]):
+    chop = FakeOperator(path, op_type="selectCHOP", family="CHOP")
+    chop.chans = lambda: [FakeChannel(name, samples) for name, samples in channels.items()]
+    chop.numSamples = len(next(iter(channels.values())))
+    chop.rate = 60.0
+    return chop
+
+
+def test_chop_values_reads_current_values_without_mutating(monkeypatch) -> None:
+    monkeypatch.setattr(builtins, "absTime", SimpleNamespace(frame=1234), raising=False)
+    chop = chop_with("/project1/osc", {"tx": [0.0, 0.12], "ty": [1.0, float("nan")]})
+    control = make_control({chop.path: chop}.get)
+
+    result = control.execute({"name": "chop.values.get", "input": {"operator_path": chop.path}})
+
+    assert result == {
+        "operator_path": chop.path,
+        "frame": 1234,
+        "values": {"tx": 0.12, "ty": None},
+        "non_finite_count": 1,
+    }
+
+
+def test_chop_values_reads_a_bounded_sample_range_of_selected_channels() -> None:
+    chop = chop_with("/project1/osc", {"tx": [0.0, 0.5, 1.0], "ty": [2.0, 3.0, 4.0]})
+    control = make_control({chop.path: chop}.get)
+
+    result = control.execute(
+        {
+            "name": "chop.values.get",
+            "input": {
+                "operator_path": chop.path,
+                "channels": ["ty"],
+                "sample_offset": 1,
+                "sample_count": 2,
+            },
+        }
+    )
+
+    assert result["values"] == {"ty": [3.0, 4.0]}
+    assert (result["sample_offset"], result["sample_rate"], result["total_samples"]) == (1, 60.0, 3)
+    with pytest.raises(module.AgentCommandError, match="chop_channel_not_found"):
+        control.execute(
+            {"name": "chop.values.get", "input": {"operator_path": chop.path, "channels": ["tz"]}}
+        )
+    not_chop = FakeOperator("/project1/top", family="TOP")
+    with pytest.raises(module.AgentCommandError, match="operator_family_unsupported"):
+        make_control({not_chop.path: not_chop}.get).execute(
+            {"name": "chop.values.get", "input": {"operator_path": not_chop.path}}
+        )

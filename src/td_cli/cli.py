@@ -36,6 +36,8 @@ ops_state_app = typer.Typer()
 ops_hierarchy_app = typer.Typer()
 ops_tox_app = typer.Typer()
 dat_app = typer.Typer()
+chop_app = typer.Typer()
+chop_values_app = typer.Typer()
 dat_text_app = typer.Typer()
 dat_table_app = typer.Typer()
 parameters_app = typer.Typer()
@@ -51,6 +53,8 @@ ops_app.add_typer(ops_state_app, name="state")
 ops_app.add_typer(ops_hierarchy_app, name="hierarchy")
 ops_app.add_typer(ops_tox_app, name="tox")
 app.add_typer(dat_app, name="dat")
+app.add_typer(chop_app, name="chop")
+chop_app.add_typer(chop_values_app, name="values")
 dat_app.add_typer(dat_text_app, name="text")
 dat_app.add_typer(dat_table_app, name="table")
 app.add_typer(parameters_app, name="parameters")
@@ -529,6 +533,38 @@ def ops_state_set(
         _fail(ctx, ClientError("invalid_arguments"))
     dedicated = {"operator_path": operator_path, **patch} if operator_path is not None else None
     _command(ctx, "ops.state.set", dedicated, input, input_file, no_wait, request_id)
+
+
+@chop_values_app.command("get")
+def chop_values_get(
+    ctx: typer.Context,
+    operator_path: Annotated[str | None, typer.Argument()] = None,
+    channels: Annotated[
+        str | None, typer.Option("--channels", help="Comma-separated channel names to read.")
+    ] = None,
+    sample_offset: Annotated[int | None, typer.Option("--sample-offset")] = None,
+    sample_count: Annotated[int | None, typer.Option("--sample-count")] = None,
+    input: Annotated[str | None, typer.Option("--input")] = None,
+    input_file: Annotated[str | None, typer.Option("--input-file")] = None,
+    no_wait: Annotated[bool, typer.Option("--no-wait")] = False,
+    request_id: Annotated[str | None, typer.Option("--request-id")] = None,
+) -> None:
+    options = {
+        "channels": channels.split(",") if channels is not None else None,
+        "sample_offset": sample_offset,
+        "sample_count": sample_count,
+    }
+    if any(value is not None for value in options.values()) and operator_path is None:
+        _fail(ctx, ClientError("invalid_arguments"))
+    dedicated = (
+        {
+            "operator_path": operator_path,
+            **{key: value for key, value in options.items() if value is not None},
+        }
+        if operator_path is not None
+        else None
+    )
+    _command(ctx, "chop.values.get", dedicated, input, input_file, no_wait, request_id)
 
 
 @dat_text_app.command("get")

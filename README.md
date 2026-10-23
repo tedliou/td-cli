@@ -528,6 +528,21 @@ DAT on failure; distinct unavailable, non-writable, rollback-failed, and
 uncertain-outcome errors preserve honest state. These Commands never execute
 DATs, import modules, evaluate content, or accept filesystem paths.
 
+CHOP channel values are read directly, without a temporary CHOP to DAT:
+
+```powershell
+td --json --instance <selector> chop values get /project1/noise1 --channels tx,ty
+td --json --instance <selector> chop values get /project1/noise1 --sample-offset 0 --sample-count 64
+```
+
+Without a sample range the result holds the current value of each channel plus
+the current `frame`; with `--sample-offset` and `--sample-count` (always given
+together) each channel holds that window of samples plus `sample_rate` and
+`total_samples`. `--channels` selects channels by exact name; an unknown name fails
+with `chop_channel_not_found`. NaN and infinite samples become `null`, counted in
+`non_finite_count`. At most 4096 values are returned per call; a larger request
+fails with `result_too_large` instead of truncating.
+
 <!-- doc-section: project-save -->
 ## Save the current project
 

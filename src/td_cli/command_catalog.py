@@ -206,6 +206,34 @@ class TextDatReadInput(OperatorInput):
     )
 
 
+MAX_CHOP_VALUES = 4096
+
+
+class ChopValuesInput(OperatorInput):
+    channels: list[Annotated[str, Field(min_length=1, max_length=256)]] | None = Field(
+        default=None,
+        min_length=1,
+        max_length=MAX_CHOP_VALUES,
+        exclude_if=lambda value: value is None,
+        description="Read only these channel names.",
+    )
+    sample_offset: int | None = Field(
+        default=None,
+        ge=0,
+        exclude_if=lambda value: value is None,
+        description="First sample index; with sample_count reads a range instead of current values.",
+    )
+    sample_count: int | None = Field(
+        default=None, ge=1, le=MAX_CHOP_VALUES, exclude_if=lambda value: value is None
+    )
+
+    @model_validator(mode="after")
+    def range_is_complete(self) -> ChopValuesInput:
+        if (self.sample_offset is None) != (self.sample_count is None):
+            raise ValueError("sample_offset and sample_count must be given together")
+        return self
+
+
 class TextDatSetInput(OperatorInput):
     text: str
 
@@ -915,6 +943,12 @@ COMMAND_CATALOG = CommandCatalog(
             features=(("dat.text.get:offset", lambda value: value.get("offset") is not None),),
         ),
         CommandDefinition(
+            "chop.values.get",
+            ChopValuesInput,
+            CommandEffect.READ_ONLY,
+            ExecutionClass.FAST_READ,
+        ),
+        CommandDefinition(
             "dat.text.set", TextDatSetInput, CommandEffect.MUTATION, ExecutionClass.BOUNDED_MUTATION
         ),
         CommandDefinition(
@@ -1107,6 +1141,7 @@ CommandInput = (
     | ConnectionsInput
     | InspectOperatorInput
     | SetOperatorStateInput
+    | ChopValuesInput
     | TextDatReadInput
     | TextDatSetInput
     | TableDatReadInput

@@ -95,6 +95,7 @@ ERROR_CATALOG = ErrorCatalog(
         "operator_family_unsupported",
         "operator_family_mismatch",
         "family_inspection_unavailable",
+        "chop_channel_not_found",
         "family_inspection_outcome_unknown",
         # Trusted TOX Import
         "tox_trust_required",

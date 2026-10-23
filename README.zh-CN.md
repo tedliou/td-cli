@@ -427,6 +427,19 @@ bytes 的完整字符，并附 `offset`、`next_offset`（读到结尾时为 `nu
 `text_sha256`；分段之间内容被修改时 sha256 会改变。offset 落在字符中间时返回 `invalid_arguments`。Mutation 会 read back 完整内容与尺寸，失败时恢复整份 DAT。这些 Command 不执行
 DAT、不 import module、不 evaluate content，也不接受 filesystem path。
 
+CHOP channel 值可直接读取，不需临时创建 CHOP to DAT：
+
+```powershell
+td --json --instance <selector> chop values get /project1/noise1 --channels tx,ty
+td --json --instance <selector> chop values get /project1/noise1 --sample-offset 0 --sample-count 64
+```
+
+未指定 sample 范围时返回每个 channel 的当前值与当前 `frame`；指定 `--sample-offset` 与
+`--sample-count`（两者须一起提供）时，每个 channel 返回该范围的 samples，并附 `sample_rate` 与
+`total_samples`。`--channels` 以完整名称选取 channel，名称不存在时返回 `chop_channel_not_found`。NaN
+与无限值以 `null` 表示，并计入 `non_finite_count`。每次最多返回 4096 个值，超过时返回
+`result_too_large`，不会截断。
+
 <!-- doc-section: project-save -->
 ## 保存当前项目
 

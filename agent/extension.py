@@ -68,6 +68,7 @@ class OperatorControl:
         "ops.state.get": "_get_operator_state",
         "ops.state.set": "_set_operator_state",
         "ops.tox.import": "_import_tox",
+        "chop.values.get": "_get_chop_values",
         "dat.text.get": "_get_text_dat",
         "dat.text.set": "_set_text_dat",
         "dat.table.get": "_get_table_dat",
@@ -97,6 +98,7 @@ class OperatorControl:
         ("render", "render", "boolean"),
     )
     MAX_DAT_CONTENT_BYTES = 32_768
+    MAX_CHOP_VALUES = 4096
     MAX_TABLE_ROWS = 256
     MAX_TABLE_COLUMNS = 256
     MAX_TABLE_CELLS = 4096
@@ -369,6 +371,54 @@ class OperatorControl:
         if not math.isfinite(number):
             raise AgentCommandError("family_inspection_unavailable")
         return number
+
+    def _get_chop_values(self, payload):
+        """Read current or ranged CHOP sample values without creating any Operator."""
+        operator = self._operator(payload)
+        if str(operator.family) != "CHOP":
+            raise AgentCommandError("operator_family_unsupported")
+        channels = list(operator.chans())
+        wanted = payload.get("channels")
+        if wanted is not None:
+            by_name = {str(channel.name): channel for channel in channels}
+            if any(name not in by_name for name in wanted):
+                raise AgentCommandError("chop_channel_not_found")
+            channels = [by_name[name] for name in wanted]
+        non_finite = 0
+
+        def number(value):
+            nonlocal non_finite
+            value = float(value)
+            if math.isfinite(value):
+                return value
+            non_finite += 1
+            return None
+
+        offset = payload.get("sample_offset")
+        if offset is None:
+            self._require_inspection_bound(len(channels), self.MAX_CHOP_VALUES)
+            values = {str(channel.name): number(channel.eval()) for channel in channels}
+            frame = getattr(getattr(builtins, "absTime", None), "frame", None)
+            return {
+                "operator_path": str(operator.path),
+                "frame": frame,
+                "values": values,
+                "non_finite_count": non_finite,
+            }
+        total = int(operator.numSamples)
+        indexes = range(offset, min(offset + payload["sample_count"], total))
+        self._require_inspection_bound(len(channels) * len(indexes), self.MAX_CHOP_VALUES)
+        return {
+            "operator_path": str(operator.path),
+            "sample_offset": offset,
+            "sample_rate": float(operator.rate),
+            "total_samples": total,
+            "values": {
+                str(channel.name): [number(channel[index]) for index in indexes]
+                for channel in channels
+            },
+            "non_finite_count": non_finite,
+        }
 
     def _get_text_dat(self, payload):
         # Any text-content DAT is readable, including Execute-family callbacks; writes stay
