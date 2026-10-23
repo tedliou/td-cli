@@ -1132,9 +1132,11 @@ class OperatorControl:
         if connections and not payload["allow_connected"]:
             raise AgentCommandError("operator_connected")
         summary = None
+        detached = connections
         if payload.get("inventory") == "summary":
-            connections = self._outside_connections(subtree, connections)
-            self._require_summary_boundary(connections)
+            # A summary reports only the wires that cross the destroyed subtree's boundary.
+            detached = self._outside_connections(subtree, connections)
+            self._require_summary_boundary(detached)
             summary = self._inventory_summary(subtree, operator)
         try:
             operator.destroy()
@@ -1148,7 +1150,7 @@ class OperatorControl:
             "operator_path": path,
             "operator_count": len(subtree),
             **(summary or {}),
-            "detached_connections": connections,
+            "detached_connections": detached,
             "destroyed": True,
         }
 
@@ -1885,7 +1887,9 @@ class OperatorControl:
             selected = [by_name[name] for name in dict.fromkeys(names)]
         non_default_only = payload.get("non_default_only", False)
         if non_default_only:
-            # Without a reliable isDefault the parameter is kept rather than silently dropped.
+            # TouchDesigner's isDefault covers value, mode, and expression, so parameters whose
+            # default is an expression (rate = me.time.rate) stay out. Without a reliable
+            # isDefault the parameter is kept rather than silently dropped.
             selected = [
                 parameter
                 for parameter in selected

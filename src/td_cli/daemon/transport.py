@@ -353,6 +353,8 @@ def create_transport_app(
         item = metadata[adapter.instance_id]
         item.last_heartbeat_at = _now()
         project = _project(data)
+        # The Agent wire drops nulls, so a missing project cannot be told apart from an older
+        # Agent that never reports one; keep the last known project instead of clearing it.
         if project is not None:
             item.project = project
         if isinstance(data, dict) and data.get("status") == "draining":

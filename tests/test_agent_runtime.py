@@ -3751,6 +3751,18 @@ def test_parameter_list_reports_only_non_default_parameters_with_values() -> Non
     assert [item["name"] for item in result["parameters"]] == ["gain"]
     assert result["parameters"][0]["value"]["value"] == 0.5
 
+    # A default expression (isDefault) stays out; a driven parameter that is not default is listed.
+    width, operation = root.builtinPars[1], root.builtinPars[2]
+    width.mode, width.expr = "expression", "me.time.rate"
+    operation.mode, operation.expr, operation.isDefault = "expression", "'add'", False
+    driven = make_control(lambda _: root).execute(
+        {
+            "name": "parameters.list",
+            "input": {"operator_path": root.path, "non_default_only": True},
+        }
+    )
+    assert [item["name"] for item in driven["parameters"]] == ["gain", "operation"]
+
 
 def test_parameter_list_rejects_unknown_selected_names() -> None:
     root = _listed_parameters_root()

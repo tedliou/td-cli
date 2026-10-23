@@ -14,6 +14,7 @@ from typing import Any
 from tools.locked_daemon_harness import Harness, run_locked
 
 PALETTE = Path(r"C:\Program Files\Derivative\TouchDesigner\Samples\Palette")
+MAX_PAGES = 32  # every paged read here finishes in a handful of pages
 TEXT = "td-cli 分段讀取：" + "繁體中文與 ASCII mixed 🎛 " * 6
 
 
@@ -97,7 +98,7 @@ def _text_dats(harness: Harness) -> dict[str, Any]:
     notes = _create(harness, "/project1", "textDAT", "notes")
     harness.run("set notes", "dat.text.set", {"operator_path": notes, "text": TEXT})
     chunks, offset = [], 0
-    while offset is not None:
+    while offset is not None and len(chunks) < MAX_PAGES:
         chunk = harness.run(
             f"chunk at {offset}",
             "dat.text.get",
@@ -204,7 +205,7 @@ def _snapshots(harness: Harness) -> dict[str, Any]:
     harness.run("wire src0 -> sink", "ops.connect", {"source_path": paths[0], "target_path": sink})
     base = {"operator_path": graph, "max_depth": 1, "max_operators": 2}
     pages, cursor = [], None
-    while True:
+    while len(pages) < MAX_PAGES:
         page = harness.run(
             f"page {len(pages)}",
             "project.snapshot",

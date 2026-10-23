@@ -1025,19 +1025,6 @@ def test_every_batch_requires_agents_that_report_each_read() -> None:
     }
 
 
-def test_text_get_offset_is_optional_on_the_wire_and_needs_an_advertising_agent() -> None:
-    plain = Command.model_validate(
-        {"name": "dat.text.get", "input": {"operator_path": "/project1/notes"}}
-    ).model_dump(mode="json")
-    assert "offset" not in plain["input"]
-    chunked = Command.model_validate(
-        {"name": "dat.text.get", "input": {"operator_path": "/project1/notes", "offset": 0}}
-    ).model_dump(mode="json")
-    assert chunked["input"]["offset"] == 0
-    assert "dat.text.get:offset" in COMMAND_CATALOG.required_capabilities(chunked)
-    assert "dat.text.get:offset" not in COMMAND_CATALOG.required_capabilities(plain)
-
-
 def test_chop_values_is_a_bounded_batchable_read() -> None:
     assert COMMAND_CATALOG.effect("chop.values.get") == "read_only"
     assert "chop.values.get" in COMMAND_CATALOG.batch_names
@@ -1051,29 +1038,6 @@ def test_chop_values_is_a_bounded_batchable_read() -> None:
                 "name": "chop.values.get",
                 "input": {"operator_path": "/p", "sample_offset": 0, "sample_count": 4097},
             }
-        )
-
-
-def test_parameter_list_options_stay_off_the_wire_and_need_an_advertising_agent() -> None:
-    plain = Command.model_validate(
-        {"name": "parameters.list", "input": {"operator_path": "/project1/a"}}
-    ).model_dump(mode="json")
-    assert plain["input"] == {"operator_path": "/project1/a"}
-    assert "parameters.list:options" not in COMMAND_CATALOG.required_capabilities(plain)
-    for option in (
-        {"names": ["gain"]},
-        {"include_values": True},
-        {"non_default_only": True},
-        {"include_menu_options": False},
-    ):
-        command = Command.model_validate(
-            {"name": "parameters.list", "input": {"operator_path": "/project1/a", **option}}
-        ).model_dump(mode="json")
-        assert command["input"] == {"operator_path": "/project1/a", **option}
-        assert "parameters.list:options" in COMMAND_CATALOG.required_capabilities(command)
-    with pytest.raises(ValidationError):
-        Command.model_validate(
-            {"name": "parameters.list", "input": {"operator_path": "/p", "names": []}}
         )
 
 
@@ -1095,50 +1059,76 @@ def test_parameter_list_normalizes_attached_values() -> None:
     assert result["parameters"][0]["value"]["unsupported_reason"] is None
 
 
-def test_snapshot_paging_and_connections_need_an_advertising_agent() -> None:
-    plain = Command.model_validate(
-        {"name": "project.snapshot", "input": {"operator_path": "/project1"}}
-    ).model_dump(mode="json")
-    assert set(plain["input"]) == {"operator_path", "max_depth", "max_operators"}
-    assert "project.snapshot:options" not in COMMAND_CATALOG.required_capabilities(plain)
-    for option in ({"paginate": True}, {"cursor": "abc"}, {"include_connections": True}):
-        command = Command.model_validate(
-            {"name": "project.snapshot", "input": {"operator_path": "/project1", **option}}
-        ).model_dump(mode="json")
-        assert {**command["input"], **option} == command["input"]
-        assert "project.snapshot:options" in COMMAND_CATALOG.required_capabilities(command)
+_STRUCTURAL_IDENTITIES = {
+    "ops.destroy": {"operator_path": "/project1/big", "recursive": True},
+    "ops.copy": {
+        "source_path": "/project1/big",
+        "target_parent_path": "/project1",
+        "new_name": "c",
+    },
+    "ops.move": {
+        "source_path": "/project1/big",
+        "target_parent_path": "/project1",
+        "new_name": "m",
+    },
+}
 
 
 @pytest.mark.parametrize(
-    ("name", "identity"),
+    ("name", "identity", "option", "capability"),
     [
-        ("ops.destroy", {"operator_path": "/project1/big", "recursive": True}),
-        (
-            "ops.copy",
-            {"source_path": "/project1/big", "target_parent_path": "/project1", "new_name": "c"},
+        ("dat.text.get", {"operator_path": "/p"}, {"offset": 0}, "dat.text.get:offset"),
+        *(
+            ("parameters.list", {"operator_path": "/p"}, option, "parameters.list:options")
+            for option in (
+                {"names": ["gain"]},
+                {"include_values": True},
+                {"non_default_only": True},
+                {"include_menu_options": False},
+            )
         ),
-        (
-            "ops.move",
-            {"source_path": "/project1/big", "target_parent_path": "/project1", "new_name": "m"},
+        *(
+            ("project.snapshot", {"operator_path": "/p"}, option, "project.snapshot:options")
+            for option in ({"paginate": True}, {"cursor": "abc"}, {"include_connections": True})
+        ),
+        *(
+            (name, identity, {"inventory": "summary"}, f"{name}:inventory_summary")
+            for name, identity in _STRUCTURAL_IDENTITIES.items()
         ),
     ],
 )
-def test_structural_summary_inventory_admits_large_subtrees_from_advertising_agents(
-    name: str, identity: dict[str, object]
+def test_new_options_stay_off_the_wire_unless_set_and_need_an_advertising_agent(
+    name: str, identity: dict[str, object], option: dict[str, object], capability: str
 ) -> None:
     plain = Command.model_validate({"name": name, "input": identity}).model_dump(mode="json")
-    assert "inventory" not in plain["input"]
-    assert f"{name}:inventory_summary" not in COMMAND_CATALOG.required_capabilities(plain)
+    assert not set(option) & set(plain["input"])
+    assert capability not in COMMAND_CATALOG.required_capabilities(plain)
+    command = Command.model_validate({"name": name, "input": {**identity, **option}}).model_dump(
+        mode="json"
+    )
+    assert {**command["input"], **option} == command["input"]
+    assert capability in COMMAND_CATALOG.required_capabilities(command)
+
+
+@pytest.mark.parametrize(("name", "identity"), list(_STRUCTURAL_IDENTITIES.items()))
+def test_structural_summary_inventory_admits_up_to_ten_thousand_operators(
+    name: str, identity: dict[str, object]
+) -> None:
     with pytest.raises(ValidationError, match="requires inventory 'summary'"):
         Command.model_validate({"name": name, "input": {**identity, "max_operators": 1001}})
-    summary = Command.model_validate(
+    Command.model_validate(
         {"name": name, "input": {**identity, "max_operators": 10_000, "inventory": "summary"}}
-    ).model_dump(mode="json")
-    assert summary["input"]["inventory"] == "summary"
-    assert f"{name}:inventory_summary" in COMMAND_CATALOG.required_capabilities(summary)
+    )
     with pytest.raises(ValidationError):
         Command.model_validate(
             {"name": name, "input": {**identity, "max_operators": 10_001, "inventory": "summary"}}
+        )
+
+
+def test_parameter_list_rejects_an_empty_name_selection() -> None:
+    with pytest.raises(ValidationError):
+        Command.model_validate(
+            {"name": "parameters.list", "input": {"operator_path": "/p", "names": []}}
         )
 
 

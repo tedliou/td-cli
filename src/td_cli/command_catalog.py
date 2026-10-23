@@ -1174,10 +1174,7 @@ COMMAND_CATALOG = CommandCatalog(
             _import_result,
             (
                 ("ops.tox.import:root_child", lambda value: value.get("root_child") is not None),
-                (
-                    "ops.tox.import:inventory_summary",
-                    lambda value: value.get("inventory") == "summary",
-                ),
+                _inventory_summary_feature("ops.tox.import"),
             ),
         ),
         CommandDefinition(
