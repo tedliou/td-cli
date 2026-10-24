@@ -59,6 +59,14 @@ def _write_zip(path: Path, files: dict[str, Path], source_epoch: int) -> None:
             archive.writestr(info, files[name].read_bytes(), compresslevel=9)
 
 
+def _native_files(bundle: Path) -> dict[str, Path]:
+    """The native td is one exe; a leftover PyInstaller runtime beside it is not shipped."""
+    executable = bundle / f"{bundle.name}.exe"
+    if not executable.is_file():
+        raise ValueError(f"Release input is missing: {executable}")
+    return {executable.name: executable}
+
+
 def _onedir_files(bundle: Path) -> dict[str, Path]:
     """Map every file of one onedir bundle to archive names.
 
@@ -88,7 +96,7 @@ def package_release(
     notices = license_files(Path("."))
     output.mkdir(parents=True, exist_ok=True)
     layouts = {
-        f"td-v{RELEASE_VERSION}-windows-x86_64.zip": _onedir_files(executables / "td"),
+        f"td-v{RELEASE_VERSION}-windows-x86_64.zip": _native_files(executables / "td"),
         f"td-daemon-v{RELEASE_VERSION}-windows-x86_64.zip": _onedir_files(
             executables / "td-daemon"
         ),

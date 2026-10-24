@@ -19,10 +19,14 @@ def test_release_build_refuses_unreviewed_native_runtime(monkeypatch: pytest.Mon
         license_files(Path("."), check_runtime=True)
 
 
-# Every executable is a PyInstaller onedir bundle, so no invocation pays a onefile extraction.
+# td is one native exe; the Python executables are PyInstaller onedir bundles, so no
+# invocation pays a onefile extraction.
 ONEDIR_RUNTIME_FILES = {
-    name: (f"{name}-runtime/base_library.zip", f"{name}-runtime/python311.dll")
-    for name in ("td", "td-daemon", "td-agent")
+    "td": (),
+    **{
+        name: (f"{name}-runtime/base_library.zip", f"{name}-runtime/python311.dll")
+        for name in ("td-daemon", "td-agent")
+    },
 }
 
 
@@ -103,11 +107,20 @@ def test_release_packaging_creates_the_four_root_layouts_and_sorted_checksums(
     assert (output / "uninstall.ps1").is_file()
 
 
-@pytest.mark.parametrize("damage", ["missing", "changed", "stale-lock"])
+@pytest.mark.parametrize(
+    "damage", ["missing", "changed", "stale-lock", "stale-cargo-lock", "stale-toolchain"]
+)
 def test_release_refuses_incomplete_or_stale_licenses(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, damage: str
 ) -> None:
-    for name in ("LICENSE", "THIRD_PARTY_NOTICES.md", "uv.lock"):
+    (tmp_path / "native/td").mkdir(parents=True)
+    for name in (
+        "LICENSE",
+        "THIRD_PARTY_NOTICES.md",
+        "uv.lock",
+        "native/td/Cargo.lock",
+        "native/td/rust-toolchain.toml",
+    ):
         shutil.copyfile(name, tmp_path / name)
     shutil.copytree("LICENSES", tmp_path / "LICENSES")
     _write_executables(tmp_path)
@@ -117,11 +130,22 @@ def test_release_refuses_incomplete_or_stale_licenses(
         damaged.unlink()
     elif damage == "changed":
         damaged.write_text("removed upstream notice", encoding="utf-8")
-    else:
+    elif damage == "stale-lock":
         lock = tmp_path / "uv.lock"
         lock.write_text(
             lock.read_text(encoding="utf-8").replace('name = "bidict"', 'name = "new-dependency"'),
             encoding="utf-8",
+        )
+    elif damage == "stale-cargo-lock":
+        lock = tmp_path / "native/td/Cargo.lock"
+        lock.write_text(
+            lock.read_text(encoding="utf-8").replace('name = "itoa"', 'name = "new-crate"'),
+            encoding="utf-8",
+        )
+    else:
+        toolchain = tmp_path / "native/td/rust-toolchain.toml"
+        toolchain.write_text(
+            toolchain.read_text(encoding="utf-8").replace("1.99.1", "1.100.0"), encoding="utf-8"
         )
     monkeypatch.chdir(tmp_path)
     with pytest.raises(ValueError, match="license"):
@@ -153,7 +177,7 @@ def test_agent_stage_rejects_verification_for_another_artifact(tmp_path: Path) -
         validate_agent_stage(tmp_path, expected_commit="a" * 40)
 
 
-@pytest.mark.parametrize("bundle", ["td", "td-daemon", "td-agent"])
+@pytest.mark.parametrize("bundle", ["td-daemon", "td-agent"])
 def test_release_refuses_an_executable_without_its_onedir_runtime(
     tmp_path: Path, bundle: str
 ) -> None:
@@ -162,4 +186,30 @@ def test_release_refuses_an_executable_without_its_onedir_runtime(
     shutil.rmtree(tmp_path / bundle / f"{bundle}-runtime")
 
     with pytest.raises(ValueError, match=f"{bundle}-runtime"):
+        package_release(tmp_path, tmp_path, tmp_path / "output", source_epoch=1_700_000_000)
+
+
+def test_release_ships_only_the_native_td_exe(tmp_path: Path) -> None:
+    _write_executables(tmp_path)
+    _write_agent_stage(tmp_path)
+    leftover = tmp_path / "td/td-runtime/python311.dll"
+    leftover.parent.mkdir()
+    leftover.write_bytes(b"stale PyInstaller runtime")
+
+    artifacts = package_release(tmp_path, tmp_path, tmp_path / "output", source_epoch=1_700_000_000)
+
+    td = next(path for path in artifacts if path.name.startswith("td-v"))
+    with zipfile.ZipFile(td) as opened:
+        assert [name for name in opened.namelist() if not name.startswith("LICENSE")] == [
+            "THIRD_PARTY_NOTICES.md",
+            "td.exe",
+        ]
+
+
+def test_release_refuses_a_missing_native_td(tmp_path: Path) -> None:
+    _write_executables(tmp_path)
+    _write_agent_stage(tmp_path)
+    (tmp_path / "td/td.exe").unlink()
+
+    with pytest.raises(ValueError, match="td.exe"):
         package_release(tmp_path, tmp_path, tmp_path / "output", source_epoch=1_700_000_000)

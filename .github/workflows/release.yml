@@ -53,6 +53,9 @@ jobs:
           if ($meta.workflow_run.head_sha -ne $env:SOURCE_COMMIT) { throw 'Staged artifact source commit mismatch' }
           gh api "repos/$env:GITHUB_REPOSITORY/actions/artifacts/$env:ARTIFACT_ID/zip" > agent-stage.zip
           Expand-Archive agent-stage.zip agent-stage
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install
+        working-directory: native/td
       - name: Build and package
         shell: pwsh
         env: { SOURCE_COMMIT: "${{ inputs.source_commit }}" }

@@ -23,6 +23,18 @@ jobs:
           prune-cache: true
           download-from-astral-mirror: false
       - run: uv sync --locked --python 3.11
+      # The pinned GNU toolchain from native/td/rust-toolchain.toml; it needs no Visual Studio.
+      - run: rustup toolchain install
+        working-directory: native/td
+      - run: cargo fmt --check
+        working-directory: native/td
+      - run: cargo clippy --release --all-targets --locked -- -D warnings
+        working-directory: native/td
+      - run: cargo test --release --locked
+        working-directory: native/td
+      # The parity tests in pytest run the native td and its fake Daemon example.
+      - run: cargo build --release --locked --bins --examples
+        working-directory: native/td
       - run: uv run ruff format --check .
       - run: uv run ruff check .
       - run: uv run mypy src
@@ -47,12 +59,15 @@ jobs:
           prune-cache: true
           download-from-astral-mirror: false
       - run: uv sync --locked --python 3.11
+      - run: rustup toolchain install
+        working-directory: native/td
       - run: uv run python scripts/check_licenses.py --runtime
       - shell: pwsh
         run: |
           $env:SOURCE_DATE_EPOCH = git show -s --format=%ct HEAD
           $expectedProtocol = [int](uv run python -c "from td_cli.protocol import PROTOCOL_VERSION; print(PROTOCOL_VERSION)")
-          'td','td-daemon','td-agent' | ForEach-Object { uv run pyinstaller --clean --noconfirm "packaging/$_.spec" }
+          'td-daemon','td-agent' | ForEach-Object { uv run pyinstaller --clean --noconfirm "packaging/$_.spec" }
+          uv run python -c "import sys; from pathlib import Path; sys.path.insert(0, 'scripts'); from build_release import build_native_td; build_native_td(Path('dist'), int(sys.argv[1]))" $env:SOURCE_DATE_EPOCH
           $clean = New-Item -ItemType Directory "$env:RUNNER_TEMP/clean"
           Push-Location $clean
           try {
