@@ -1,0 +1,65 @@
+{
+  "command": [
+    "--json",
+    "--timeout",
+    "30",
+    "instances",
+    "list"
+  ],
+  "daemon": "td-daemon built from this branch, same copy beside both td",
+  "unmeasured_first_round": true,
+  "runs": [
+    {
+      "td": "p1",
+      "round": 1,
+      "ms": 4454.4
+    },
+    {
+      "td": "native",
+      "round": 1,
+      "ms": 4418.4
+    },
+    {
+      "td": "p1",
+      "round": 2,
+      "ms": 4446.9
+    },
+    {
+      "td": "native",
+      "round": 2,
+      "ms": 4413.1
+    },
+    {
+      "td": "p1",
+      "round": 3,
+      "ms": 4452.0
+    },
+    {
+      "td": "native",
+      "round": 3,
+      "ms": 4420.4
+    },
+    {
+      "td": "p1",
+      "round": 4,
+      "ms": 4485.0
+    },
+    {
+      "td": "native",
+      "round": 4,
+      "ms": 4411.4
+    },
+    {
+      "td": "p1",
+      "round": 5,
+      "ms": 4457.6
+    },
+    {
+      "td": "native",
+      "round": 5,
+      "ms": 4422.3
+    }
+  ],
+  "p1_median_ms": 4454.4,
+  "native_median_ms": 4418.4
+}

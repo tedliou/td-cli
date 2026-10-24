@@ -1,0 +1,28 @@
+{
+  "td": "copy of native/td/target/release/td.exe, beside this branch's td-daemon",
+  "td_version": "td 0.11.0 (protocol 3)",
+  "results": [
+    {
+      "command": [
+        "--version"
+      ],
+      "runs": 20,
+      "p50_ms": 8.083,
+      "p95_ms": 8.314,
+      "min_ms": 7.931,
+      "max_ms": 8.428
+    },
+    {
+      "command": [
+        "--json",
+        "instances",
+        "list"
+      ],
+      "runs": 20,
+      "p50_ms": 12.271,
+      "p95_ms": 12.605,
+      "min_ms": 11.959,
+      "max_ms": 12.727
+    }
+  ]
+}
