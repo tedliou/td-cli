@@ -49,7 +49,7 @@ def test_poll_failure_retains_request_id(tmp_path, monkeypatch):
     monkeypatch.setattr(
         DaemonClient,
         "get_request",
-        lambda *a: (_ for _ in ()).throw(ClientError("daemon_unavailable")),
+        lambda *a, **k: (_ for _ in ()).throw(ClientError("daemon_unavailable")),
     )
     with pytest.raises(ClientError) as error:
         client(tmp_path).wait("known-request")
@@ -416,3 +416,35 @@ def test_deadline_spent_in_the_health_probe_sends_nothing_more(
     assert error.value.details == {"reason": "command deadline expired"}
     assert calls == ["health"]
     assert starts == []
+
+
+def test_wait_long_polls_with_the_remaining_budget(tmp_path: Path, monkeypatch) -> None:
+    clock = [100.0]
+    urls = []
+    monkeypatch.setattr("td_cli.client.time.monotonic", lambda: clock[0])
+
+    def request(method, url, **kwargs):
+        urls.append(url.split("/v3/requests/", 1)[1])
+        return httpx.Response(200, json={"status": "succeeded", "request_id": "r"})
+
+    patch_http(monkeypatch, request)
+    instance_client = client(tmp_path)
+    instance_client.timeout = 10
+    assert instance_client.wait("r")["status"] == "succeeded"
+    instance_client.timeout = 60
+    instance_client.wait("r")
+    assert urls == ["r?wait_ms=9900", "r?wait_ms=25000"]
+
+
+def test_wait_keeps_spacing_when_a_daemon_answers_unsettled_at_once(
+    tmp_path: Path, monkeypatch
+) -> None:
+    answers = iter(["running", "running", "succeeded"])
+    sleeps = []
+    monkeypatch.setattr("td_cli.client.time.sleep", sleeps.append)
+    patch_http(
+        monkeypatch,
+        lambda *a, **k: httpx.Response(200, json={"status": next(answers), "request_id": "r"}),
+    )
+    assert client(tmp_path).wait("r")["status"] == "succeeded"
+    assert sleeps == [0.05, 0.05]

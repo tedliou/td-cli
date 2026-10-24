@@ -11,13 +11,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
 from pydantic import field_validator
 
 from td_cli import __version__
 from td_cli.daemon.storage import RequestIdentityConflict, RequestStore
 from td_cli.error_catalog import ERROR_CATALOG
 from td_cli.protocol import PROTOCOL_VERSIONS, Command, RequestSnapshot, StrictModel
+
+# One long poll stays well under the 60-second single-wait limit of AGENTS.md.
+MAX_REQUEST_WAIT_MS = 25_000
 
 
 class SubmitRequest(StrictModel):
@@ -158,9 +161,17 @@ def create_app(
         return persisted
 
     @app.get("/v3/requests/{request_id}", dependencies=[Depends(authenticate)])
-    async def get_request(request_id: str) -> dict[str, object]:
+    async def get_request(
+        request_id: str,
+        wait_ms: Annotated[int, Query(ge=0, le=MAX_REQUEST_WAIT_MS)] = 0,
+    ) -> dict[str, object]:
+        """Answer at once, or once the Request settles when ``wait_ms`` asks for a long poll."""
         assert store is not None
-        snapshot = await store.get(request_id)
+        snapshot = (
+            await store.wait_until_terminal(request_id, timeout=wait_ms / 1000)
+            if wait_ms
+            else await store.get(request_id)
+        )
         if snapshot is None:
             raise HTTPException(status_code=404, detail="request_not_found")
         return snapshot

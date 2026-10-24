@@ -127,3 +127,50 @@ async def test_failed_v1_migration_rolls_back_and_fails_closed(tmp_path: Path) -
     assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
     assert connection.execute("SELECT snapshot FROM requests").fetchone()[0] == "not-json"
     connection.close()
+
+
+@pytest.mark.asyncio
+async def test_terminal_wait_returns_as_soon_as_the_request_settles(tmp_path: Path) -> None:
+    store = await RequestStore.open(tmp_path / "daemon.db")
+    try:
+        await store.create_or_get(snapshot())
+        waiting = asyncio.create_task(store.wait_until_terminal(REQUEST_ID, timeout=10))
+        await asyncio.sleep(0.05)
+        assert not waiting.done()
+        await store.compare_and_set(
+            REQUEST_ID, expected_statuses={"queued"}, changes={"status": "dispatched"}
+        )
+        await asyncio.sleep(0.05)
+        assert not waiting.done()  # a non-terminal transition keeps waiting
+        await store.compare_and_set(
+            REQUEST_ID, expected_statuses={"dispatched"}, changes={"status": "failed"}
+        )
+        settled = await asyncio.wait_for(waiting, 1)
+        assert settled is not None and settled["status"] == "failed"
+    finally:
+        await store.close()
+
+
+@pytest.mark.asyncio
+async def test_terminal_wait_returns_the_current_snapshot_when_time_runs_out(
+    tmp_path: Path,
+) -> None:
+    store = await RequestStore.open(tmp_path / "daemon.db")
+    try:
+        await store.create_or_get(snapshot())
+        current = await store.wait_until_terminal(REQUEST_ID, timeout=0.05)
+        assert current is not None and current["status"] == "queued"
+        assert await store.wait_until_terminal("missing-request", timeout=10) is None
+    finally:
+        await store.close()
+
+
+@pytest.mark.asyncio
+async def test_closing_the_store_releases_terminal_waiters(tmp_path: Path) -> None:
+    store = await RequestStore.open(tmp_path / "daemon.db")
+    await store.create_or_get(snapshot())
+    waiting = asyncio.create_task(store.wait_until_terminal(REQUEST_ID, timeout=30))
+    await asyncio.sleep(0.05)
+    await store.close()
+    released = await asyncio.wait_for(waiting, 1)
+    assert released is not None and released["status"] == "queued"

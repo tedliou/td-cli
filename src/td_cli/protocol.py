@@ -69,6 +69,18 @@ class RequestStatus(StrEnum):
     DAEMON_SHUTDOWN = "daemon_shutdown"
 
 
+# A client stops waiting at these statuses; `unknown` may still be refined by a retained outcome.
+TERMINAL_REQUEST_STATUSES = frozenset(
+    {
+        RequestStatus.SUCCEEDED,
+        RequestStatus.FAILED,
+        RequestStatus.UNKNOWN,
+        RequestStatus.INSTANCE_OFFLINE,
+        RequestStatus.DAEMON_SHUTDOWN,
+    }
+)
+
+
 class RequestSnapshot(StrictModel):
     request_id: str
     instance_id: str

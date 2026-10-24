@@ -10,9 +10,12 @@ from pydantic import ValidationError
 from td_cli.daemon.runtime_files import ENDPOINT, data_root, load_token
 from td_cli.error_catalog import ERROR_CATALOG
 from td_cli.processes import LaunchError
-from td_cli.protocol import PROTOCOL_VERSION, RequestStatus
+from td_cli.protocol import PROTOCOL_VERSION, TERMINAL_REQUEST_STATUSES, RequestStatus
 
 _REQUEST_STATUSES = frozenset(RequestStatus)
+# The Daemon caps one long poll at 25 s; leave room for its answer within the HTTP budget.
+MAX_WAIT_SECONDS = 25.0
+WAIT_RESPONSE_MARGIN_SECONDS = 0.1
 
 
 MAX_VALIDATION_ERRORS = 8
@@ -252,8 +255,10 @@ class DaemonClient:
             error.details.setdefault("request_id", request_id)
             raise
 
-    def get_request(self, request_id: str) -> dict[str, Any]:
-        snapshot = self.request("GET", f"/v3/requests/{request_id}")
+    def get_request(self, request_id: str, *, wait: float = 0) -> dict[str, Any]:
+        """Read a Request; with ``wait`` seconds the Daemon answers once it settles."""
+        query = f"?wait_ms={int(wait * 1000)}" if wait > 0 else ""
+        snapshot = self.request("GET", f"/v3/requests/{request_id}{query}")
         if snapshot.get("status") not in _REQUEST_STATUSES:
             raise _incompatible(snapshot)
         error = snapshot.get("error")
@@ -336,21 +341,21 @@ class DaemonClient:
                 raise ClientError(
                     "wait_timeout", details={"request_id": request_id, "request": snapshot}
                 )
+            wait = min(
+                MAX_WAIT_SECONDS,
+                deadline - time.monotonic() - WAIT_RESPONSE_MARGIN_SECONDS,
+            )
             try:
-                snapshot = self.get_request(request_id)
+                snapshot = self.get_request(request_id, wait=wait)
             except ClientError as error:
                 error.details.setdefault("request_id", request_id)
                 raise
-            if snapshot["status"] in {
-                "succeeded",
-                "failed",
-                "unknown",
-                "instance_offline",
-                "daemon_shutdown",
-            }:
+            if snapshot["status"] in TERMINAL_REQUEST_STATUSES:
                 return snapshot
             if time.monotonic() >= deadline:
                 raise ClientError("wait_timeout", details={"request": snapshot})
+            # A long poll ends unsettled only when its wait ran out; an older Daemon answers at
+            # once, so keep the original 50 ms spacing between queries.
             time.sleep(min(0.05, max(0, deadline - time.monotonic())))
 
 
