@@ -5,7 +5,11 @@
 ## 用語
 
 - frame：TouchDesigner 每秒更新 60 次，每次是一個 frame，間隔 16.67 ms。
-- 長輪詢（long poll）：client 查詢 Request 時請 Daemon 先不回答，等 Request 結束或等待時間用完再回答。
+- timeline：TouchDesigner 的播放時間軸；暫停時畫面時間停住，但程式照樣更新。
+- SocketIO DAT：TouchDesigner 內建、Agent 用來連 Daemon 的 operator。callback 是它收到訊息時呼叫的函式。
+- Execute DAT：TouchDesigner 在專案啟動、每個 frame 開始等時機呼叫其中函式的 operator。
+- 長輪詢（Long Poll，見 GLOSSARY.md）：client 查詢 Request 時請 Daemon 先不回答，等 Request 結束或等待時間用完再回答。
+- 一次性專案：只為這次量測建出、量完即丟的 TouchDesigner 專案，不是任何使用者作品。
 - p50／p95：把所有量測值排序後，第 50 與第 95 百分位的值。
 
 ## 變更
@@ -18,16 +22,16 @@
 
 ### 方法
 
-`tools/locked_frame_timing_acceptance.py` 在隔離的 `127.0.0.1:19982` 跑本分支的 Daemon transport，data root 放在 session scratch 的 `LOCALAPPDATA`。TouchDesigner 2025.32050 開一個 disposable 專案，專案的 Execute DAT 執行 `tools/locked_frame_timing_probe.py`。探針與 harness 用同一個系統時鐘（`GetSystemTimePreciseAsFileTime`）記錄每一段的時間，也記錄每個 frame 的開始時間。每輪先跑 5 次 `ops.get /project1` 暖機不計，再量 40 次。
+`tools/locked_frame_timing_acceptance.py` 在隔離的 `127.0.0.1:19982` 跑本分支的 Daemon transport（這支測試驅動程式以下稱 harness），data root 放在 session scratch 的 `LOCALAPPDATA`。TouchDesigner 2025.32050 開一個一次性專案，專案的 Execute DAT 執行 `tools/locked_frame_timing_probe.py`。探針與 harness 用同一個系統時鐘（`GetSystemTimePreciseAsFileTime`）記錄每一段的時間，也記錄每個 frame 的開始時間。每輪先跑 5 次 `ops.get /project1` 暖機不計，再量 40 次。
 
-disposable 專案：
+一次性專案的建法：
 
 1. 以 #157 驗收用的 `probe.toe` 為底。它是官方 Samples `NewProject.toe` 經 `toeexpand` 在 `/project1` 加入 Execute DAT `probe_exec` 而成。
 2. `toeexpand` 後改寫 `probe_exec.text`：保留原本 23 bytes 的標頭，接著是 big-endian int32 的文字長度與文字本身。文字以 `runpy.run_path` 載入 `tools/locked_frame_timing_probe.py`，並把 `onStart`、`onFrameStart` 轉給它。
 3. 改寫 `probe_exec.parm`，打開 `start` 與 `framestart`。
 4. TOC 以 LF 寫入後 `toecollapse`。產物 1,026 bytes，SHA-256 `25a7f3b38aa18b38ec432ab46fefd4cf6c8b3ee8280e0e3425af3473bd42ebb5`，放在 git 忽略的 `.codex/frame-timing/probe.toe`。
 
-0.11.0 基準用已發佈的 Agent artifact。本分支用 `--source agent`：先在另一個 disposable TouchDesigner 程序以 `agent/build_td.py` 從本分支原始碼建出 Agent，再載入量測。
+0.11.0 基準用已發佈的 Agent artifact。本分支用 `--source agent`：先在另一個一次性 TouchDesigner 程序以 `agent/build_td.py` 從本分支原始碼建出 Agent，再載入量測。
 
 ```powershell
 uv run python -m tools.locked_frame_timing_acceptance --work <scratch>\run --project .codex\frame-timing\probe.toe --source agent --evidence docs\evidence\v0120\frame-timing-0.12.0-running.json

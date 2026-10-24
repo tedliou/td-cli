@@ -4,11 +4,11 @@ Status: accepted
 
 # Agent 在 request_execute callback 內直接執行 Command
 
-Protocol v3 的 Agent 原本收到 `request_execute` 後，用 `run(delayMilliSeconds=1, delayRef=op.TDResources)` 把執行排到之後。鎖定版 TouchDesigner 2025.32050 的 frame 時戳探針（`tools/locked_frame_timing_acceptance.py`）量到三件事：
+Protocol v3 的 Agent 原本收到 `request_execute` 後，用 `run(delayMilliSeconds=1, delayRef=op.TDResources)` 把執行排到之後。鎖定版 TouchDesigner 2025.32050 的 frame 時戳探針（`tools/locked_frame_timing_acceptance.py`）量到三件事。callback 是 SocketIO DAT 收到訊息時呼叫的函式；主 thread 是 TouchDesigner 更新畫面、唯一能安全操作 operator 的執行緒；frame 是 TouchDesigner 每次更新，60 fps 下間隔 16.67 ms。
 
 - SocketIO DAT 的 callback 在主 thread、每個 frame 開頭執行。
 - `run()` 的 1 ms 延遲固定多等一個 frame（60 fps 下 16.3 ms），執行點同樣在 frame 開頭。
-- `emit()` 立即送出，不會等到 frame 結束。
+- `emit()`（Agent 送訊息給 Daemon 的呼叫）立即送出，不會等到 frame 結束。
 
 所以我們改成在 callback 內直接執行。執行的 thread 和 frame 內位置都和原本相同，只少等一個 frame。暫停 timeline 時 callback 照常執行，原本靠 `op.TDResources` 保證的性質仍然成立。
 
