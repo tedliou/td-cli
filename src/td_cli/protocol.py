@@ -81,6 +81,7 @@ TERMINAL_REQUEST_STATUSES = frozenset(
 )
 
 # Longest long poll a Request query may ask for; the Daemon rejects a longer ``wait_ms``.
+# It stays well under the 60-second single-wait limit of AGENTS.md.
 MAX_REQUEST_WAIT_MS = 25_000
 
 

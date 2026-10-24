@@ -1082,8 +1082,9 @@ def test_command_against_a_healthy_daemon_imports_neither_the_server_stack_nor_h
 ) -> None:
     import subprocess
 
-    # pydantic itself imports importlib.metadata for its plugin lookup, so the guard checks
-    # that no package metadata is read rather than that the module is absent.
+    # pydantic itself imports importlib.metadata and scans entry_points once for its plugins
+    # (about 4 ms warm), so the guard refuses only the per-package reads that td once paid
+    # ~130 ms for, and leaves entry_points to pydantic.
     probe = (
         "import sys, importlib.metadata as metadata\n"
         "def refuse(*a, **k):\n"

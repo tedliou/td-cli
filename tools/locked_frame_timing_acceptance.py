@@ -56,13 +56,15 @@ def _instrument() -> None:
     for name in ("accepted", "outcome"):
         original = getattr(RequestLifecycle, name)
 
-        def stamped(
-            self, instance_id, connection_id, request_id, *rest, _o=original, _n=name, **kw
-        ):
-            DAEMON_EVENTS.append({"event": _n, "request_id": request_id, "ns": wall_ns()})
-            return _o(self, instance_id, connection_id, request_id, *rest, **kw)
+        setattr(RequestLifecycle, name, _stamped(original, name))
 
-        setattr(RequestLifecycle, name, stamped)
+
+def _stamped(original_method, event_name):
+    def stamped(self, instance_id, connection_id, request_id, *rest, **kw):
+        DAEMON_EVENTS.append({"event": event_name, "request_id": request_id, "ns": wall_ns()})
+        return original_method(self, instance_id, connection_id, request_id, *rest, **kw)
+
+    return stamped
 
 
 def _steps(harness: Harness, work: Path) -> dict[str, Any]:

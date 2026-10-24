@@ -25,8 +25,6 @@ from td_cli.protocol import (
     StrictModel,
 )
 
-# One long poll stays well under the 60-second single-wait limit of AGENTS.md.
-
 
 class SubmitRequest(StrictModel):
     request_id: str
