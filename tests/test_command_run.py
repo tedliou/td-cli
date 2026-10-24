@@ -1,6 +1,7 @@
 import json
 
 import pytest
+from daemon_doubles import validated_plan
 from typer.testing import CliRunner
 
 from td_cli import cli
@@ -22,6 +23,9 @@ class FakeClient:
         self.calls.append((request_id, command))
         if self.submit_error:
             raise ClientError("daemon_unavailable")
+
+    def validate_plan(self, document):
+        return validated_plan(document)
 
     def wait(self, request_id):
         status = self.statuses[len(self.calls) - 1]
@@ -159,4 +163,4 @@ def test_oversized_plan_rejected_before_network(tmp_path, monkeypatch):
     path = tmp_path / "large.json"
     path.write_bytes(b" " * (MAX_PLAN_BYTES + 1))
     with pytest.raises(ClientError, match="invalid_arguments"):
-        read_plan(path)
+        read_plan(path, FakeClient())

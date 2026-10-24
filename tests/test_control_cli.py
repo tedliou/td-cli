@@ -2,6 +2,7 @@ import json
 import sys
 
 import pytest
+from daemon_doubles import accepted_command
 from typer.testing import CliRunner
 
 from td_cli import cli
@@ -45,8 +46,9 @@ class FakeDaemonClient:
         del selector, online_only
         return INSTANCE
 
-    def submit(self, request_id, instance_id, command):
-        self.__class__.submitted = command
+    def submit(self, request_id, instance_id, command, *, instance_selector=None):
+        del instance_selector
+        self.__class__.submitted = accepted_command(command)
         return {"request_id": request_id, "instance_id": instance_id, "status": "queued"}
 
     def wait(self, request_id):

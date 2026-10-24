@@ -6,7 +6,7 @@ import pytest
 from test_agent_runtime import FakeParameter, make_control, module
 
 from td_cli.command_catalog import COMMAND_CATALOG
-from td_cli.command_run import CommandPlan
+from td_cli.protocol import CommandPlan
 
 
 def menu_set_input(**overrides):

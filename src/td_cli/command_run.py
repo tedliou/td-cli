@@ -2,45 +2,30 @@
 
 from __future__ import annotations
 
+import codecs
 import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field, ValidationError, model_validator
-
 from td_cli.client import ClientError, DaemonClient
-from td_cli.command_catalog import StrictModel
-from td_cli.protocol import Command
-
-MAX_PLAN_BYTES = 1024 * 1024
+from td_cli.protocol import MAX_PLAN_BYTES
 
 
-class CommandPlan(StrictModel):
-    commands: list[Command] = Field(min_length=1, max_length=256)
-
-    @model_validator(mode="after")
-    def no_nested_batch(self) -> CommandPlan:
-        if any(command.name == "batch.execute" for command in self.commands):
-            raise ValueError("nested batch is unsupported")
-        return self
-
-
-def read_plan(path: Path) -> list[Command]:
+def read_plan(path: Path, client: DaemonClient) -> list[dict[str, Any]]:
+    """Read a bounded plan file and have the Daemon validate all of it before anything runs."""
     try:
         with path.open("rb") as source:
             data = source.read(MAX_PLAN_BYTES + 1)
-        if len(data) > MAX_PLAN_BYTES or data.startswith(b"\xef\xbb\xbf"):
-            raise ValueError("invalid plan size or encoding")
-        return CommandPlan.model_validate_json(data).commands
-    except ValidationError as error:
-        raise ClientError.invalid_arguments(error) from error
-    except (OSError, ValueError) as error:
+    except OSError as error:
         raise ClientError("invalid_arguments") from error
+    if len(data) > MAX_PLAN_BYTES or data.startswith(codecs.BOM_UTF8):
+        raise ClientError("invalid_arguments")
+    return client.validate_plan(data)
 
 
 def run_plan(
-    commands: list[Command],
+    commands: list[dict[str, Any]],
     *,
     client: DaemonClient,
     selector: str | None,
@@ -79,7 +64,7 @@ def run_plan(
                 }
             )
             submitting = True
-            client.submit(request_id, instance["instance_id"], command.model_dump(mode="json"))
+            client.submit(request_id, instance["instance_id"], command)
             snapshot = client.wait(request_id)
             emit({"event": "completed", "index": index, "request": snapshot})
             if snapshot["status"] != "succeeded":

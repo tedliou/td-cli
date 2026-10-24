@@ -551,3 +551,32 @@ def test_daemon_connection_reports_a_refused_connection_as_nothing_sent() -> Non
         DaemonConnection(f"http://127.0.0.1:{port}").exchange(
             "POST", "/v3/requests", headers={}, body=b"{}", timeout=2
         )
+
+
+def test_new_contract_carries_selector_and_validation_details(tmp_path: Path, monkeypatch) -> None:
+    sent = []
+    details = {"validation_errors": [{"location": ["input"]}], "validation_errors_truncated": False}
+
+    def request(method, url, **kwargs):
+        sent.append((method, url.removeprefix(ENDPOINT), kwargs["json"]))
+        if method == "POST":
+            return httpx.Response(422, json={"detail": "invalid_arguments", "details": details})
+        return httpx.Response(200, json={"instance_id": "i", "status": "offline"})
+
+    patch_http(monkeypatch, request)
+    instance_client = client(tmp_path)
+    assert instance_client.select_instance("a b", online_only=False)["status"] == "offline"
+    instance_client.select_instance(None)
+    with pytest.raises(ClientError) as raised:
+        instance_client.submit("r", None, {"name": "ops.get"}, instance_selector="8c")
+    assert raised.value.code == "invalid_arguments"
+    assert raised.value.details == {**details, "request_id": "r"}
+    assert sent == [
+        ("GET", "/v3/instances/resolve?online_only=false&selector=a+b", None),
+        ("GET", "/v3/instances/resolve?online_only=true", None),
+        (
+            "POST",
+            "/v3/requests",
+            {"request_id": "r", "command": {"name": "ops.get"}, "instance_selector": "8c"},
+        ),
+    ]

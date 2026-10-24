@@ -6,7 +6,7 @@ import json
 from enum import StrEnum
 from typing import Any
 
-from pydantic import ValidationError, model_validator
+from pydantic import Field, ValidationError, model_validator
 from pydantic_core import InitErrorDetails
 
 from td_cli.command_catalog import (
@@ -117,3 +117,17 @@ class RequestSnapshot(StrictModel):
             result=None,
             error=None,
         )
+
+
+# A ``commands execute`` plan document, validated whole before its first Command is sent.
+MAX_PLAN_BYTES = 1024 * 1024
+
+
+class CommandPlan(StrictModel):
+    commands: list[Command] = Field(min_length=1, max_length=256)
+
+    @model_validator(mode="after")
+    def no_nested_batch(self) -> CommandPlan:
+        if any(command.name == "batch.execute" for command in self.commands):
+            raise ValueError("nested batch is unsupported")
+        return self

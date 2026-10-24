@@ -6,7 +6,7 @@ import select
 import time
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 from pydantic import ValidationError
 
@@ -19,58 +19,11 @@ from td_cli.protocol import (
     TERMINAL_REQUEST_STATUSES,
     RequestStatus,
 )
+from td_cli.validation_details import validation_details
 
 _REQUEST_STATUSES = frozenset(RequestStatus)
 # The Daemon caps one long poll at 25 s; leave room for its answer within the HTTP budget.
 WAIT_RESPONSE_MARGIN_SECONDS = 0.1
-
-
-MAX_VALIDATION_ERRORS = 8
-MAX_VALIDATION_MESSAGE_CHARACTERS = 256
-MAX_VALIDATION_LOCATION_CHARACTERS = 64
-# Pydantic messages interpolate only their context; these context keys come from the schema,
-# never from the rejected input, so messages built from them are safe to report.
-_SCHEMA_CONTEXT_KEYS = frozenset(
-    {
-        "actual_length",
-        "class",
-        "class_name",
-        "discriminator",
-        "expected",
-        "expected_plural",
-        "expected_tags",
-        "field_type",
-        "ge",
-        "gt",
-        "le",
-        "lt",
-        "max_length",
-        "min_length",
-        "multiple_of",
-        "pattern",
-    }
-)
-
-
-def _validation_message(item: Any) -> str:
-    context = item.get("ctx") or {}
-    if set(context) <= _SCHEMA_CONTEXT_KEYS:
-        return str(item["msg"])
-    if item["type"] == "value_error" and type(context.get("error")) is ValueError:
-        return str(item["msg"])  # raised by a Command catalog validator with fixed text
-    if item["type"] == "union_tag_invalid":
-        return (
-            f"Input tag found using {context['discriminator']} does not match any of the "
-            f"expected tags: {context['expected_tags']}"
-        )
-    return f"Input failed {item['type']} validation"
-
-
-def _validation_location(location: tuple[int | str, ...]) -> list[int | str]:
-    return [
-        part[:MAX_VALIDATION_LOCATION_CHARACTERS] if isinstance(part, str) else part
-        for part in location
-    ]
 
 
 HEALTH_PROBE_TIMEOUT = 0.5
@@ -92,19 +45,7 @@ class ClientError(Exception):
     @classmethod
     def invalid_arguments(cls, error: ValidationError) -> ClientError:
         """Name each violated field and its limit without echoing the rejected input."""
-        errors = error.errors(include_url=False, include_input=False)
-        details: dict[str, Any] = {
-            "validation_errors": [
-                {
-                    "location": _validation_location(item["loc"]),
-                    "type": item["type"],
-                    "message": _validation_message(item)[:MAX_VALIDATION_MESSAGE_CHARACTERS],
-                }
-                for item in errors[:MAX_VALIDATION_ERRORS]
-            ],
-            "validation_errors_truncated": len(errors) > MAX_VALIDATION_ERRORS,
-        }
-        return cls("invalid_arguments", details=details)
+        return cls("invalid_arguments", details=validation_details(error))
 
 
 class DaemonConnectError(OSError):
@@ -216,7 +157,13 @@ class DaemonClient:
         )
 
     def request(
-        self, method: str, path: str, *, json: object = None, long_poll: bool = False
+        self,
+        method: str,
+        path: str,
+        *,
+        json: object = None,
+        content: bytes | None = None,
+        long_poll: bool = False,
     ) -> Any:
         """Send one call within the Command deadline.
 
@@ -242,7 +189,9 @@ class DaemonClient:
         if time.monotonic() >= deadline:
             raise ClientError("daemon_unavailable", details={"reason": "command deadline expired"})
         backoffs = (0.0, 0.1, 0.3) if method == "GET" else (0.0,)
-        body = None if json is None else jsonlib.dumps(json, separators=(",", ":")).encode()
+        body = content
+        if json is not None:
+            body = jsonlib.dumps(json, separators=(",", ":")).encode()
         answer = None
         last_error: Exception | None = None
         for backoff in backoffs:
@@ -284,7 +233,8 @@ class DaemonClient:
                 detail = "invalid_arguments"
             if detail == "Not Found":
                 detail = "daemon_unavailable"
-            raise ClientError(str(detail))
+            details = payload.get("details")
+            raise ClientError(str(detail), details=details if isinstance(details, dict) else None)
         return payload
 
     def health(self) -> dict[str, Any]:
@@ -304,41 +254,32 @@ class DaemonClient:
         return items
 
     def select_instance(self, selector: str | None, *, online_only: bool = True) -> dict[str, Any]:
-        instances = self.instances()
-        if selector is None:
-            matches = [item for item in instances if item["status"] == "online"]
-            if len(matches) != 1:
-                raise ClientError(
-                    "instance_not_found" if not matches else "instance_selector_ambiguous"
-                )
-            return matches[0]
-        matches = [
-            item
-            for item in instances
-            if item["selector"].startswith(selector) or item["instance_id"].startswith(selector)
-        ]
-        if not matches:
-            raise ClientError("instance_not_found")
-        if len(matches) != 1:
-            raise ClientError("instance_selector_ambiguous")
-        instance = matches[0]
-        if online_only and instance["status"] != "online":
-            raise ClientError(
-                {
-                    "offline": "instance_offline",
-                    "draining": "instance_draining",
-                    "synchronizing": "instance_synchronizing",
-                }[instance["status"]]
-            )
-        return instance
+        """Let the Daemon apply the selector rule; without a selector, the only online one."""
+        query = {"online_only": "true" if online_only else "false"}
+        if selector is not None:
+            query["selector"] = selector
+        return self.request("GET", f"/v3/instances/resolve?{urlencode(query)}")
 
-    def submit(self, request_id: str, instance_id: str, command: dict[str, Any]) -> dict[str, Any]:
+    def validate_plan(self, document: bytes) -> list[dict[str, Any]]:
+        """Have the Daemon check a whole ``commands execute`` plan; return its Commands."""
+        return self.request("POST", "/v3/command-plans/validate", content=document)["commands"]
+
+    def submit(
+        self,
+        request_id: str,
+        instance_id: str | None,
+        command: dict[str, Any],
+        *,
+        instance_selector: str | None = None,
+    ) -> dict[str, Any]:
+        """Submit by Instance ID, or let the Daemon validate and resolve the selector first."""
+        body: dict[str, Any] = {"request_id": request_id, "command": command}
+        if instance_id is not None:
+            body["instance_id"] = instance_id
+        elif instance_selector is not None:
+            body["instance_selector"] = instance_selector
         try:
-            return self.request(
-                "POST",
-                "/v3/requests",
-                json={"request_id": request_id, "instance_id": instance_id, "command": command},
-            )
+            return self.request("POST", "/v3/requests", json=body)
         except ClientError as error:
             error.details.setdefault("request_id", request_id)
             raise

@@ -11,7 +11,7 @@ from td_cli.error_catalog import ERROR_CATALOG
 
 ROOT = Path(__file__).parents[1]
 _CODE = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$")
-_CODE_CONSTRUCTORS = {"ClientError", "AdmissionRejected", "AgentCommandError"}
+_CODE_CONSTRUCTORS = {"ClientError", "AdmissionRejected", "AgentCommandError", "SelectionError"}
 _AGENT_OUTCOME_CONSTRUCTORS = {"AgentCommandError", "_outcome_error"}
 
 

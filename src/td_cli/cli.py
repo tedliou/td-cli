@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import typer
-from pydantic import ValidationError
 from typer._click.exceptions import ClickException, UsageError
 
 from td_cli import __version__
@@ -26,7 +25,7 @@ from td_cli.command_catalog import (
 from td_cli.error_catalog import ERROR_CATALOG
 from td_cli.operator_catalog import OPERATOR_CATALOG
 from td_cli.processes import LaunchError, launch_detached
-from td_cli.protocol import PROTOCOL_VERSION, Command
+from td_cli.protocol import PROTOCOL_VERSION
 
 app = typer.Typer(no_args_is_help=True)
 instances_app = typer.Typer()
@@ -274,13 +273,14 @@ def _input(
 def _submit(
     ctx: typer.Context, name: str, payload: dict[str, Any], no_wait: bool, request_id: str | None
 ) -> None:
-    try:
-        command = Command.model_validate({"name": name, "input": payload}).model_dump(mode="json")
-    except ValidationError as error:
-        raise ClientError.invalid_arguments(error) from error
     client = _client(ctx)
-    instance = client.select_instance(ctx.obj["instance"])
-    snapshot = client.submit(request_id or _uuid7(), instance["instance_id"], command)
+    # The Daemon validates the Command before it resolves the Instance selector.
+    snapshot = client.submit(
+        request_id or _uuid7(),
+        None,
+        {"name": name, "input": payload},
+        instance_selector=ctx.obj["instance"],
+    )
     if not no_wait:
         snapshot = client.wait(snapshot["request_id"])
     if snapshot["status"] != "succeeded" and not no_wait:
@@ -317,7 +317,8 @@ def commands_execute(
     from td_cli.command_run import read_plan, run_plan
 
     def operation() -> None:
-        commands = read_plan(input_file)
+        client = _client(ctx)
+        commands = read_plan(input_file, client)
 
         def emit(event: dict[str, Any]) -> None:
             typer.echo(json.dumps(event, separators=(",", ":"), ensure_ascii=True))
@@ -325,7 +326,7 @@ def commands_execute(
 
         run_plan(
             commands,
-            client=_client(ctx),
+            client=client,
             selector=ctx.obj["instance"],
             timeout=float(ctx.obj["timeout"]),
             new_request_id=_uuid7,

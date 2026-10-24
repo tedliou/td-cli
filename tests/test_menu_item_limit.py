@@ -4,16 +4,17 @@ and `invalid_arguments` details that name the violated field."""
 import json
 
 import pytest
+from daemon_doubles import accepted_command
 from pydantic import ValidationError
 from test_agent_runtime import AgentExt, FakeOwner, execute_v2, isolated_touchdesigner_runtime
 from test_custom_menu_options import FakeMenuParameter, MenuComp
 from typer.testing import CliRunner
 
 from td_cli import cli
-from td_cli.client import MAX_VALIDATION_ERRORS, ClientError
+from td_cli.client import ClientError
 from td_cli.command_catalog import COMMAND_CATALOG, MAX_MENU_JSON_BYTES
-from td_cli.command_run import CommandPlan, read_plan
-from td_cli.protocol import Command
+from td_cli.protocol import Command, CommandPlan
+from td_cli.validation_details import MAX_VALIDATION_ERRORS
 
 __all__ = ["isolated_touchdesigner_runtime"]
 
@@ -110,15 +111,29 @@ def write_plan(tmp_path, payload):
 
 
 def test_plan_validation_error_names_the_command_field_and_limit(tmp_path):
-    assert len(read_plan(write_plan(tmp_path, menu_set_input(**numbered_menu(38))))) == 2
-    with pytest.raises(ClientError) as raised:
-        read_plan(write_plan(tmp_path, menu_set_input(**numbered_menu(257))))
-    assert raised.value.code == "invalid_arguments"
-    errors = raised.value.details["validation_errors"]
+    from fastapi.testclient import TestClient
+
+    from td_cli.daemon.app import create_app
+
+    def validate(path):
+        with TestClient(create_app(tmp_path, token="a" * 64)) as daemon:
+            return daemon.post(
+                "/v3/command-plans/validate",
+                headers={"Authorization": "Bearer " + "a" * 64},
+                content=path.read_bytes(),
+            )
+
+    assert (
+        len(validate(write_plan(tmp_path, menu_set_input(**numbered_menu(38)))).json()["commands"])
+        == 2
+    )
+    rejected = validate(write_plan(tmp_path, menu_set_input(**numbered_menu(257)))).json()
+    assert rejected["detail"] == "invalid_arguments"
+    errors = rejected["details"]["validation_errors"]
     assert errors[0]["location"] == ["commands", 1, "input", "menu_names"]
     assert errors[0]["type"] == "too_long"
     assert "256" in errors[0]["message"]
-    assert "D001" not in json.dumps(raised.value.details)
+    assert "D001" not in json.dumps(rejected["details"])
 
 
 class RecordingDaemonClient:
@@ -134,8 +149,9 @@ class RecordingDaemonClient:
         del selector, online_only
         return {"instance_id": "instance-1"}
 
-    def submit(self, request_id, instance_id, command):
-        self.__class__.submitted = command
+    def submit(self, request_id, instance_id, command, *, instance_selector=None):
+        del instance_selector
+        self.__class__.submitted = accepted_command(command)
         return {"request_id": request_id, "instance_id": instance_id, "status": "queued"}
 
     def wait(self, request_id):
