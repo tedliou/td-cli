@@ -7,11 +7,14 @@
 - 暖機：Daemon 已在執行，`td` 只付自己的啟動與一次本機 HTTP 往返。
 - 冷啟動：Daemon 沒在執行，`td` 先自動啟動 Daemon、等它健康，再執行命令。
 - p50／p95：把所有量測值排序後，第 50 與第 95 百分位的值。
+- 暫存資料夾（scratch）：本 session 專用、量完即丟的資料夾，路徑中以 `<scratch>` 表示。
+- data root：Daemon 存放狀態、權杖與記錄的使用者資料夾，預設是 `%LOCALAPPDATA%	ouchdesigner-cli`。
+- WMI：Windows 管理介面；Daemon 透過它的 `Win32_Process.Create` 建立行程，讓 Daemon 不隨呼叫者的主控台結束。
 - 一次性專案：只為這次量測建出、量完即丟的 TouchDesigner 專案，不是任何使用者作品。
 
 ## 變更
 
-`td` 從凍結版 Python（PyInstaller onedir，`td.exe` 加 `td-runtime\`）改成 Rust 寫的單一 `td.exe`（#199–#206）。輸出、exit code 與錯誤碼不變。Command 與計畫的驗證移到 Daemon。Daemon 不在時，`td` 呼叫同目錄的 `td-daemon.exe start`。
+`td` 從凍結版 Python（PyInstaller 把 Python 程式與直譯器打包成可執行檔；onedir 是打包成一個資料夾，即 `td.exe` 加 `td-runtime\`）改成 Rust 寫的單一 `td.exe`（#199–#206）。輸出、exit code 與錯誤碼不變。Command 與計畫的驗證移到 Daemon。Daemon 不在時，`td` 呼叫同目錄的 `td-daemon.exe start`。
 
 ## 量測對象
 

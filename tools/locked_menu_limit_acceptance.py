@@ -27,11 +27,11 @@ from td_cli.command_catalog import MAX_MENU_JSON_BYTES
 from td_cli.daemon.runtime_files import load_or_create_token, secure_layout
 from td_cli.daemon.transport import create_transport_app
 from td_cli.protocol import Command
+from tools.locked_daemon_harness import NATIVE_TD
 
 PORT = 19982
 TOUCHDESIGNER = Path(r"C:\Program Files\Derivative\TouchDesigner\bin\TouchDesigner.exe")
 COMP = "/project1/menu_limit"
-NATIVE_TD = Path(__file__).parents[1] / "native" / "td" / "target" / "release" / "td.exe"
 
 
 def _wait_for(predicate, seconds: float, what: str) -> Any:

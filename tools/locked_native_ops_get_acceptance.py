@@ -19,16 +19,15 @@ from pathlib import Path
 from typing import Any
 
 from tools.latency_bench import summarize
-from tools.locked_daemon_harness import PORT, Harness, run_locked
+from tools.locked_daemon_harness import NATIVE_TD, PORT, Harness, run_locked
 from tools.locked_frame_timing_acceptance import build_artifact
 
-NATIVE_TD = Path(__file__).parents[1] / "native" / "td" / "target" / "release" / "td.exe"
 WARMUP = 5
 MEASURED = 40
 RUN_TIMEOUT_SECONDS = 60
 
 
-def _native(instance_id: str, work: Path) -> tuple[float, subprocess.CompletedProcess[str]]:
+def _run_native_td(instance_id: str, work: Path) -> tuple[float, subprocess.CompletedProcess[str]]:
     env = {
         **os.environ,
         "LOCALAPPDATA": str(work / "localappdata"),
@@ -60,7 +59,7 @@ def _steps(harness: Harness, work: Path) -> dict[str, Any]:
     process_ms = []
     first: dict[str, Any] | None = None
     for index in range(WARMUP + MEASURED):
-        elapsed, completed = _native(harness.instance_id, work)
+        elapsed, completed = _run_native_td(harness.instance_id, work)
         if first is None:
             first = json.loads(completed.stdout)
         if index >= WARMUP:

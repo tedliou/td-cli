@@ -28,6 +28,7 @@ from td_cli.daemon.transport import create_transport_app
 from td_cli.protocol import Command
 
 PORT = 19982
+NATIVE_TD = Path(__file__).parents[1] / "native" / "td" / "target" / "release" / "td.exe"
 TOUCHDESIGNER = Path(r"C:\Program Files\Derivative\TouchDesigner\bin\TouchDesigner.exe")
 
 

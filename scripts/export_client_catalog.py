@@ -27,7 +27,7 @@ from td_cli.protocol import PROTOCOL_VERSION, TERMINAL_REQUEST_STATUSES, Request
 OUTPUT = Path(__file__).resolve().parents[1] / "native" / "td" / "catalog.json"
 
 
-def _command_tree() -> dict[str, Any]:
+def _committed_command_tree() -> dict[str, Any]:
     return json.loads(OUTPUT.read_text(encoding="utf-8"))["cli"]
 
 
@@ -35,7 +35,7 @@ def build_catalog() -> dict[str, Any]:
     return {
         "release_version": __version__,
         "protocol_version": PROTOCOL_VERSION,
-        "cli": _command_tree(),
+        "cli": _committed_command_tree(),
         "commands": {
             name: {
                 "effect": COMMAND_CATALOG.effect(name).value,

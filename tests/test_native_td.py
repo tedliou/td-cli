@@ -657,7 +657,7 @@ def test_long_polls_ask_for_the_rest_of_the_command_deadline(home):
         ("GET", REQUEST): [(200, snapshot(status="running")), (200, snapshot(result={}))],
     }
     expected = recorded(lambda: run(argv, routes, home))
-    for kind, result in (("python", expected), ("native", run(argv, routes, home))):
+    for kind, result in (("recorded", expected), ("native", run(argv, routes, home))):
         assert result.exit_code == 0, result.stderr
         polls = [path for method, path, _ in result.requests if path.startswith(REQUEST)]
         waits = [int(path.split("wait_ms=")[1]) for path in polls]
