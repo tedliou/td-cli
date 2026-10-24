@@ -301,22 +301,17 @@ def test_healthy_daemon_serves_a_command_on_one_connection_without_starting(
     starts = []
     monkeypatch.setattr("td_cli.client.ensure_running", lambda **kw: starts.append(kw))
 
-    def request(self, method, url, **kwargs):
-        calls.append((id(self), method, url.rsplit("/", 1)[-1]))
+    def request(method, url, **kwargs):
+        calls.append((method, url.rsplit("/", 1)[-1]))
         return httpx.Response(200, json=HEALTHY if url.endswith("/health") else [])
 
-    monkeypatch.setattr(httpx.Client, "request", request)
+    patch_http(monkeypatch, request)
     instance_client = client(tmp_path)
     instance_client._autostart = True
     assert instance_client.instances() == []
     assert instance_client.instances() == []
     assert starts == []
-    assert [call[1:] for call in calls] == [
-        ("GET", "health"),
-        ("GET", "instances"),
-        ("GET", "instances"),
-    ]
-    assert len({call[0] for call in calls}) == 1
+    assert calls == [("GET", "health"), ("GET", "instances"), ("GET", "instances")]
 
 
 @pytest.mark.parametrize(
@@ -388,7 +383,36 @@ def test_unreachable_probe_starts_with_the_remaining_budget(tmp_path: Path, monk
     assert observed == [{"timeout": 9.5}]
 
 
-def test_close_releases_the_shared_connection(tmp_path: Path) -> None:
+def test_a_closed_client_reports_the_daemon_unavailable(tmp_path: Path) -> None:
     instance_client = client(tmp_path)
     instance_client.close()
-    assert instance_client._http.is_closed
+    with pytest.raises(ClientError, match="daemon_unavailable"):
+        instance_client.request("POST", "/v3/requests")
+
+
+@pytest.mark.parametrize("health", [HEALTHY, None])
+def test_deadline_spent_in_the_health_probe_sends_nothing_more(
+    tmp_path: Path, monkeypatch, health
+) -> None:
+    clock = [100.0]
+    calls = []
+    starts = []
+    monkeypatch.setattr("td_cli.client.time.monotonic", lambda: clock[0])
+    monkeypatch.setattr("td_cli.client.ensure_running", lambda **kw: starts.append(kw))
+
+    def request(method, url, **kwargs):
+        calls.append(url.rsplit("/", 1)[-1])
+        clock[0] += 2
+        if health is None:
+            raise httpx.ConnectTimeout("probe stalled")
+        return httpx.Response(200, json=health)
+
+    patch_http(monkeypatch, request)
+    instance_client = client(tmp_path)
+    instance_client._autostart = True
+    with pytest.raises(ClientError) as error:
+        instance_client.instances()
+    assert error.value.code == "daemon_unavailable"
+    assert error.value.details == {"reason": "command deadline expired"}
+    assert calls == ["health"]
+    assert starts == []

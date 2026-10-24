@@ -123,20 +123,17 @@ class DaemonClient:
             raise ClientError("daemon_unavailable")
         return {"Authorization": f"Bearer {token}"}
 
-    def _ready(self) -> bool:
+    def _daemon_is_healthy(self) -> bool:
         """Probe health on the shared connection; any doubt is left to the start routine."""
-        token = load_token(self.root)
-        if token is None:
-            return False
         try:
             response = self._http.request(
                 "GET",
                 f"{self.endpoint}/v3/health",
-                headers={"Authorization": f"Bearer {token}"},
+                headers=self._headers(),
                 timeout=min(HEALTH_PROBE_TIMEOUT, self.timeout),
             )
             payload = response.json() if response.status_code == 200 else None
-        except (OSError, RuntimeError, ValueError, httpx.HTTPError):
+        except (ClientError, OSError, RuntimeError, ValueError, httpx.HTTPError):
             return False
         if not isinstance(payload, dict):
             return False
@@ -151,10 +148,14 @@ class DaemonClient:
         if self._autostart:
             self._autostart = False
             self._deadline = time.monotonic() + self.timeout
-            if not self._ready():
+            if not self._daemon_is_healthy():
                 remaining = self._deadline - time.monotonic()
+                if remaining <= 0:
+                    raise ClientError(
+                        "daemon_unavailable", details={"reason": "command deadline expired"}
+                    )
                 try:
-                    ensure_running(timeout=max(0.001, remaining))
+                    ensure_running(timeout=remaining)
                 except (LaunchError, OSError) as error:
                     raise ClientError(
                         "daemon_unavailable", details={"reason": str(error)}

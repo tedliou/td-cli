@@ -208,13 +208,14 @@ def version_info(
     def operation() -> None:
         _reject_instance_on_query(ctx)
         daemon_version = None
+        client = DaemonClient(timeout=float(ctx.obj["timeout"]))
         try:
-            daemon_version = DaemonClient(timeout=float(ctx.obj["timeout"])).health()[
-                "release_version"
-            ]
+            daemon_version = client.health()["release_version"]
         except ClientError as error:
             if error.code not in {"daemon_unavailable", "transport_error"}:
                 raise
+        finally:
+            client.close()
         data = {
             "release_version": __version__,
             "protocol_versions": [3],
