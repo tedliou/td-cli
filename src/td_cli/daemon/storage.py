@@ -42,6 +42,7 @@ class RequestStore:
         self._closed = False
         # Futures resolved on every status change of a Request, for terminal waits.
         self._waiters: dict[str, set[asyncio.Future[None]]] = {}
+        self._released = False
 
     @classmethod
     async def open(cls, path: Path) -> RequestStore:
@@ -96,14 +97,15 @@ class RequestStore:
         """Return the snapshot once its status is terminal, or the current one at ``timeout``.
 
         The waiter is registered before each read, so a change between the read and the wait
-        still wakes it. Closing the store releases every waiter with its last snapshot.
+        still wakes it. ``release_waiters`` and ``close`` answer every waiter with its current
+        snapshot.
         """
         loop = asyncio.get_running_loop()
         deadline = loop.time() + timeout
         while True:
-            changed: asyncio.Future[None] = loop.create_future()
+            wakeup: asyncio.Future[None] = loop.create_future()
             waiters = self._waiters.setdefault(request_id, set())
-            waiters.add(changed)
+            waiters.add(wakeup)
             try:
                 snapshot = await self.get(request_id)
                 remaining = deadline - loop.time()
@@ -111,14 +113,15 @@ class RequestStore:
                     snapshot is None
                     or snapshot["status"] in TERMINAL_REQUEST_STATUSES
                     or remaining <= 0
+                    or self._released
                 ):
                     return snapshot
                 with contextlib.suppress(TimeoutError):
-                    await asyncio.wait_for(changed, remaining)
+                    await asyncio.wait_for(wakeup, remaining)
                 if self._closed:
                     return snapshot
             finally:
-                waiters.discard(changed)
+                waiters.discard(wakeup)
                 if not waiters:
                     self._waiters.pop(request_id, None)
 
@@ -130,11 +133,16 @@ class RequestStore:
     async def schema_version(self) -> int:
         return await self._run(_schema_version, self._connection)
 
+    def release_waiters(self) -> None:
+        """Answer every current and later wait at once, so a stopping server is not held open."""
+        self._released = True
+        self._wake([waiter for waiters in self._waiters.values() for waiter in waiters])
+
     async def close(self) -> None:
         if self._closed:
             return
         self._closed = True
-        self._wake([waiter for waiters in self._waiters.values() for waiter in waiters])
+        self.release_waiters()
         await self._run(_close, self._connection, allow_closed=True)
         self._executor.shutdown(wait=True, cancel_futures=True)
 

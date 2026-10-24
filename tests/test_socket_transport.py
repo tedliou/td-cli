@@ -557,3 +557,50 @@ async def test_instances_report_no_project_for_older_agents(tmp_path: Path) -> N
         if client.connected:
             await client.disconnect()
         stop_server(server, thread)
+
+
+@pytest.mark.asyncio
+async def test_fatal_stop_answers_open_long_polls_before_the_server_stops(tmp_path: Path) -> None:
+    stopped = threading.Event()
+    app = create_transport_app(tmp_path, token=TOKEN, shutdown=stopped.set)
+    server, thread, port = await start_server(app)
+    client = socketio.AsyncClient(reconnection=False)
+    dispatched: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
+    client.on("request_dispatch", lambda data: dispatched.set_result(data))
+    command = {"name": "ops.get", "input": {"operator_path": "/project1"}}
+    try:
+        await register(client, port)
+        async with ClientSession(headers={"Authorization": f"Bearer {TOKEN}"}) as session:
+            submitted = await session.post(
+                f"http://127.0.0.1:{port}/v3/requests",
+                json={"request_id": REQUEST_ID, "instance_id": INSTANCE_ID, "command": command},
+            )
+            assert submitted.status == 201
+            await asyncio.wait_for(dispatched, 2)
+            poll = asyncio.create_task(
+                session.get(f"http://127.0.0.1:{port}/v3/requests/{REQUEST_ID}?wait_ms=20000")
+            )
+            store = app.other_asgi_app.state.request_store
+
+            async def unavailable(*args: object, **kwargs: object) -> object:
+                raise RuntimeError("store unavailable")
+
+            # The failing store also keeps the controlled shutdown from settling the Request.
+            store.create_or_get = unavailable
+            store.find_by_statuses = unavailable
+            await session.post(
+                f"http://127.0.0.1:{port}/v3/requests",
+                json={
+                    "request_id": "018f47ec-7f3b-7a34-8f31-2ad70b6f6e2b",
+                    "instance_id": INSTANCE_ID,
+                    "command": command,
+                },
+            )
+            answered = await asyncio.wait_for(poll, 5)
+            assert answered.status == 200
+            assert (await answered.json())["status"] == "dispatched"
+        assert stopped.is_set()
+    finally:
+        if client.connected:
+            await client.disconnect()
+        stop_server(server, thread)

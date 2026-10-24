@@ -171,12 +171,20 @@ async def test_waiting_query_answers_when_the_request_settles(tmp_path: Path) ->
         AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
     ):
         assert (await client.post("/v3/requests", headers=headers(), json=SUBMISSION)).is_success
+        store = app.state.request_store
+        reads: asyncio.Queue[None] = asyncio.Queue()
+        read = store.get
+
+        async def counted(request_id: str) -> dict[str, object] | None:
+            reads.put_nowait(None)  # the query reads only after registering as a waiter
+            return await read(request_id)
+
+        store.get = counted
         query = asyncio.create_task(
             client.get(f"/v3/requests/{REQUEST_ID}?wait_ms=10000", headers=headers())
         )
-        await asyncio.sleep(0.05)
-        assert not query.done()
-        await app.state.request_store.compare_and_set(
+        await asyncio.wait_for(reads.get(), 1)
+        await store.compare_and_set(
             REQUEST_ID, expected_statuses={"queued"}, changes={"status": "failed"}
         )
         response = await asyncio.wait_for(query, 1)

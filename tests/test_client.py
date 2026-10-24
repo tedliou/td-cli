@@ -436,6 +436,28 @@ def test_wait_long_polls_with_the_remaining_budget(tmp_path: Path, monkeypatch) 
     assert urls == ["r?wait_ms=9900", "r?wait_ms=25000"]
 
 
+def test_retried_long_poll_waits_only_for_the_budget_left(tmp_path: Path, monkeypatch) -> None:
+    clock = [100.0]
+    attempts = []
+    monkeypatch.setattr("td_cli.client.time.monotonic", lambda: clock[0])
+    monkeypatch.setattr(
+        "td_cli.client.time.sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds)
+    )
+
+    def request(method, url, **kwargs):
+        attempts.append((url.split("/v3/requests/", 1)[1], kwargs["timeout"]))
+        if len(attempts) == 1:
+            raise httpx.ConnectError("refused")
+        return httpx.Response(200, json={"status": "succeeded", "request_id": "r"})
+
+    patch_http(monkeypatch, request)
+    instance_client = client(tmp_path)
+    instance_client.timeout = 10
+    assert instance_client.wait("r")["status"] == "succeeded"
+    assert [url for url, _ in attempts] == ["r?wait_ms=9900", "r?wait_ms=9800"]
+    assert attempts[1][1] == pytest.approx(9.9)  # the HTTP timeout outlasts the Daemon wait
+
+
 def test_wait_keeps_spacing_when_a_daemon_answers_unsettled_at_once(
     tmp_path: Path, monkeypatch
 ) -> None:

@@ -148,6 +148,9 @@ def serve() -> None:
                 host="127.0.0.1",
                 port=9982,
                 log_config=None,
+                # Bounds a stop that did not go through the transport, such as a failed
+                # orderly shutdown request, while a long poll is still open.
+                timeout_graceful_shutdown=5,
             )
         )
         snapshot = {

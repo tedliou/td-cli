@@ -80,6 +80,9 @@ TERMINAL_REQUEST_STATUSES = frozenset(
     }
 )
 
+# Longest long poll a Request query may ask for; the Daemon rejects a longer ``wait_ms``.
+MAX_REQUEST_WAIT_MS = 25_000
+
 
 class RequestSnapshot(StrictModel):
     request_id: str

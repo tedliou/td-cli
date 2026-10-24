@@ -10,11 +10,15 @@ from pydantic import ValidationError
 from td_cli.daemon.runtime_files import ENDPOINT, data_root, load_token
 from td_cli.error_catalog import ERROR_CATALOG
 from td_cli.processes import LaunchError
-from td_cli.protocol import PROTOCOL_VERSION, TERMINAL_REQUEST_STATUSES, RequestStatus
+from td_cli.protocol import (
+    MAX_REQUEST_WAIT_MS,
+    PROTOCOL_VERSION,
+    TERMINAL_REQUEST_STATUSES,
+    RequestStatus,
+)
 
 _REQUEST_STATUSES = frozenset(RequestStatus)
 # The Daemon caps one long poll at 25 s; leave room for its answer within the HTTP budget.
-MAX_WAIT_SECONDS = 25.0
 WAIT_RESPONSE_MARGIN_SECONDS = 0.1
 
 
@@ -147,7 +151,14 @@ class DaemonClient:
             and PROTOCOL_VERSION in versions
         )
 
-    def request(self, method: str, path: str, *, json: object = None) -> Any:
+    def request(
+        self, method: str, path: str, *, json: object = None, long_poll: bool = False
+    ) -> Any:
+        """Send one call within the Command deadline.
+
+        With ``long_poll`` each attempt asks the Daemon to wait for the rest of the deadline,
+        less a margin for its answer, so a retried GET never outwaits its own timeout.
+        """
         if self._autostart:
             self._autostart = False
             self._deadline = time.monotonic() + self.timeout
@@ -175,10 +186,17 @@ class DaemonClient:
                 if remaining <= backoff:
                     break
                 time.sleep(backoff)
+            url = f"{self.endpoint}{path}"
+            wait_ms = min(
+                MAX_REQUEST_WAIT_MS,
+                int((deadline - time.monotonic() - WAIT_RESPONSE_MARGIN_SECONDS) * 1000),
+            )
+            if long_poll and wait_ms > 0:
+                url = f"{url}?wait_ms={wait_ms}"
             try:
                 response = self._http.request(
                     method,
-                    f"{self.endpoint}{path}",
+                    url,
                     headers=self._headers(),
                     json=json,
                     timeout=max(0.001, deadline - time.monotonic()),
@@ -255,10 +273,9 @@ class DaemonClient:
             error.details.setdefault("request_id", request_id)
             raise
 
-    def get_request(self, request_id: str, *, wait: float = 0) -> dict[str, Any]:
-        """Read a Request; with ``wait`` seconds the Daemon answers once it settles."""
-        query = f"?wait_ms={int(wait * 1000)}" if wait > 0 else ""
-        snapshot = self.request("GET", f"/v3/requests/{request_id}{query}")
+    def get_request(self, request_id: str, *, long_poll: bool = False) -> dict[str, Any]:
+        """Read a Request; with ``long_poll`` the Daemon answers once it settles."""
+        snapshot = self.request("GET", f"/v3/requests/{request_id}", long_poll=long_poll)
         if snapshot.get("status") not in _REQUEST_STATUSES:
             raise _incompatible(snapshot)
         error = snapshot.get("error")
@@ -341,12 +358,8 @@ class DaemonClient:
                 raise ClientError(
                     "wait_timeout", details={"request_id": request_id, "request": snapshot}
                 )
-            wait = min(
-                MAX_WAIT_SECONDS,
-                deadline - time.monotonic() - WAIT_RESPONSE_MARGIN_SECONDS,
-            )
             try:
-                snapshot = self.get_request(request_id, wait=wait)
+                snapshot = self.get_request(request_id, long_poll=True)
             except ClientError as error:
                 error.details.setdefault("request_id", request_id)
                 raise
@@ -354,8 +367,8 @@ class DaemonClient:
                 return snapshot
             if time.monotonic() >= deadline:
                 raise ClientError("wait_timeout", details={"request": snapshot})
-            # A long poll ends unsettled only when its wait ran out; an older Daemon answers at
-            # once, so keep the original 50 ms spacing between queries.
+            # A long poll ends unsettled only when its wait ran out or the Daemon is stopping;
+            # space the next query so neither case becomes a tight loop.
             time.sleep(min(0.05, max(0, deadline - time.monotonic())))
 
 

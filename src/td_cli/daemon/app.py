@@ -17,10 +17,15 @@ from pydantic import field_validator
 from td_cli import __version__
 from td_cli.daemon.storage import RequestIdentityConflict, RequestStore
 from td_cli.error_catalog import ERROR_CATALOG
-from td_cli.protocol import PROTOCOL_VERSIONS, Command, RequestSnapshot, StrictModel
+from td_cli.protocol import (
+    MAX_REQUEST_WAIT_MS,
+    PROTOCOL_VERSIONS,
+    Command,
+    RequestSnapshot,
+    StrictModel,
+)
 
 # One long poll stays well under the 60-second single-wait limit of AGENTS.md.
-MAX_REQUEST_WAIT_MS = 25_000
 
 
 class SubmitRequest(StrictModel):
