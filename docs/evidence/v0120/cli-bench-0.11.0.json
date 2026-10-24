@@ -1,0 +1,28 @@
+{
+  "td": "C:\\Users\\Ted\\AppData\\Local\\Programs\\touchdesigner-cli\\current\\td.exe",
+  "td_version": "td 0.11.0 (protocol 3)",
+  "results": [
+    {
+      "command": [
+        "--version"
+      ],
+      "runs": 20,
+      "p50_ms": 535.576,
+      "p95_ms": 559.007,
+      "min_ms": 530.041,
+      "max_ms": 561.017
+    },
+    {
+      "command": [
+        "--json",
+        "instances",
+        "list"
+      ],
+      "runs": 20,
+      "p50_ms": 1484.167,
+      "p95_ms": 1507.706,
+      "min_ms": 1473.194,
+      "max_ms": 1511.81
+    }
+  ]
+}

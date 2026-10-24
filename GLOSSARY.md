@@ -80,6 +80,10 @@ _Avoid_: untyped value, serialized object
 A submission of one Command carrying a Request ID whose result remains queryable after a client timeout.
 _Avoid_: command invocation
 
+**Long Poll**:
+A Request query that asks the Daemon to answer only once the Request reaches a terminal status or the requested wait, at most 25 seconds, runs out. It replaces repeated short queries; the answer is always the current snapshot.
+_Avoid_: push, subscription
+
 **Protocol Version**:
 The version of the wire messages and JSON schemas shared by the daemon and Agent Component. Protocol v3 carries the typed Command as canonical JSON text across SocketIO DAT so booleans and numbers retain their types. It does not imply that the pre-1.0 CLI surface has a SemVer stability guarantee. Offline Agent upgrades are independent of this runtime Protocol.
 _Avoid_: CLI version, Release version

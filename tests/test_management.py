@@ -154,3 +154,62 @@ async def test_cancelled_http_admission_completes_persistence_after_lifecycle_ad
             await asyncio.sleep(0.01)
         assert persisted is not None
         assert persisted["status"] == "queued"
+
+
+SUBMISSION = {
+    "request_id": REQUEST_ID,
+    "instance_id": INSTANCE_ID,
+    "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
+}
+
+
+@pytest.mark.asyncio
+async def test_waiting_query_answers_when_the_request_settles(tmp_path: Path) -> None:
+    app = create_app(tmp_path, token=TOKEN)
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        assert (await client.post("/v3/requests", headers=headers(), json=SUBMISSION)).is_success
+        store = app.state.request_store
+        reads: asyncio.Queue[None] = asyncio.Queue()
+        read = store.get
+
+        async def counted(request_id: str) -> dict[str, object] | None:
+            reads.put_nowait(None)  # the query reads only after registering as a waiter
+            return await read(request_id)
+
+        store.get = counted
+        query = asyncio.create_task(
+            client.get(f"/v3/requests/{REQUEST_ID}?wait_ms=10000", headers=headers())
+        )
+        await asyncio.wait_for(reads.get(), 1)
+        await store.compare_and_set(
+            REQUEST_ID, expected_statuses={"queued"}, changes={"status": "failed"}
+        )
+        response = await asyncio.wait_for(query, 1)
+        assert response.json()["status"] == "failed"
+
+        expired = await client.get(f"/v3/requests/{REQUEST_ID}?wait_ms=0", headers=headers())
+        assert expired.json()["status"] == "failed"
+        missing = await client.get(
+            "/v3/requests/018f47ec-7f3b-7a34-8f31-000000000000?wait_ms=50", headers=headers()
+        )
+        assert missing.status_code == 404
+        assert missing.json()["detail"] == "request_not_found"
+
+
+@pytest.mark.parametrize("wait_ms", ["-1", "25001", "soon"])
+def test_waiting_query_rejects_a_wait_outside_its_bound(tmp_path: Path, wait_ms: str) -> None:
+    with TestClient(create_app(tmp_path, token=TOKEN)) as client:
+        client.post("/v3/requests", headers=headers(), json=SUBMISSION)
+        response = client.get(f"/v3/requests/{REQUEST_ID}?wait_ms={wait_ms}", headers=headers())
+        assert response.status_code == 422
+
+
+def test_waiting_query_returns_the_current_snapshot_when_the_wait_ends(tmp_path: Path) -> None:
+    with TestClient(create_app(tmp_path, token=TOKEN)) as client:
+        client.post("/v3/requests", headers=headers(), json=SUBMISSION)
+        response = client.get(f"/v3/requests/{REQUEST_ID}?wait_ms=50", headers=headers())
+        assert response.status_code == 200
+        assert response.json()["status"] == "queued"

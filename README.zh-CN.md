@@ -182,8 +182,9 @@ Agent 在发出 `request_accepted` 前会先保留有界 outcome 容量，只执
 authorization 的工作，并保留所有 post-accept `succeeded`、`failed`、`unknown` outcome，直到
 Daemon 完成记录。上限为 64 条、每条 canonical outcome 256 KiB、合计 16 MiB。Command、
 超过锁定版 SocketIO DAT 单一事件实测范围的 outcome，会拆成依序且经过 identity 验证的 24 KiB
-区块，重组完成后才提交公开结果。Command、heartbeat 与 drain timer 使用 TouchDesigner
-独立的 `TDResources` 时间参考，所有 TouchDesigner object 访问仍只在主线程。Extension
+区块，重组完成后才提交公开结果。heartbeat 与 drain timer 使用 TouchDesigner
+独立的 `TDResources` 时间参考；已授权的 Command 直接在 SocketIO DAT callback 内执行，
+也就是主线程的 frame 开头，所有 TouchDesigner object 访问仍只在主线程。Extension
 初始化使用官方 SocketIO Reset 参数，连接后清除暂存 auth DAT。Power Off 模式不受支持。
 
 <!-- doc-section: offline-upgrade -->
@@ -524,4 +525,4 @@ read-only Command 使用。
 终态 snapshot。请保存输出；中断或 outcome unknown 后先查询已记录的 Request，
 不要盲目重跑整份计划。不接受嵌套 `batch.execute`。
 
-0.11.0 离线升级除现有来源（含 0.7.0、0.7.1、0.8.0、0.9.0）外，新增精确 canonical 0.10.0 Agent 白名单，保留 Connectionstate 定义。Agent 读取接口新增：`batch execute` 逐项结果、Instance 的 `project`、`ops inspect` 的 COMP 接口摘要、Execute 系列与 byte offset 的 `dat text get`、`chop values get`、`parameters list` 的值与筛选选项、可分页的 `project snapshot`，以及 `ops destroy`／`copy`／`move` 的 `--inventory summary`。`td` 改以 onedir 发布，启动约 0.4 秒。新选项需要 0.11.0 Agent；内嵌较旧 Agent 时，CLI 与 Daemon 会以 `command_unsupported` 拒绝。下一个 patch 版缩短预热后的命令延迟：Daemon 健康时，在线 `td` 命令不再导入 Daemon 服务器包，并复用同一条 HTTP 连接，`td --json instances list` 从约 1.5 秒降到约 0.5 秒。`td-daemon` 与 `td-agent` 也改以 onedir 发布，`td-daemon-runtime\`、`td-agent-runtime\` 与 `td-runtime\` 并存于同一个版本目录。
+0.11.0 离线升级除现有来源（含 0.7.0、0.7.1、0.8.0、0.9.0）外，新增精确 canonical 0.10.0 Agent 白名单，保留 Connectionstate 定义。Agent 读取接口新增：`batch execute` 逐项结果、Instance 的 `project`、`ops inspect` 的 COMP 接口摘要、Execute 系列与 byte offset 的 `dat text get`、`chop values get`、`parameters list` 的值与筛选选项、可分页的 `project snapshot`，以及 `ops destroy`／`copy`／`move` 的 `--inventory summary`。`td` 改以 onedir 发布，启动约 0.4 秒。新选项需要 0.11.0 Agent；内嵌较旧 Agent 时，CLI 与 Daemon 会以 `command_unsupported` 拒绝。下一个 patch 版缩短预热后的命令延迟：Daemon 健康时，在线 `td` 命令不再导入 Daemon 服务器包，并复用同一条 HTTP 连接，`td --json instances list` 从约 1.5 秒降到约 0.5 秒。`td-daemon` 与 `td-agent` 也改以 onedir 发布，`td-daemon-runtime\`、`td-agent-runtime\` 与 `td-runtime\` 并存于同一个版本目录。下一个 minor 版再缩短：已授权的 Command 在授权的同一个 TouchDesigner frame 内执行；`td` 等待 Request 改用长轮询，不再每 50 ms 查询一次；`td` 启动不读取包 metadata、不导入 httpx。TouchDesigner 往返时间从约 62 ms 降到约 33 ms，`td --json instances list` 降到约 0.3 秒。

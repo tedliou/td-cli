@@ -84,6 +84,7 @@ def create_transport_app(
         async_mode="asgi", cors_allowed_origins=[], max_http_buffer_size=256 * 1024
     )
     lifecycle: RequestLifecycle | None = None
+    request_store: RequestStore | None = None
     effect_task: asyncio.Task[None] | None = None
     deadline_task: asyncio.Task[None] | None = None
     connections: dict[str, _ConnectionAdapter] = {}
@@ -98,8 +99,16 @@ def create_transport_app(
             raise RuntimeError("RequestLifecycle is not started")
         return lifecycle
 
+    def stop_serving() -> None:
+        # The server waits for open connections before it stops, so answer long polls first.
+        if request_store is not None:
+            request_store.release_waiters()
+        if shutdown is not None:
+            shutdown()
+
     async def startup(store: RequestStore) -> None:
-        nonlocal lifecycle, effect_task, deadline_task
+        nonlocal lifecycle, request_store, effect_task, deadline_task
+        request_store = store
         lifecycle = RequestLifecycle(
             store,
             heartbeat_timeout=heartbeat_timeout,
@@ -172,8 +181,7 @@ def create_transport_app(
             await asyncio.sleep(0.05)
         for adapter in list(connections.values()):
             await enqueue(adapter, _Outbound(disconnect=True), wait=True)
-        if shutdown is not None:
-            shutdown()
+        stop_serving()
 
     management = create_app(
         root,
@@ -207,8 +215,7 @@ def create_transport_app(
                     metadata.pop(effect.instance_id, None)
                 continue
             if effect.kind == "fatal":
-                if shutdown is not None:
-                    shutdown()
+                stop_serving()
                 continue
             if effect.instance_id is None or effect.connection_id is None:
                 continue

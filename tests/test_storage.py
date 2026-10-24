@@ -127,3 +127,80 @@ async def test_failed_v1_migration_rolls_back_and_fails_closed(tmp_path: Path) -
     assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
     assert connection.execute("SELECT snapshot FROM requests").fetchone()[0] == "not-json"
     connection.close()
+
+
+def _count_reads(store: RequestStore) -> asyncio.Queue[None]:
+    """Signal each snapshot read; a waiter reads only after it has registered."""
+    reads: asyncio.Queue[None] = asyncio.Queue()
+    read = store.get
+
+    async def counted(request_id: str) -> dict[str, object] | None:
+        reads.put_nowait(None)
+        return await read(request_id)
+
+    store.get = counted  # type: ignore[method-assign]
+    return reads
+
+
+@pytest.mark.asyncio
+async def test_terminal_wait_returns_as_soon_as_the_request_settles(tmp_path: Path) -> None:
+    store = await RequestStore.open(tmp_path / "daemon.db")
+    try:
+        await store.create_or_get(snapshot())
+        reads = _count_reads(store)
+        waiting = asyncio.create_task(store.wait_until_terminal(REQUEST_ID, timeout=10))
+        await asyncio.wait_for(reads.get(), 1)
+        await store.compare_and_set(
+            REQUEST_ID, expected_statuses={"queued"}, changes={"status": "dispatched"}
+        )
+        await asyncio.wait_for(reads.get(), 1)  # woken by a non-terminal change, reads again
+        await store.compare_and_set(
+            REQUEST_ID, expected_statuses={"dispatched"}, changes={"status": "failed"}
+        )
+        settled = await asyncio.wait_for(waiting, 1)
+        assert settled is not None and settled["status"] == "failed"
+    finally:
+        await store.close()
+
+
+@pytest.mark.asyncio
+async def test_terminal_wait_returns_the_current_snapshot_when_time_runs_out(
+    tmp_path: Path,
+) -> None:
+    store = await RequestStore.open(tmp_path / "daemon.db")
+    try:
+        await store.create_or_get(snapshot())
+        current = await store.wait_until_terminal(REQUEST_ID, timeout=0.05)
+        assert current is not None and current["status"] == "queued"
+        assert await store.wait_until_terminal("missing-request", timeout=10) is None
+    finally:
+        await store.close()
+
+
+@pytest.mark.asyncio
+async def test_closing_the_store_releases_terminal_waiters(tmp_path: Path) -> None:
+    store = await RequestStore.open(tmp_path / "daemon.db")
+    await store.create_or_get(snapshot())
+    reads = _count_reads(store)
+    waiting = asyncio.create_task(store.wait_until_terminal(REQUEST_ID, timeout=30))
+    await asyncio.wait_for(reads.get(), 1)
+    await store.close()
+    released = await asyncio.wait_for(waiting, 1)
+    assert released is not None and released["status"] == "queued"
+
+
+@pytest.mark.asyncio
+async def test_releasing_waiters_answers_current_and_later_waits_at_once(tmp_path: Path) -> None:
+    store = await RequestStore.open(tmp_path / "daemon.db")
+    try:
+        await store.create_or_get(snapshot())
+        reads = _count_reads(store)
+        waiting = asyncio.create_task(store.wait_until_terminal(REQUEST_ID, timeout=30))
+        await asyncio.wait_for(reads.get(), 1)
+        store.release_waiters()
+        released = await asyncio.wait_for(waiting, 1)
+        later = await asyncio.wait_for(store.wait_until_terminal(REQUEST_ID, timeout=30), 1)
+        assert released is not None and released["status"] == "queued"
+        assert later is not None and later["status"] == "queued"
+    finally:
+        await store.close()

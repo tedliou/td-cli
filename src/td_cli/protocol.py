@@ -69,6 +69,22 @@ class RequestStatus(StrEnum):
     DAEMON_SHUTDOWN = "daemon_shutdown"
 
 
+# A client stops waiting at these statuses; `unknown` may still be refined by a retained outcome.
+TERMINAL_REQUEST_STATUSES = frozenset(
+    {
+        RequestStatus.SUCCEEDED,
+        RequestStatus.FAILED,
+        RequestStatus.UNKNOWN,
+        RequestStatus.INSTANCE_OFFLINE,
+        RequestStatus.DAEMON_SHUTDOWN,
+    }
+)
+
+# Longest long poll a Request query may ask for; the Daemon rejects a longer ``wait_ms``.
+# It stays well under the 60-second single-wait limit of AGENTS.md.
+MAX_REQUEST_WAIT_MS = 25_000
+
+
 class RequestSnapshot(StrictModel):
     request_id: str
     instance_id: str
