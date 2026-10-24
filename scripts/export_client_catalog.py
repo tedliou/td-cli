@@ -16,7 +16,12 @@ from typing import Any
 import typer.main
 
 from td_cli import __version__, cli
-from td_cli.command_catalog import COMMAND_CATALOG
+from td_cli.command_catalog import (
+    COMMAND_CATALOG,
+    MAX_DAT_CONTENT_BYTES,
+    MAX_INSPECTION_ITEMS,
+    MAX_TOX_FILE_BYTES,
+)
 from td_cli.error_catalog import ERROR_CATALOG
 from td_cli.protocol import PROTOCOL_VERSION, TERMINAL_REQUEST_STATUSES, RequestStatus
 
@@ -89,6 +94,12 @@ def build_catalog() -> dict[str, Any]:
                 "input_schema": COMMAND_CATALOG.input_model(name).model_json_schema(),
             }
             for name in COMMAND_CATALOG.names
+        },
+        # Defaults the td commands put into a Command input when an option is left out.
+        "input_defaults": {
+            "max_dat_content_bytes": MAX_DAT_CONTENT_BYTES,
+            "max_inspection_items": MAX_INSPECTION_ITEMS,
+            "max_tox_file_bytes": MAX_TOX_FILE_BYTES,
         },
         "request_statuses": [status.value for status in RequestStatus],
         "terminal_request_statuses": sorted(status.value for status in TERMINAL_REQUEST_STATUSES),

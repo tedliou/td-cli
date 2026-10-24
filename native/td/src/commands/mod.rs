@@ -5,6 +5,11 @@ use std::io::Read;
 
 use serde_json::{Map, Value, json};
 
+mod ops;
+mod options;
+
+use options::{Builder, Options};
+
 use crate::args::{Invocation, Values};
 use crate::catalog;
 use crate::client::{ClientError, DaemonClient, Result};
@@ -46,22 +51,30 @@ pub fn run(invocation: Invocation) -> i32 {
         ["instances", "get"] => instances_get(&context, values),
         ["requests", "get"] => requests_get(&context, values),
         ["requests", "wait"] => requests_wait(&context, values),
-        ["ops", "get"] => {
-            let dedicated =
-                text(values, "operator_path").map(|path| json!({"operator_path": path}));
-            submit_command(&context, "ops.get", dedicated, values)
-        }
-        _ => {
-            crate::output::echo(
-                crate::output::Stream::Err,
-                "not yet available in the native td",
-            );
-            return 5;
-        }
+        [group, rest @ ..] => match submission(group, rest) {
+            Some((name, build)) => build(&Options(values))
+                .and_then(|dedicated| submit_command(&context, name, dedicated, values)),
+            None => {
+                crate::output::echo(
+                    crate::output::Stream::Err,
+                    "not yet available in the native td",
+                );
+                return 5;
+            }
+        },
+        [] => unreachable!("the parser always names a command"),
     };
     match outcome {
         Ok(()) => 0,
         Err(error) => context.printer.fail(error),
+    }
+}
+
+/// The Command a submitting `td` command sends, and how it builds the dedicated input.
+fn submission(group: &str, rest: &[&str]) -> Option<(&'static str, Builder)> {
+    match group {
+        "ops" => ops::command(rest),
+        _ => None,
     }
 }
 

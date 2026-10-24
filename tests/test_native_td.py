@@ -674,3 +674,120 @@ def test_a_start_that_never_finishes_is_stopped(native_beside_fake_daemon, tmp_p
     assert json.loads(result.stdout)["error"]["details"] == {
         "reason": "td-daemon start did not finish in time"
     }
+
+
+# ops commands: the minimal dedicated arguments, every refinement, and a partial group.
+OPS = {
+    "get": (["/p"], ["/p"], None),
+    "inspect": (["/p"], ["/p", "--max-items", "7"], ["--max-items", "7"]),
+    "state get": (["/p"], ["/p"], None),
+    "state set": (
+        ["/p"],
+        [
+            "/p",
+            "--node-x",
+            "1",
+            "--color",
+            "1",
+            "0.5",
+            "0",
+            "--comment",
+            "é",
+            "--no-bypass",
+            "--lock",
+        ],
+        ["--lock"],
+    ),
+    "children": (["/p"], ["/p", "--op-type", "baseCOMP"], ["--op-type", "baseCOMP"]),
+    "connections": (["/p"], ["/p", "--max-connections", "3"], ["--max-connections", "3"]),
+    "hierarchy connections": (["/p"], ["/p", "--max-connections", "0"], ["--max-connections", "1"]),
+    "hierarchy connect": (["/a", "/b"], ["/a", "/b", "--output-index", "1", "--replace"], ["/a"]),
+    "hierarchy disconnect": (
+        ["/a", "/b"],
+        ["/a", "/b", "--input-index", "2"],
+        ["--input-index", "2"],
+    ),
+    "create": (
+        ["/p", "baseCOMP", "n"],
+        ["/p", "baseCOMP", "n", "--node-x", "5", "--allow-conditional"],
+        ["/p", "baseCOMP"],
+    ),
+    "connect": (["/a", "/b"], ["/a", "/b", "--input-index", "0", "--replace"], ["--replace"]),
+    "rename": (["/a", "b"], ["/a", "b"], ["/a"]),
+    "destroy": (
+        ["/a"],
+        [
+            "/a",
+            "--recursive",
+            "--allow-connected",
+            "--max-operators",
+            "9",
+            "--inventory",
+            "summary",
+        ],
+        ["--recursive"],
+    ),
+    "copy": (
+        ["/a", "/b", "c"],
+        ["/a", "/b", "c", "--include-docked", "--node-y", "3"],
+        ["/a", "/b"],
+    ),
+    "move": (
+        ["/a", "/b", "c"],
+        ["/a", "/b", "c", "--allow-connected", "--max-operators", "0", "--inventory", "x"],
+        ["--node-x", "1"],
+    ),
+    "tox import": (
+        ["/p", "C:/x.tox", "C:/", "t"],
+        [
+            "/p",
+            "C:/x.tox",
+            "C:/",
+            "t",
+            "--trusted",
+            "--replace",
+            "--root-child",
+            "r",
+            "--max-file-bytes",
+            "10",
+            "--max-operators",
+            "2",
+            "--inventory",
+            "summary",
+        ],
+        ["/p", "C:/x.tox"],
+    ),
+    "disconnect": (["/a", "/b"], ["/a", "/b", "--output-index", "3"], ["/a"]),
+}
+FIXED = ["--request-id", REQUEST_ID]
+
+
+def ops_cases():
+    for name, (minimal, full, partial) in OPS.items():
+        command = ["ops", *name.split()]
+        inline = ["--input", '{"operator_path":"/p","n":1.0}']
+        stdin = b'{"source_path": "/a", "target_path": "/b"}'
+        yield pytest.param([*command, *minimal, *FIXED], None, False, id=f"{name}-minimal")
+        yield pytest.param([*command, *full, "--no-wait", *FIXED], None, False, id=f"{name}-full")
+        yield pytest.param([*command, *inline, *FIXED], None, False, id=f"{name}-input")
+        yield pytest.param(
+            [*command, "--input-file", "-", *FIXED], stdin, False, id=f"{name}-stdin"
+        )
+        if partial is not None:
+            yield pytest.param([*command, *partial, *FIXED], None, True, id=f"{name}-partial")
+
+
+@pytest.mark.parametrize(("argv", "stdin", "rejected"), ops_cases())
+def test_ops_commands(argv, stdin, rejected, home):
+    native = same(["--json", *argv], submission(), home, stdin=stdin)
+    if rejected:
+        assert (native.exit_code, native.requests) == (2, [])
+    else:
+        assert native.exit_code == 0, native.stderr
+        assert [method for method, _, _ in native.requests][:2] == ["GET", "POST"]
+
+
+def test_dedicated_options_and_input_are_exclusive(home):
+    argv = ["--json", "ops", "rename", "/a", "b", "--input", "{}", *FIXED]
+    native = same(argv, submission(), home)
+    assert (native.exit_code, native.requests) == (2, [])

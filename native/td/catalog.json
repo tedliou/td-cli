@@ -7037,6 +7037,11 @@
    }
   }
  },
+ "input_defaults": {
+  "max_dat_content_bytes": 32768,
+  "max_inspection_items": 100,
+  "max_tox_file_bytes": 67108864
+ },
  "request_statuses": [
   "queued",
   "dispatched",
