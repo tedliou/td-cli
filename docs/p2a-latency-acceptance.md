@@ -8,7 +8,7 @@
 - 冷啟動：Daemon 沒在執行，`td` 先自動啟動 Daemon、等它健康，再執行命令。
 - p50／p95：把所有量測值排序後，第 50 與第 95 百分位的值。
 - 暫存資料夾（scratch）：本 session 專用、量完即丟的資料夾，路徑中以 `<scratch>` 表示。
-- data root：Daemon 存放狀態、權杖與記錄的使用者資料夾，預設是 `%LOCALAPPDATA%	ouchdesigner-cli`。
+- data root：Daemon 存放狀態、權杖與記錄的使用者資料夾，預設是 `%LOCALAPPDATA%\touchdesigner-cli`。
 - WMI：Windows 管理介面；Daemon 透過它的 `Win32_Process.Create` 建立行程，讓 Daemon 不隨呼叫者的主控台結束。
 - 一次性專案：只為這次量測建出、量完即丟的 TouchDesigner 專案，不是任何使用者作品。
 
@@ -80,8 +80,7 @@ Daemon 經 WMI 的 `Win32_Process.Create` 啟動，不繼承呼叫者的環境�
 第一次嘗試時工作站已鎖定，TouchDesigner 無法完成啟動。解鎖後跑了兩次，原始輸出在 `docs/evidence/v0130/native-ops-get.json` 與 `native-ops-get-2.json`。
 
 ```powershell
-uv run python -m tools.locked_native_ops_get_acceptance --work <scratch>\locked --project .codexrame-timing\probe.toe --artifact <scratch>rame-timing-src	d-agent.tox --evidence docs\evidence0130
-ative-ops-get.json
+uv run python -m tools.locked_native_ops_get_acceptance --work <scratch>\locked --project .codex\frame-timing\probe.toe --artifact <scratch>\frame-timing-src\td-agent.tox --evidence docs\evidence\v0130\native-ops-get.json
 ```
 
 40 次，單位 ms：

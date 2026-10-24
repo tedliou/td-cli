@@ -1088,9 +1088,17 @@ def test_project_open_launches_detached(folder, tmp_path, home):
 def test_project_open_reports_a_rejected_launch(project, home):
     (project / "touchdesigner.exe").write_bytes(b"not a program")
     argv = ["--json", "project", "open", str(project / "scene.TOE")]
-    native = same([*argv, "--executable", str(project / "touchdesigner.exe")], daemon(), home)
+    # The Win32_Process.Create return code for a non-program differs between Windows builds
+    # (9 locally, 8 on the CI runner), so only the shape of the reason is fixed.
+    native = run([*argv, "--executable", str(project / "touchdesigner.exe")], daemon(), home)
     assert native.exit_code == 5
-    assert json.loads(native.stdout)["error"]["code"] == "process_launch_failed"
+    error = json.loads(native.stdout)["error"]
+    assert error["code"] == "process_launch_failed"
+    assert re.fullmatch(
+        r"Windows process service rejected launch [(]Win32_Process [0-9]+[)]",
+        error["details"]["reason"],
+    )
+    assert native.stderr == "process_launch_failed" + chr(13) + chr(10)
 
 
 def test_project_open_reports_a_launch_that_outlives_the_timeout(project, home):

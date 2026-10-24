@@ -6547,13 +6547,6 @@
   "requests": [],
   "connections": 0
  },
- "test_project_open_reports_a_rejected_launch#0": {
-  "exit_code": 5,
-  "stdout": "{\"protocol_version\":3,\"error\":{\"code\":\"process_launch_failed\",\"message\":\"process_launch_failed\",\"details\":{\"reason\":\"Windows process service rejected launch (Win32_Process 9)\"},\"retryable\":false}}\r\n",
-  "stderr": "process_launch_failed\r\n",
-  "requests": [],
-  "connections": 0
- },
  "test_queries_reject_an_instance_selector[argv0]#0": {
   "exit_code": 2,
   "stdout": "{\"protocol_version\":3,\"error\":{\"code\":\"invalid_arguments\",\"message\":\"invalid_arguments\",\"details\":{},\"retryable\":false}}\r\n",
