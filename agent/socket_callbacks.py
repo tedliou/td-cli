@@ -30,8 +30,10 @@ def onReceiveEvent(dat, rowIndex, message, event):
             "execution_sync",
             data={**agent.heartbeat_payload(), "records": records},
         )
+        # Authorization and execution share one callback, so a record is left authorized only
+        # by a callback that failed mid-way; the Daemon authorizes one Request per Instance.
         for request_id, execution_id in agent.authorized_records():
-            execute(dat, request_id, execution_id)
+            executeAuthorized(dat, request_id, execution_id)
     elif event == "registration_error":
         agent.set_connection_status("registration_error")
         agent.runtime_active = False
@@ -71,7 +73,7 @@ def onReceiveEvent(dat, rowIndex, message, event):
             dat.emit(result_event, data=payload)
     elif event == "request_execute":
         if agent.authorize(message):
-            execute(dat, message["request_id"], message["execution_id"])
+            executeAuthorized(dat, message["request_id"], message["execution_id"])
     elif event == "outcome_recorded":
         agent.acknowledge_outcome(message["request_id"], message.get("execution_id"))
         if agent.draining and agent.retention_snapshot()["record_count"] == 0:
@@ -99,7 +101,7 @@ def onReceiveEvent(dat, rowIndex, message, event):
             )
 
 
-def execute(dat, request_id, execution_id):
+def executeAuthorized(dat, request_id, execution_id):
     """Run in this callback: SocketIO DAT callbacks already run on the main thread at frame start.
 
     Deferring with run() would only add a frame (docs/adr/0002-execute-in-socket-callback.md).

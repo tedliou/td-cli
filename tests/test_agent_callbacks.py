@@ -344,15 +344,20 @@ def _refuse_run(*args, **options):
     raise AssertionError(f"execution must not be deferred with run(): {args} {options}")
 
 
+def _inline_callbacks(extension):
+    """Load the callbacks with a run() that fails, proving execution is never deferred."""
+    return run_path(
+        str(Path("agent/socket_callbacks.py")),
+        init_globals={"parent": lambda: component(extension), "run": _refuse_run},
+    )
+
+
 def test_execute_authorization_runs_in_the_callback_and_chunks_outcomes() -> None:
     extension = FakeAgentExtension()
     extension.connection_id = "connection-1"
     socket = FakeSocket()
     socket.extension = extension
-    callbacks = run_path(
-        str(Path("agent/socket_callbacks.py")),
-        init_globals={"parent": lambda: component(extension), "run": _refuse_run},
-    )
+    callbacks = _inline_callbacks(extension)
     callbacks["onReceiveEvent"](
         socket,
         0,
@@ -373,13 +378,13 @@ def test_execute_authorization_runs_in_the_callback_and_chunks_outcomes() -> Non
         )
     ]
 
-    execute = {
+    execute_message = {
         "request_id": "request-2",
         "instance_id": "instance-1",
         "connection_id": "connection-1",
         "execution_id": "execution-1",
     }
-    callbacks["onReceiveEvent"](socket, 0, execute, "request_execute")
+    callbacks["onReceiveEvent"](socket, 0, execute_message, "request_execute")
     assert extension.authorized == ["execution-1"]
     event, chunk = socket.emitted[-1]
     assert event == "request_outcome_chunk"
@@ -397,7 +402,7 @@ def test_execute_authorization_runs_in_the_callback_and_chunks_outcomes() -> Non
     callbacks["onReceiveEvent"](
         socket,
         0,
-        {**execute, "request_id": "request-3", "execution_id": "execution-2"},
+        {**execute_message, "request_id": "request-3", "execution_id": "execution-2"},
         "request_execute",
     )
     event, chunk = socket.emitted[-1]
@@ -405,23 +410,31 @@ def test_execute_authorization_runs_in_the_callback_and_chunks_outcomes() -> Non
     assert json.loads(chunk["payload"]) == failed
 
 
-def test_refused_execute_authorization_runs_nothing() -> None:
+def test_repeated_execute_authorization_runs_the_command_once() -> None:
     extension = FakeAgentExtension()
     extension.connection_id = "connection-1"
-    extension.authorize = lambda message: False
+    granted = set()
+
+    def authorize(message):  # the Agent grants each reserved execution exactly once
+        if message["execution_id"] in granted:
+            return False
+        granted.add(message["execution_id"])
+        return True
+
     executed = []
-    extension.execute_authorized = lambda *arguments: executed.append(arguments)
+    original = extension.execute_authorized
+    extension.authorize = authorize
+    extension.execute_authorized = lambda *arguments: (
+        executed.append(arguments) or original(*arguments)
+    )
     socket = FakeSocket()
     socket.extension = extension
-    callbacks = run_path(
-        str(Path("agent/socket_callbacks.py")),
-        init_globals={"parent": lambda: component(extension), "run": _refuse_run},
-    )
-    callbacks["onReceiveEvent"](
-        socket, 0, {"request_id": "request-2", "execution_id": "execution-1"}, "request_execute"
-    )
-    assert executed == []
-    assert socket.emitted == []
+    callbacks = _inline_callbacks(extension)
+    message = {"request_id": "request-2", "execution_id": "execution-1"}
+    callbacks["onReceiveEvent"](socket, 0, message, "request_execute")
+    callbacks["onReceiveEvent"](socket, 0, message, "request_execute")
+    assert executed == [("request-2", "execution-1")]
+    assert [event for event, _ in socket.emitted] == ["request_outcome_chunk"]
 
 
 def test_registration_executes_retained_authorizations_after_synchronizing() -> None:
@@ -429,10 +442,7 @@ def test_registration_executes_retained_authorizations_after_synchronizing() -> 
     extension.authorized_records = lambda: [("request-4", "execution-4")]
     socket = FakeSocket()
     socket.extension = extension
-    callbacks = run_path(
-        str(Path("agent/socket_callbacks.py")),
-        init_globals={"parent": lambda: component(extension), "run": _refuse_run},
-    )
+    callbacks = _inline_callbacks(extension)
     callbacks["onReceiveEvent"](socket, 0, {"connection_id": "connection-1"}, "registered")
     assert [event for event, _ in socket.emitted] == ["execution_sync", "request_outcome_chunk"]
     assert json.loads(socket.emitted[-1][1]["payload"])["execution_id"] == "execution-4"
