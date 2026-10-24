@@ -8,7 +8,7 @@ P1 之後，暖機的 `td --json instances list` 要 317 ms，`td --version` 也
 
 決定：
 
-- `td` 用 Rust 寫成一個 exe。`td-daemon`、`td-agent` 仍是 Python，Protocol v3 不變。
+- `td` 用 Rust 寫成一個 exe。`td-daemon`、`td-agent` 仍是 Python。Agent 與 Daemon 之間的 Protocol v3 訊息不變；Daemon 的 HTTP 介面只新增可選欄位與端點，舊 client 照常可用。
 - Python 仍是 Command catalog、operator catalog 與錯誤目錄的唯一來源。建置時把它們匯出成 JSON 嵌進 exe，測試確保匯出檔與 Python 一致。
 - Command 驗證移到 Daemon。`POST /v3/requests` 可改帶 Instance selector，Daemon 依序驗證 Command、解析 selector、收件，錯誤碼、細節與優先順序和現在的 client 相同。這樣 Rust 不必重做 pydantic 驗證，selector 規則也只有一份。
 - Daemon 不在時，`td` 呼叫同目錄的 `td-daemon.exe start`，沿用既有的啟動與健康檢查，只在冷啟動多付 Python 啟動的時間。

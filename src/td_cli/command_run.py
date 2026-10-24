@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import codecs
 import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from td_cli.client import ClientError, DaemonClient
-from td_cli.protocol import MAX_PLAN_BYTES
+from td_cli.protocol import MAX_PLAN_BYTES, plan_document_fits
 
 
 def read_plan(path: Path, client: DaemonClient) -> list[dict[str, Any]]:
@@ -19,7 +18,7 @@ def read_plan(path: Path, client: DaemonClient) -> list[dict[str, Any]]:
             data = source.read(MAX_PLAN_BYTES + 1)
     except OSError as error:
         raise ClientError("invalid_arguments") from error
-    if len(data) > MAX_PLAN_BYTES or data.startswith(codecs.BOM_UTF8):
+    if not plan_document_fits(data):
         raise ClientError("invalid_arguments")
     return client.validate_plan(data)
 

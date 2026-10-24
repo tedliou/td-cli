@@ -356,3 +356,38 @@ def test_plan_validation_checks_the_whole_document(tmp_path: Path) -> None:
         assert validate(json.dumps({"commands": [nested]}).encode())[0] == 422
         assert validate(b"\xef\xbb\xbf{}")[1]["detail"] == "invalid_arguments"
         assert validate(b" " * (1024 * 1024 + 1))[1]["detail"] == "invalid_arguments"
+
+
+def test_resubmission_by_selector_returns_the_admitted_request(tmp_path: Path) -> None:
+    items = [instance(INSTANCE_ID, "8cf8")]
+    body = {
+        "request_id": REQUEST_ID,
+        "instance_selector": "8c",
+        "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
+    }
+    with TestClient(create_app(tmp_path, token=TOKEN, instances=lambda: items)) as client:
+        assert client.post("/v3/requests", headers=headers(), json=body).status_code == 201
+        items[0] = instance(INSTANCE_ID, "8cf8", "offline")  # the selector would now fail
+        again = client.post("/v3/requests", headers=headers(), json=body)
+        assert again.status_code == 200
+        assert again.json()["instance_id"] == INSTANCE_ID
+        changed = {**body, "command": {"name": "ops.get", "input": {"operator_path": "/x"}}}
+        conflict = client.post("/v3/requests", headers=headers(), json=changed)
+        assert (conflict.status_code, conflict.json()["detail"]) == (409, "request_id_conflict")
+
+
+def test_submission_by_instance_id_reports_command_details_and_truncates_them(
+    tmp_path: Path,
+) -> None:
+    many = {f"x{index}": index for index in range(12)}  # twelve unknown input fields
+    body = {
+        "request_id": REQUEST_ID,
+        "instance_id": INSTANCE_ID,
+        "command": {"name": "ops.get", "input": {"operator_path": "/project1", **many}},
+    }
+    with TestClient(create_app(tmp_path, token=TOKEN)) as client:
+        response = client.post("/v3/requests", headers=headers(), json=body)
+        details = response.json()["details"]
+        assert response.status_code == 422
+        assert len(details["validation_errors"]) == 8
+        assert details["validation_errors_truncated"] is True

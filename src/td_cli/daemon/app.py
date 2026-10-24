@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import codecs
 import contextlib
 import inspect
 import secrets
@@ -28,6 +27,7 @@ from td_cli.protocol import (
     CommandPlan,
     RequestSnapshot,
     StrictModel,
+    plan_document_fits,
 )
 from td_cli.validation_details import validation_details
 
@@ -173,8 +173,12 @@ def create_app(
     @app.post("/v3/command-plans/validate", dependencies=[Depends(authenticate)])
     async def validate_plan(request: Request) -> object:
         """Check a whole ``commands execute`` plan before its first Command is sent."""
-        document = await request.body()
-        if len(document) > MAX_PLAN_BYTES or document.startswith(codecs.BOM_UTF8):
+        document = bytearray()
+        async for chunk in request.stream():
+            document += chunk
+            if len(document) > MAX_PLAN_BYTES:
+                return _invalid_arguments()
+        if not plan_document_fits(bytes(document)):
             return _invalid_arguments()
         try:
             plan = CommandPlan.model_validate_json(document)
@@ -209,6 +213,12 @@ def create_app(
         except ValidationError:
             return _invalid_arguments()
         instance_id = payload.instance_id
+        if instance_id is None:
+            # A resubmission keeps the Instance it was admitted for, whatever the selector
+            # would choose now; admission then deduplicates it or reports the conflict.
+            existing = await store.get(payload.request_id)
+            if existing is not None:
+                instance_id = str(existing["instance_id"])
         if instance_id is None:
             try:
                 selected = select_instance(

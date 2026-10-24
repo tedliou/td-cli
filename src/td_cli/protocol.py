@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import codecs
 import json
 from enum import StrEnum
 from typing import Any
@@ -121,6 +122,11 @@ class RequestSnapshot(StrictModel):
 
 # A ``commands execute`` plan document, validated whole before its first Command is sent.
 MAX_PLAN_BYTES = 1024 * 1024
+
+
+def plan_document_fits(document: bytes) -> bool:
+    """A plan is at most ``MAX_PLAN_BYTES`` of UTF-8 without a byte order mark."""
+    return len(document) <= MAX_PLAN_BYTES and not document.startswith(codecs.BOM_UTF8)
 
 
 class CommandPlan(StrictModel):

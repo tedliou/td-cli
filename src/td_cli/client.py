@@ -8,8 +8,6 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode, urlsplit
 
-from pydantic import ValidationError
-
 from td_cli.daemon.runtime_files import ENDPOINT, data_root, load_token
 from td_cli.error_catalog import ERROR_CATALOG
 from td_cli.processes import LaunchError
@@ -19,7 +17,6 @@ from td_cli.protocol import (
     TERMINAL_REQUEST_STATUSES,
     RequestStatus,
 )
-from td_cli.validation_details import validation_details
 
 _REQUEST_STATUSES = frozenset(RequestStatus)
 # The Daemon caps one long poll at 25 s; leave room for its answer within the HTTP budget.
@@ -41,11 +38,6 @@ class ClientError(Exception):
         super().__init__(code)
         self.code = code
         self.details = details or {}
-
-    @classmethod
-    def invalid_arguments(cls, error: ValidationError) -> ClientError:
-        """Name each violated field and its limit without echoing the rejected input."""
-        return cls("invalid_arguments", details=validation_details(error))
 
 
 class DaemonConnectError(OSError):

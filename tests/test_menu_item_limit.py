@@ -11,10 +11,9 @@ from test_custom_menu_options import FakeMenuParameter, MenuComp
 from typer.testing import CliRunner
 
 from td_cli import cli
-from td_cli.client import ClientError
 from td_cli.command_catalog import COMMAND_CATALOG, MAX_MENU_JSON_BYTES
 from td_cli.protocol import Command, CommandPlan
-from td_cli.validation_details import MAX_VALIDATION_ERRORS
+from td_cli.validation_details import MAX_VALIDATION_ERRORS, validation_details
 
 __all__ = ["isolated_touchdesigner_runtime"]
 
@@ -210,7 +209,7 @@ def test_validation_details_are_bounded():
     with pytest.raises(ValidationError) as raised:
         Command.model_validate({"name": "parameters.page.create", "input": payload})
     assert len(raised.value.errors()) > MAX_VALIDATION_ERRORS
-    details = ClientError.invalid_arguments(raised.value).details
+    details = validation_details(raised.value)
     assert len(details["validation_errors"]) == MAX_VALIDATION_ERRORS
     assert details["validation_errors_truncated"] is True
     assert all(len(item["message"]) <= 256 for item in details["validation_errors"])
@@ -222,7 +221,7 @@ def test_validation_details_are_bounded():
 def details_for(command):
     with pytest.raises(ValidationError) as raised:
         Command.model_validate(command)
-    return ClientError.invalid_arguments(raised.value).details
+    return validation_details(raised.value)
 
 
 @pytest.mark.parametrize(
