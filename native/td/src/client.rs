@@ -54,7 +54,7 @@ impl ClientError {
     }
 
     /// Name the Request the error belongs to, unless the error already names one.
-    fn for_request(mut self, request_id: &str) -> Self {
+    pub fn for_request(mut self, request_id: &str) -> Self {
         if !self.details.contains_key("request_id") {
             self.details
                 .insert("request_id".into(), Value::String(request_id.into()));
@@ -71,6 +71,12 @@ pub fn details<const N: usize>(entries: [(&str, Value); N]) -> Map<String, Value
 }
 
 pub type Result<T> = std::result::Result<T, ClientError>;
+
+/// The Instance a submission names.
+pub enum Target<'a> {
+    Id(&'a Value),
+    Selector(&'a str),
+}
 
 pub struct DaemonClient {
     timeout: f64,
@@ -242,18 +248,35 @@ impl DaemonClient {
         )
     }
 
-    /// Submit by Instance selector; the Daemon validates the Command and resolves it.
+    /// Have the Daemon check a whole `commands execute` plan; return its Commands.
+    pub fn validate_plan(&mut self, document: &[u8]) -> Result<Vec<Value>> {
+        let mut payload =
+            self.request("POST", "/v3/command-plans/validate", Some(document), false)?;
+        match payload.get_mut("commands").map(Value::take) {
+            Some(Value::Array(commands)) => Ok(commands),
+            _ => Err(ClientError::new("protocol_incompatible")),
+        }
+    }
+
+    /// Submit by Instance ID, or let the Daemon validate the Command and resolve the selector
+    /// first; without either, the Daemon picks the only online Instance.
     pub fn submit(
         &mut self,
         request_id: &str,
         command: Value,
-        selector: Option<&str>,
+        target: Option<Target>,
     ) -> Result<Value> {
         let mut body = Map::new();
         body.insert("request_id".into(), Value::String(request_id.into()));
         body.insert("command".into(), command);
-        if let Some(selector) = selector {
-            body.insert("instance_selector".into(), Value::String(selector.into()));
+        match target {
+            Some(Target::Id(id)) => {
+                body.insert("instance_id".into(), id.clone());
+            }
+            Some(Target::Selector(selector)) => {
+                body.insert("instance_selector".into(), Value::String(selector.into()));
+            }
+            None => {}
         }
         let document = compact(&Value::Object(body));
         self.request("POST", "/v3/requests", Some(document.as_bytes()), false)

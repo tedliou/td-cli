@@ -11,6 +11,17 @@ pub fn catalog() -> &'static Value {
     PARSED.get_or_init(|| serde_json::from_str(CATALOG).expect("embedded catalog is valid JSON"))
 }
 
+/// The locked-build create-support catalog, embedded from the Python package itself.
+const OPERATORS: &str =
+    include_str!("../../../src/td_cli/data/touchdesigner-2025.32050-operators.json");
+
+pub fn operator_catalog() -> &'static Value {
+    static PARSED: OnceLock<Value> = OnceLock::new();
+    PARSED.get_or_init(|| {
+        serde_json::from_str(OPERATORS).expect("embedded operator catalog is valid JSON")
+    })
+}
+
 pub fn release_version() -> &'static str {
     catalog()["release_version"]
         .as_str()

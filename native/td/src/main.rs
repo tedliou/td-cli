@@ -6,6 +6,7 @@ mod client;
 mod commands;
 mod http;
 mod json;
+mod launch;
 mod output;
 mod python;
 mod request_id;

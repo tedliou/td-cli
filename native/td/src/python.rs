@@ -1,5 +1,5 @@
-//! The Python behaviours the CLI's messages depend on: `repr`, `str` and
-//! `difflib.get_close_matches`.
+//! The Python behaviours the CLI's messages depend on: `repr`, `str`, truthiness,
+//! `str.isspace` and `difflib.get_close_matches`.
 
 use serde_json::Value;
 
@@ -11,6 +11,23 @@ pub fn str_of(value: &Value) -> String {
         Value::String(text) => text.clone(),
         other => repr_value(other),
     }
+}
+
+/// Python truthiness of a value `json.loads` produced.
+pub fn is_falsy(value: &Value) -> bool {
+    match value {
+        Value::Null => true,
+        Value::Bool(flag) => !flag,
+        Value::Number(number) => number.as_f64() == Some(0.0),
+        Value::String(text) => text.is_empty(),
+        Value::Array(items) => items.is_empty(),
+        Value::Object(entries) => entries.is_empty(),
+    }
+}
+
+/// `str.isspace`, which also counts the ASCII file, group, record and unit separators.
+pub fn is_space(character: char) -> bool {
+    character.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&character)
 }
 
 fn repr_value(value: &Value) -> String {

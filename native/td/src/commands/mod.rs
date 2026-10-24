@@ -6,6 +6,8 @@ use std::io::Read;
 use serde_json::{Map, Value, json};
 
 mod dat;
+mod execute;
+mod local;
 mod ops;
 mod options;
 mod parameters;
@@ -15,8 +17,9 @@ use options::{Builder, Options};
 
 use crate::args::{Invocation, Values};
 use crate::catalog;
-use crate::client::{ClientError, DaemonClient, Result};
+use crate::client::{ClientError, DaemonClient, Result, Target};
 use crate::output::Printer;
+use crate::python;
 
 pub struct Context {
     pub printer: Printer,
@@ -37,9 +40,11 @@ impl Context {
     }
 }
 
+type Handler = Box<dyn Fn(&Context, &Values) -> Result<()>>;
+
 pub fn run(invocation: Invocation) -> i32 {
     let globals = &invocation.globals;
-    let mut context = Context {
+    let context = Context {
         printer: Printer {
             json: globals["as_json"] == true,
         },
@@ -47,30 +52,35 @@ pub fn run(invocation: Invocation) -> i32 {
         instance: globals["instance"].as_str().map(String::from),
     };
     let path: Vec<&str> = invocation.path.iter().map(String::as_str).collect();
-    let values = &invocation.values;
-    let outcome = match path.as_slice() {
-        ["version"] => version(&mut context, values),
-        ["instances", "list"] => instances_list(&context, values),
-        ["instances", "get"] => instances_get(&context, values),
-        ["requests", "get"] => requests_get(&context, values),
-        ["requests", "wait"] => requests_wait(&context, values),
-        [group, rest @ ..] => match submission(group, rest) {
-            Some((name, build)) => build(&Options(values))
-                .and_then(|dedicated| submit_command(&context, name, dedicated, values)),
-            None => {
-                crate::output::echo(
-                    crate::output::Stream::Err,
-                    "not yet available in the native td",
-                );
-                return 5;
-            }
-        },
-        [] => unreachable!("the parser always names a command"),
-    };
-    match outcome {
+    let handler = handler(&path).expect("every catalog command has a handler");
+    match handler(&context, &invocation.values) {
         Ok(()) => 0,
         Err(error) => context.printer.fail(error),
     }
+}
+
+/// What runs a command path: a query, a local command, or a Command submission.
+fn handler(path: &[&str]) -> Option<Handler> {
+    let fixed: fn(&Context, &Values) -> Result<()> = match path {
+        ["version"] => version,
+        ["instances", "list"] => instances_list,
+        ["instances", "get"] => instances_get,
+        ["requests", "get"] => requests_get,
+        ["requests", "wait"] => requests_wait,
+        ["commands", "schema"] => local::commands_schema,
+        ["commands", "execute"] => execute::commands_execute,
+        ["ops", "types"] => local::ops_types,
+        ["project", "open"] => local::project_open,
+        [group, rest @ ..] => {
+            let (name, build) = submission(group, rest)?;
+            return Some(Box::new(move |context, values| {
+                build(&Options(values))
+                    .and_then(|dedicated| submit_command(context, name, dedicated, values))
+            }));
+        }
+        [] => return None,
+    };
+    Some(Box::new(fixed))
 }
 
 /// The Command a submitting `td` command sends, and how it builds the dedicated input.
@@ -87,7 +97,7 @@ fn text<'a>(values: &'a Values, name: &str) -> Option<&'a str> {
     values.get(name).and_then(Value::as_str)
 }
 
-fn version(context: &mut Context, values: &Values) -> Result<()> {
+fn version(context: &Context, values: &Values) -> Result<()> {
     context.reject_instance_on_query()?;
     let mut client = DaemonClient::new(context.timeout, false);
     let daemon_version = match client.health() {
@@ -110,8 +120,10 @@ fn version(context: &mut Context, values: &Values) -> Result<()> {
         "protocol_versions": [catalog::protocol_version()],
         "daemon_release_version": daemon_version,
     });
-    context.printer.json |= values["as_json"] == true;
-    context.printer.emit(data, None);
+    let printer = Printer {
+        json: context.printer.json || values["as_json"] == true,
+    };
+    printer.emit(data, None);
     Ok(())
 }
 
@@ -164,7 +176,10 @@ fn fail_unless_succeeded(snapshot: &Value) -> Result<()> {
     if snapshot["status"] == "succeeded" {
         return Ok(());
     }
-    let code = match snapshot.get("error").filter(|error| !is_falsy(error)) {
+    let code = match snapshot
+        .get("error")
+        .filter(|error| !python::is_falsy(error))
+    {
         Some(error) => match &error["code"] {
             Value::String(code) => code.clone(),
             other => crate::json::compact(other),
@@ -174,18 +189,6 @@ fn fail_unless_succeeded(snapshot: &Value) -> Result<()> {
     let mut details = Map::new();
     details.insert("request".into(), snapshot.clone());
     Err(ClientError::with(&code, details))
-}
-
-/// Python truthiness, for `snapshot.get("error") or default`.
-fn is_falsy(value: &Value) -> bool {
-    match value {
-        Value::Null => true,
-        Value::Bool(flag) => !flag,
-        Value::Number(number) => number.as_f64() == Some(0.0),
-        Value::String(text) => text.is_empty(),
-        Value::Array(items) => items.is_empty(),
-        Value::Object(entries) => entries.is_empty(),
-    }
 }
 
 /// The Command input from exactly one of: the dedicated options, `--input`, `--input-file`.
@@ -225,15 +228,10 @@ pub fn json_document(text: &str) -> Result<Value> {
     let mut stream = serde_json::Deserializer::from_str(text).into_iter::<Value>();
     let value = stream.next().ok_or_else(invalid)?.map_err(|_| invalid())?;
     let rest = &text[stream.byte_offset()..];
-    if !rest.chars().all(python_space) || !value.is_object() {
+    if !rest.chars().all(python::is_space) || !value.is_object() {
         return Err(invalid());
     }
     Ok(value)
-}
-
-/// `str.isspace`, which also counts the ASCII file, group, record and unit separators.
-fn python_space(character: char) -> bool {
-    character.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&character)
 }
 
 fn submit_command(
@@ -248,7 +246,8 @@ fn submit_command(
     let mut client = context.client();
     // The Daemon validates the Command before it resolves the Instance selector.
     let command = json!({"name": name, "input": payload});
-    let mut snapshot = client.submit(&request_id, command, context.instance.as_deref())?;
+    let target = context.instance.as_deref().map(Target::Selector);
+    let mut snapshot = client.submit(&request_id, command, target)?;
     if !no_wait {
         let admitted = snapshot["request_id"]
             .as_str()
@@ -275,6 +274,30 @@ mod tests {
         assert_eq!(json_document("{\"a\":1} \n").unwrap(), json!({"a": 1}));
         for text in ["", " {}", "\u{feff}{}", "[]", "{} x", "{", "{}{}"] {
             assert!(json_document(text).is_err(), "{text:?}");
+        }
+    }
+
+    fn leaves(node: &Value, path: &mut Vec<String>, found: &mut Vec<Vec<String>>) {
+        match node.get("commands").and_then(Value::as_object) {
+            Some(commands) => {
+                for (name, child) in commands {
+                    path.push(name.clone());
+                    leaves(child, path, found);
+                    path.pop();
+                }
+            }
+            None => found.push(path.clone()),
+        }
+    }
+
+    #[test]
+    fn every_catalog_command_has_a_handler() {
+        let mut found = Vec::new();
+        leaves(&catalog::catalog()["cli"], &mut Vec::new(), &mut found);
+        assert!(found.len() > 40);
+        for path in found {
+            let path: Vec<&str> = path.iter().map(String::as_str).collect();
+            assert!(handler(&path).is_some(), "{path:?}");
         }
     }
 }

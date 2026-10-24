@@ -88,6 +88,16 @@ DROP = (0, None)
 CLOSE = "close"
 
 
+def parsed(raw: bytes) -> object:
+    """A request body as JSON, or as text when it is not JSON (a malformed plan, say)."""
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except ValueError:
+        return raw.decode(errors="replace")
+
+
 def free_port() -> int:
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
@@ -124,13 +134,16 @@ class FakeDaemon:
                         self.command,
                         self.path,
                         self.headers.get("Authorization"),
-                        json.loads(raw) if raw else None,
+                        parsed(raw),
                         self.client_address[1],
                     )
                 )
-                responses = daemon.routes.get((self.command, route)) or [
-                    (404, {"detail": "Not Found"})
-                ]
+                # "/v3/requests/*" answers for Request IDs the CLI generates itself.
+                responses = (
+                    daemon.routes.get((self.command, route))
+                    or daemon.routes.get((self.command, route.rsplit("/", 1)[0] + "/*"))
+                    or [(404, {"detail": "Not Found"})]
+                )
                 status, payload, *after = responses.pop(0) if len(responses) > 1 else responses[0]
                 if (status, payload) == DROP:
                     self.close_connection = True
@@ -919,3 +932,158 @@ def test_dedicated_options_and_input_are_exclusive(home):
     argv = ["--json", "ops", "rename", "/a", "b", "--input", "{}", *FIXED]
     native = same(argv, submission(), home)
     assert (native.exit_code, native.requests) == (2, [])
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--json", "commands", "schema"],
+        ["commands", "schema"],
+        ["--json", "commands", "schema", "parameters.set"],
+        ["commands", "schema", "ops.get"],
+        ["--json", "commands", "schema", "ops.nope"],
+        ["--json", "--instance", "x", "commands", "schema"],
+        ["--json", "ops", "types"],
+        ["ops", "types", "--family", "CHOP", "--limit", "3"],
+        ["--json", "ops", "types", "noiseTOP"],
+        ["--json", "ops", "types", "nopeTOP"],
+        ["--json", "ops", "types", "noiseTOP", "--family", "CHOP"],
+        ["--json", "ops", "types", "--family", "XYZ"],
+        ["--json", "ops", "types", "--limit", "680"],
+        ["--json", "ops", "types", "--limit", "0"],
+        ["--json", "--instance", "x", "ops", "types"],
+    ],
+)
+def test_offline_queries(argv, home):
+    native = same(argv, daemon(), home)
+    assert native.requests == []
+
+
+@pytest.fixture
+def project(tmp_path):
+    folder = tmp_path / "my project"
+    folder.mkdir()
+    (folder / "scene.TOE").write_bytes(b"")
+    (folder / "scene.txt").write_bytes(b"")
+    shutil.copy(FAKE_TD_DAEMON, folder / "touchdesigner.exe")
+    shutil.copy(FAKE_TD_DAEMON, folder / "td.exe")
+    return folder
+
+
+@pytest.mark.parametrize(
+    ("toe", "exe", "extra"),
+    [
+        ("scene.txt", "touchdesigner.exe", []),
+        ("scene.TOE", "td.exe", []),
+        ("scene.TOE", "touchdesigner.exe", ["--instance", "x"]),
+        ("missing.toe", "touchdesigner.exe", []),
+        ("scene.TOE", ".", []),
+    ],
+)
+def test_project_open_rejects_before_launching(toe, exe, extra, project, home):
+    argv = ["--json", *extra, "project", "open", str(project / toe)]
+    native = same([*argv, "--executable", str(project / exe)], daemon(), home)
+    assert native.exit_code == 2
+
+
+def test_project_open_launches_detached(project, home):
+    argv = ["--json", "project", "open", str(project / "scene.TOE")]
+    argv += ["--executable", str(project / "touchdesigner.exe")]
+    results = [run(kind, argv, daemon(), home) for kind in ("python", "native")]
+    data = [json.loads(result.stdout)["data"] for result in results]
+    assert [result.exit_code for result in results] == [0, 0]
+    assert data[0]["pid"] > 0 and data[1]["pid"] > 0
+    assert {**data[1], "pid": 0} == {**data[0], "pid": 0}
+    assert data[1]["path"] == str((project / "scene.TOE").resolve())
+
+
+def test_project_open_reports_a_launch_that_outlives_the_timeout(project, home):
+    argv = ["--json", "--timeout", "0.1", "project", "open", str(project / "scene.TOE")]
+    native = same([*argv, "--executable", str(project / "touchdesigner.exe")], daemon(), home)
+    assert native.exit_code == 5
+
+
+PLAN = [
+    {"name": "ops.get", "input": {"operator_path": "/a"}},
+    {"name": "ops.rename", "input": {"operator_path": "/a", "new_name": "é"}},
+]
+FAILED = snapshot(
+    status="failed",
+    error={"code": "operator_not_found", "message": "missing", "details": {"path": "/a"}},
+)
+
+
+def plan_routes(*, validate=None, resolve=None, posts=None, waits=None) -> Route:
+    return {
+        **daemon(),
+        ("POST", "/v3/command-plans/validate"): [validate or (200, {"commands": PLAN})],
+        ("GET", "/v3/instances/resolve"): [resolve or (200, INSTANCE)],
+        ("POST", "/v3/requests"): posts or [ADMITTED],
+        ("GET", "/v3/requests/*"): waits or [(200, snapshot(result={"ok": True}))],
+    }
+
+
+MIB = 1024 * 1024
+
+
+@pytest.mark.parametrize(
+    ("globals_", "routes", "document"),
+    [
+        pytest.param(["--json"], plan_routes(), None, id="succeeds"),
+        pytest.param(["--json", "--instance", "專案"], plan_routes(), None, id="selector"),
+        pytest.param([], plan_routes(), None, id="human"),
+        pytest.param(
+            ["--json"], plan_routes(waits=[(200, snapshot()), (200, FAILED)]), None, id="fails"
+        ),
+        pytest.param(
+            ["--json"],
+            plan_routes(waits=[(200, snapshot(status="cancelled"))]),
+            None,
+            id="cancelled",
+        ),
+        pytest.param(
+            ["--json"],
+            plan_routes(validate=(422, {"detail": "invalid_arguments"})),
+            b"nope",
+            id="rejected-plan",
+        ),
+        pytest.param(
+            ["--json"],
+            plan_routes(resolve=(404, {"detail": "instance_not_found"})),
+            None,
+            id="no-instance",
+        ),
+        pytest.param(["--json"], plan_routes(posts=[DROP]), None, id="dropped-submit"),
+        pytest.param(
+            ["--json"],
+            plan_routes(posts=[ADMITTED, (409, {"detail": "request_conflict"})]),
+            None,
+            id="second-rejected",
+        ),
+        pytest.param(["--json"], plan_routes(), b" " * MIB, id="at-limit"),
+        pytest.param(["--json"], plan_routes(), b" " * (MIB + 1), id="over-limit"),
+        pytest.param(["--json"], plan_routes(), "﻿{}".encode(), id="bom"),
+    ],
+)
+def test_commands_execute(globals_, routes, document, home):
+    plan = home / "plan.json"
+    plan.write_bytes(json.dumps({"commands": PLAN}).encode() if document is None else document)
+    same([*globals_, "commands", "execute", "--input-file", str(plan)], routes, home)
+
+
+def test_commands_execute_without_a_plan_file(home):
+    argv = ["--json", "commands", "execute", "--input-file", str(home / "missing.json")]
+    native = same(argv, plan_routes(), home)
+    assert (native.exit_code, native.requests) == (2, [])
+
+
+def test_commands_execute_stops_at_the_deadline(home):
+    plan = home / "plan.json"
+    plan.write_text(json.dumps({"commands": PLAN}), encoding="utf-8")
+    argv = ["--json", "--timeout", "0.4", "commands", "execute", "--input-file", str(plan)]
+    routes = plan_routes(waits=[(200, snapshot(status="running"))])
+    native = same(argv, routes, home, compare_requests=False)
+    events = [json.loads(line) for line in native.stdout.splitlines()]
+    assert [event["event"] for event in events[:2]] == ["submitting", "stopped"]
+    assert events[1]["error"]["code"] == "wait_timeout"
+    assert native.exit_code == 6
