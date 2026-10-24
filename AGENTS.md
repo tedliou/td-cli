@@ -4,18 +4,6 @@
 
 - 一律使用正體中文與使用者溝通。
 
-### Issue tracker
-
-Issue 與規格均使用 GitHub Issues 管理。詳見 `docs/agents/issue-tracker.md`。
-
-### Triage labels
-
-使用預設的五種 triage 標籤。詳見 `docs/agents/triage-labels.md`。
-
-### Domain docs
-
-採用單一領域脈絡（single-context）配置。詳見 `docs/agents/domain.md`。
-
 ### Agent-led development
 
 - 對已授權的端到端開發，主 session 負責規格、grilling 決策、tickets、實作、驗證與 PR；使用者只在完整 PR 交付後審核。
