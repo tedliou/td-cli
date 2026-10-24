@@ -182,8 +182,9 @@ Agent 在送出 `request_accepted` 前會先保留有界 outcome 容量，只執
 authorization 的工作，並保留所有 post-accept `succeeded`、`failed`、`unknown` outcome，直到
 Daemon 完成記錄。上限為 64 筆、每筆 canonical outcome 256 KiB、合計 16 MiB。Command、
 超過鎖定版 SocketIO DAT 單一事件實測範圍的 outcome，會拆成依序且經 identity 驗證的 24 KiB
-區塊，重組完成後才提交公開結果。Command、heartbeat 與 drain timer 使用 TouchDesigner
-獨立的 `TDResources` 時間參考，所有 TouchDesigner object 存取仍只在主執行緒。Extension
+區塊，重組完成後才提交公開結果。heartbeat 與 drain timer 使用 TouchDesigner
+獨立的 `TDResources` 時間參考；已授權的 Command 直接在 SocketIO DAT callback 內執行，
+也就是主執行緒的 frame 開頭，所有 TouchDesigner object 存取仍只在主執行緒。Extension
 初始化使用官方 SocketIO Reset 參數，連線後清除暫存 auth DAT。Power Off 模式不受支援。
 
 <!-- doc-section: offline-upgrade -->

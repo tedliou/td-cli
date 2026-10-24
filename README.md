@@ -212,8 +212,9 @@ post-accept `succeeded`, `failed`, or `unknown` outcome until the Daemon records
 it. Retention is limited to 64 records, 256 KiB per canonical outcome, and 16
 MiB total. Outcomes above the locked SocketIO DAT's proven single-event envelope
 are sent as ordered, identity-checked 24 KiB chunks and are reassembled before
-the public result is committed. Command, heartbeat, and drain timers use TouchDesigner's independent
-`TDResources` time reference while all TouchDesigner object access remains on
+the public result is committed. Heartbeat and drain timers use TouchDesigner's independent
+`TDResources` time reference. An authorized Command runs directly in its SocketIO DAT
+callback, on the main thread at frame start, so all TouchDesigner object access remains on
 the main thread. Extension initialization uses the official SocketIO Reset
 parameter, and clears the transient auth DAT after connection. Power Off mode is
 not supported.
