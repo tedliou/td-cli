@@ -8,16 +8,14 @@ from td_cli import cli
 
 
 def test_version_query_never_starts_a_daemon(monkeypatch):
-    import httpx
+    from td_cli.client import DaemonConnection
 
     starts = []
     monkeypatch.setattr("td_cli.client.ensure_running", lambda **kw: starts.append(True))
     monkeypatch.setattr(
-        httpx.Client,
-        "request",
-        lambda *a, **k: httpx.Response(
-            200, json={"release_version": "test", "protocol_versions": [3]}
-        ),
+        DaemonConnection,
+        "exchange",
+        lambda *a, **k: (200, b'{"release_version":"test","protocol_versions":[3]}'),
     )
     result = CliRunner().invoke(cli.app, ["version", "--json"])
     assert result.exit_code == 0, result.output
@@ -1079,22 +1077,28 @@ def test_cli_startup_does_not_import_the_daemon_server_stack() -> None:
     assert result.stdout.strip() == "[]"
 
 
-def test_command_against_a_healthy_daemon_does_not_import_the_daemon_server_stack(
+def test_command_against_a_healthy_daemon_imports_neither_the_server_stack_nor_httpx(
     tmp_path,
 ) -> None:
     import subprocess
 
+    # pydantic itself imports importlib.metadata for its plugin lookup, so the guard checks
+    # that no package metadata is read rather than that the module is absent.
     probe = (
-        "import sys, httpx, td_cli.cli\n"
+        "import sys, importlib.metadata as metadata\n"
+        "def refuse(*a, **k):\n"
+        "    raise AssertionError('package metadata read')\n"
+        "metadata.version = metadata.distribution = metadata.metadata = refuse\n"
+        "import td_cli.cli\n"
         "from pathlib import Path\n"
-        "from td_cli.client import DaemonClient\n"
-        "health = {'ready': True, 'protocol_versions': [3]}\n"
-        "httpx.Client.request = lambda self, method, url, **k: httpx.Response(\n"
-        "    200, json=health if url.endswith('/health') else [])\n"
+        "from td_cli.client import DaemonClient, DaemonConnection\n"
+        'health = b\'{"ready": true, "protocol_versions": [3]}\'\n'
+        "DaemonConnection.exchange = lambda self, method, path, **k: (\n"
+        "    200, health if path.endswith('/health') else b'[]')\n"
         "client = DaemonClient(timeout=5, root=Path(sys.argv[1]), autostart=True)\n"
         "assert client.instances() == []\n"
-        "print(sorted(m for m in ('fastapi', 'uvicorn', 'socketio', 'td_cli.daemon.cli') "
-        "if m in sys.modules))"
+        "heavy = ('fastapi', 'uvicorn', 'socketio', 'td_cli.daemon.cli', 'httpx')\n"
+        "print(sorted(m for m in heavy if m in sys.modules))"
     )
     (tmp_path / "state").mkdir()
     (tmp_path / "state" / "auth.token").write_text("a" * 64, encoding="ascii")

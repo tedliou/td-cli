@@ -1,15 +1,41 @@
+import json
+import socket
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import ClassVar
 
 import httpx
 import pytest
 
-from td_cli.client import ClientError, DaemonClient
+from td_cli.client import ClientError, DaemonClient, DaemonConnectError, DaemonConnection
+from td_cli.daemon.runtime_files import ENDPOINT
 from td_cli.error_catalog import ERROR_CATALOG
 
 
 def patch_http(monkeypatch, request) -> None:
-    """Route every request of the shared connection to ``request(method, url, **kwargs)``."""
-    monkeypatch.setattr(httpx.Client, "request", lambda self, *a, **k: request(*a, **k))
+    """Route every Daemon exchange to ``request(method, url, **kwargs)``.
+
+    ``request`` answers with an ``httpx.Response`` or raises an httpx error; a connect error
+    becomes a failure to open the connection and any other one a failure after sending.
+    """
+
+    def exchange(self, method, path, *, headers, body, timeout):
+        try:
+            response = request(
+                method,
+                f"{ENDPOINT}{path}",
+                headers=headers,
+                json=None if body is None else json.loads(body),
+                timeout=timeout,
+            )
+        except httpx.ConnectError as error:
+            raise DaemonConnectError(str(error)) from error
+        except httpx.HTTPError as error:
+            raise TimeoutError(str(error)) from error
+        return response.status_code, response.content
+
+    monkeypatch.setattr(DaemonConnection, "exchange", exchange)
 
 
 def client(tmp_path: Path) -> DaemonClient:
@@ -470,3 +496,58 @@ def test_wait_keeps_spacing_when_a_daemon_answers_unsettled_at_once(
     )
     assert client(tmp_path).wait("r")["status"] == "succeeded"
     assert sleeps == [0.05, 0.05]
+
+
+class _CountingHandler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+    connections: ClassVar[list[socket.socket]] = []
+
+    def setup(self) -> None:
+        super().setup()
+        self.connections.append(self.connection)
+
+    def do_GET(self) -> None:
+        body = b'{"ok":true}'
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args: object) -> None:
+        pass
+
+
+def _serve() -> tuple[ThreadingHTTPServer, str]:
+    _CountingHandler.connections = []
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _CountingHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, f"http://127.0.0.1:{server.server_address[1]}"
+
+
+def test_daemon_connection_keeps_one_connection_and_replaces_one_the_daemon_closed() -> None:
+    server, endpoint = _serve()
+    connection = DaemonConnection(endpoint)
+    try:
+        for _ in range(3):
+            assert connection.exchange("GET", "/", headers={}, body=None, timeout=2) == (
+                200,
+                b'{"ok":true}',
+            )
+        assert len(_CountingHandler.connections) == 1
+        _CountingHandler.connections[0].shutdown(socket.SHUT_RDWR)
+        assert connection.exchange("GET", "/", headers={}, body=None, timeout=2)[0] == 200
+        assert len(_CountingHandler.connections) == 2
+    finally:
+        connection.close()
+        server.shutdown()
+        server.server_close()
+
+
+def test_daemon_connection_reports_a_refused_connection_as_nothing_sent() -> None:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    with pytest.raises(DaemonConnectError):
+        DaemonConnection(f"http://127.0.0.1:{port}").exchange(
+            "POST", "/v3/requests", headers={}, body=b"{}", timeout=2
+        )
