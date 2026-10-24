@@ -77,8 +77,24 @@ Daemon 經 WMI 的 `Win32_Process.Create` 啟動，不繼承呼叫者的環境�
 
 兩者的差就是 `td` 行程本身的成本。Agent 用 P1 驗收建出的 artifact（SHA-256 `f84b0a7a…`）。它的 `source_revision` 與本分支的 `agent/` 相同，因為 P2a 沒有改 Agent。
 
-本次量測時工作站已鎖定，TouchDesigner 無法完成啟動，所以這項還沒有結果。
+第一次嘗試時工作站已鎖定，TouchDesigner 無法完成啟動。解鎖後跑了兩次，原始輸出在 `docs/evidence/v0130/native-ops-get.json` 與 `native-ops-get-2.json`。
+
+```powershell
+uv run python -m tools.locked_native_ops_get_acceptance --work <scratch>\locked --project .codexrame-timing\probe.toe --artifact <scratch>rame-timing-src	d-agent.tox --evidence docs\evidence0130
+ative-ops-get.json
+```
+
+40 次，單位 ms：
+
+| | 第 1 次 p50／p95 | 第 2 次 p50／p95 |
+| --- | --- | --- |
+| Request（TouchDesigner 往返） | 62.0／63.0 | 62.0／63.0 |
+| 整個 `td ops get` 行程 | 62.4／63.0 | 62.3／63.2 |
+| 探針記錄的 frame 間隔中位數 | 31.3 | 31.2 |
+
+- 整個行程與 Request 的 p50 差 −0.1 ms。`td` 自己約 12 ms 的啟動與連線，落在等下一個 frame 的時間裡，看不出額外成本。
+- 兩次的 Request 都比 P1 量到的 33 ms 慢。原因是 TouchDesigner 這次每 31 ms 才呼叫一次 `onFrameStart`：timeline 照 60 fps 前進，但每隔一個 frame 才 cook 一次。P1 那次是每 16 ms 一次。兩次都是一個 Request 跨兩個 cook 出來的 frame（P1：2 × 16.7 ms；本次：2 × 31 ms）。in-process 的 Request 不經過 `td`，也同樣是 62 ms。所以變慢來自這台機器解鎖後 TouchDesigner 的 cook 頻率，不是本分支。為什麼只 cook 一半的 frame，這次沒有追。
 
 ## 沒有涵蓋的部分
 
-- 需要 Instance 的命令，總時間約等於上面的暖機時間加上 TouchDesigner 往返（P1 量到約 33 ms）。
+- 沒有在 60 fps cook 的情況下重量 `ops get`；依 frame 數推算，整個行程約等於兩個 frame。
