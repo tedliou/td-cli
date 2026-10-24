@@ -15,7 +15,7 @@ P1 之後，暖機的 `td --json instances list` 要 317 ms，`td --version` 也
 - `--json` 信封、人看的輸出、stderr 的錯誤碼行與 exit code 逐字不變。數字照 Python 讀進再寫出的樣子輸出，非 ASCII 字元照 Python `ensure_ascii` 的規則跳脫。`--help` 的命令與選項相同，排版可以不同。
 - 唯一刻意的差異：Python 版在 Windows 上會先展開參數裡的 `~`、`$VAR`、`%VAR%` 與萬用字元（click 的預設），所以 `--text '$x'` 或 `/project1/*` 送出的內容可能被改寫。Rust 版照原樣送出參數。
 - 不追的邊角：Python `json.loads` 接受 `NaN`、`Infinity`、單獨的 surrogate 跳脫，Rust 的 JSON 解析器拒絕，所以這類 `--input` 或 JSON 字串選項在 Rust 版是 `invalid_arguments`。它們不是標準 JSON；schema 中的顏色與數值範圍欄位本來就拒絕非有限數字，其他欄位（如 DAT 儲存格）若需要這類值，改用字串表達。`--input-file -` 的 stdin 一律以 UTF-8 讀取，不跟 Python 用主控台字碼頁。
-- 等價移植完成後刪掉 Python 版 `td`，不保留 Python fallback。
+- 等價移植完成後刪掉 Python 版 `td`，不保留 Python fallback。刪除前把 Python 版對每個等價案例的輸出錄成測試資料，之後原生 `td` 對這份紀錄比對；刻意改變輸出時重新錄製，並在 review 中說明。`td` 的命令樹（命令、選項與說明）從此以嵌入檔中的 `cli` 節點為準，匯出時保留原樣；Command、錯誤與 operator catalog 仍由 Python 匯出。
 
 被拒絕的替代方案：
 

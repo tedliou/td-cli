@@ -4,13 +4,11 @@ and `invalid_arguments` details that name the violated field."""
 import json
 
 import pytest
-from daemon_doubles import accepted_command
 from pydantic import ValidationError
 from test_agent_runtime import AgentExt, FakeOwner, execute_v2, isolated_touchdesigner_runtime
 from test_custom_menu_options import FakeMenuParameter, MenuComp
-from typer.testing import CliRunner
 
-from td_cli import cli
+from td_cli.client import new_request_id
 from td_cli.command_catalog import COMMAND_CATALOG, MAX_MENU_JSON_BYTES
 from td_cli.protocol import Command, CommandPlan
 from td_cli.validation_details import MAX_VALIDATION_ERRORS, validation_details
@@ -135,64 +133,42 @@ def test_plan_validation_error_names_the_command_field_and_limit(tmp_path):
     assert "D001" not in json.dumps(rejected["details"])
 
 
-class RecordingDaemonClient:
-    submitted = None
+def submit_menu_set(tmp_path, payload):
+    """Submit through the Daemon, which validates the Command before it resolves the Instance."""
+    from fastapi.testclient import TestClient
 
-    def __init__(self, **kwargs):
-        del kwargs
+    from td_cli.daemon.app import create_app
 
-    def close(self):
-        pass
-
-    def select_instance(self, selector, *, online_only=True):
-        del selector, online_only
-        return {"instance_id": "instance-1"}
-
-    def submit(self, request_id, instance_id, command, *, instance_selector=None):
-        del instance_selector
-        self.__class__.submitted = accepted_command(command)
-        return {"request_id": request_id, "instance_id": instance_id, "status": "queued"}
-
-    def wait(self, request_id):
-        return {"request_id": request_id, "status": "succeeded", "result": {}}
+    body = {
+        "request_id": new_request_id(),
+        "command": {"name": "parameters.menu.set", "input": payload},
+        "instance_selector": "project1",
+    }
+    with TestClient(create_app(tmp_path, token="a" * 64)) as daemon:
+        return daemon.post(
+            "/v3/requests", headers={"Authorization": "Bearer " + "a" * 64}, json=body
+        ).json()
 
 
-def invoke_menu_set(monkeypatch, tmp_path, payload):
-    monkeypatch.setattr(cli, "DaemonClient", RecordingDaemonClient)
-    monkeypatch.setattr(RecordingDaemonClient, "submitted", None)
-    path = tmp_path / "menu.json"
-    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-    argv = ["--json", "parameters", "menu-set", "--input-file", str(path)]
-    return CliRunner().invoke(cli.app, argv)
+def test_a_38_item_menu_passes_validation(tmp_path):
+    answer = submit_menu_set(tmp_path, menu_set_input(**numbered_menu(38)))
+    # Validation passed; only the missing Instance stops it in this test Daemon.
+    assert answer["detail"] == "instance_not_found"
 
 
-def test_cli_submits_a_38_item_menu(monkeypatch, tmp_path):
-    payload = menu_set_input(**numbered_menu(38))
-    result = invoke_menu_set(monkeypatch, tmp_path, payload)
-    assert result.exit_code == 0, result.output
-    assert RecordingDaemonClient.submitted == {"name": "parameters.menu.set", "input": payload}
-
-
-def test_cli_rejection_names_each_violated_field_without_echoing_input(monkeypatch, tmp_path):
-    result = invoke_menu_set(monkeypatch, tmp_path, menu_set_input(**numbered_menu(257)))
-    assert result.exit_code == 2
-    assert RecordingDaemonClient.submitted is None
-    envelope = json.loads(result.stdout)
-    assert envelope["error"]["code"] == "invalid_arguments"
-    assert "request" not in envelope
-    errors = envelope["error"]["details"]["validation_errors"]
+def test_rejection_names_each_violated_field_without_echoing_input(tmp_path):
+    answer = submit_menu_set(tmp_path, menu_set_input(**numbered_menu(257)))
+    assert answer["detail"] == "invalid_arguments"
+    errors = answer["details"]["validation_errors"]
     assert [item["location"] for item in errors] == [
         ["input", "menu_names"],
         ["input", "menu_labels"],
     ]
     assert all(item["type"] == "too_long" and "256" in item["message"] for item in errors)
-    assert "D001" not in result.stdout
+    assert "D001" not in json.dumps(answer)
 
-    result = invoke_menu_set(
-        monkeypatch, tmp_path, menu_set_input(**budget_menu(MAX_MENU_JSON_BYTES + 1))
-    )
-    assert result.exit_code == 2
-    [item] = json.loads(result.stdout)["error"]["details"]["validation_errors"]
+    answer = submit_menu_set(tmp_path, menu_set_input(**budget_menu(MAX_MENU_JSON_BYTES + 1)))
+    [item] = answer["details"]["validation_errors"]
     assert item["location"] == ["input"]
     assert item["type"] == "value_error"
     assert "65536-byte JSON budget" in item["message"]

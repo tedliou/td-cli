@@ -92,9 +92,17 @@ td-cli 自有代码采用 [MIT 许可](LICENSE)。
 
 ## 开发
 
-需要 Python 3.11 与 [uv](https://docs.astral.sh/uv/)：
+需要 Python 3.11、[uv](https://docs.astral.sh/uv/) 与 [rustup](https://rustup.rs/)。`td` 是
+`native/td` 里的原生 Rust client，工具链由 `native/td/rust-toolchain.toml` 固定；测试运行 release 版
+`td.exe`，所以先构建再跑 `pytest`：
 
 ```powershell
+Push-Location native/td
+cargo fmt --check
+cargo clippy --release --all-targets --locked -- -D warnings
+cargo test --release --locked
+cargo build --release --locked --bins --examples
+Pop-Location
 uv sync --locked --python 3.11
 uv run pytest -q
 uv run ruff check .
@@ -519,7 +527,7 @@ read-only Command 使用。
 `td --json --instance <selector> --timeout 120 commands execute --input-file plan.json`
 接受 `{"commands":[{"name":"ops.get","input":{"operator_path":"/project1"}}]}`。
 沿用现有 typed Command payload，最多 256 项查询或 mutation、1 MiB 输入；
-整份计划验证通过后才连接。单一 CLI 进程依次提交各自独立的 Request，首个
+Daemon 先验证整份计划，通过后才提交 Request。单一 CLI 进程依次提交各自独立的 Request，首个
 非成功结果即停止；不具原子性，已完成的修改会保留。timeout 限制整轮执行。
 固定输出 JSONL：提交前先记录从零开始的 index 与 Request ID，再记录完整
 终态 snapshot。请保存输出；中断或 outcome unknown 后先查询已记录的 Request，

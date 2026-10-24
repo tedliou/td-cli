@@ -1,10 +1,11 @@
-"""Export what the native td client embeds: its command tree, Command schemas and error codes.
+"""Export what the native td client embeds: its Command schemas, defaults and error codes.
 
-Python stays the authority (ADR 0003). The native client is built from ``native/td/catalog.json``,
-and ``tests/test_client_catalog.py`` fails when that file no longer matches this export.
-The operator catalog is embedded from ``src/td_cli/data`` directly, so it is not copied here.
+Python stays the authority for Commands and errors (ADR 0003); ``tests/test_client_catalog.py``
+fails when ``native/td/catalog.json`` no longer matches this export. The ``cli`` command tree is
+the native td's own: it is kept from the committed file, and changing a ``td`` command means
+editing it there. The operator catalog is embedded from ``src/td_cli/data`` directly.
 
-Run ``uv run python scripts/export_client_catalog.py`` after changing a ``td`` command.
+Run ``uv run python scripts/export_client_catalog.py`` after changing a Command or an error.
 """
 
 from __future__ import annotations
@@ -13,80 +14,28 @@ import json
 from pathlib import Path
 from typing import Any
 
-import typer.main
-
-from td_cli import __version__, cli
+from td_cli import __version__
 from td_cli.command_catalog import (
     COMMAND_CATALOG,
     MAX_DAT_CONTENT_BYTES,
     MAX_INSPECTION_ITEMS,
     MAX_TOX_FILE_BYTES,
 )
-from td_cli.error_catalog import ERROR_CATALOG
+from td_cli.error_catalog import DEFAULT_EXIT_CODE, ERROR_CATALOG, EXIT_CODES
 from td_cli.protocol import PROTOCOL_VERSION, TERMINAL_REQUEST_STATUSES, RequestStatus
 
 OUTPUT = Path(__file__).resolve().parents[1] / "native" / "td" / "catalog.json"
-# Typer adds shell-completion installers to every app; they are not part of the td contract.
-_TYPER_ONLY_OPTIONS = {"install_completion", "show_completion"}
-_DEFAULT_EXIT_CODE = 5
 
 
-def _type(param_type: Any) -> dict[str, Any]:
-    name = type(param_type).__name__
-    if name == "IntRange":
-        return {"name": "int", "min": param_type.min, "max": param_type.max}
-    if name == "FloatRange":
-        return {"name": "float", "min": param_type.min, "max": param_type.max}
-    if name == "Tuple":
-        return {"name": "tuple", "items": [_type(item) for item in param_type.types]}
-    if name == "TyperPath":
-        return {
-            "name": "path",
-            "exists": param_type.exists,
-            "file_okay": param_type.file_okay,
-            "dir_okay": param_type.dir_okay,
-        }
-    simple = {
-        "StringParamType": "string",
-        "BoolParamType": "bool",
-        "IntParamType": "int",
-        "FloatParamType": "float",
-    }
-    return {"name": simple[name]}
-
-
-def _param(param: Any) -> dict[str, Any]:
-    default = param.default
-    if isinstance(default, tuple):
-        default = list(default)
-    if isinstance(default, Path):
-        default = str(default)
-    return {
-        "kind": "argument" if type(param).__name__ == "TyperArgument" else "option",
-        "name": param.name,
-        "opts": list(param.opts),
-        "secondary_opts": list(param.secondary_opts),
-        "type": _type(param.type),
-        "default": default,
-        "required": param.required,
-        "is_flag": bool(getattr(param, "is_flag", False)),
-        "help": getattr(param, "help", None),
-    }
-
-
-def _node(command: Any) -> dict[str, Any]:
-    params = [_param(param) for param in command.params if param.name not in _TYPER_ONLY_OPTIONS]
-    node: dict[str, Any] = {"help": command.help, "params": params}
-    if hasattr(command, "commands"):
-        node["commands"] = {name: _node(sub) for name, sub in command.commands.items()}
-    return node
+def _command_tree() -> dict[str, Any]:
+    return json.loads(OUTPUT.read_text(encoding="utf-8"))["cli"]
 
 
 def build_catalog() -> dict[str, Any]:
     return {
         "release_version": __version__,
         "protocol_version": PROTOCOL_VERSION,
-        "cli": _node(typer.main.get_command(cli.app)),
+        "cli": _command_tree(),
         "commands": {
             name: {
                 "effect": COMMAND_CATALOG.effect(name).value,
@@ -105,8 +54,8 @@ def build_catalog() -> dict[str, Any]:
         "terminal_request_statuses": sorted(status.value for status in TERMINAL_REQUEST_STATUSES),
         "errors": {
             "codes": sorted(ERROR_CATALOG.codes),
-            "default_exit_code": _DEFAULT_EXIT_CODE,
-            "exit_codes": dict(sorted(cli.EXIT_CODES.items())),
+            "default_exit_code": DEFAULT_EXIT_CODE,
+            "exit_codes": dict(sorted(EXIT_CODES.items())),
             "retryable": sorted(
                 code for code in ERROR_CATALOG.codes if ERROR_CATALOG.retryable(code)
             ),

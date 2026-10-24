@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import http.client
 import json as jsonlib
+import secrets
 import select
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode, urlsplit
@@ -24,6 +26,14 @@ WAIT_RESPONSE_MARGIN_SECONDS = 0.1
 
 
 HEALTH_PROBE_TIMEOUT = 0.5
+
+
+def new_request_id() -> str:
+    """A UUIDv7 Request ID, like the ones the native td generates."""
+    milliseconds = int(time.time() * 1000)
+    value = (milliseconds << 80) | (0x7 << 76) | (secrets.randbits(12) << 64)
+    value |= (0b10 << 62) | secrets.randbits(62)
+    return str(uuid.UUID(int=value))
 
 
 def ensure_running(*, timeout: float) -> None:

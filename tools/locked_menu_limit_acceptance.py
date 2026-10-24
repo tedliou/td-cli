@@ -15,7 +15,6 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 import threading
 import time
 from pathlib import Path
@@ -23,8 +22,7 @@ from typing import Any
 
 import uvicorn
 
-from td_cli.cli import _uuid7
-from td_cli.client import DaemonClient
+from td_cli.client import DaemonClient, new_request_id
 from td_cli.command_catalog import MAX_MENU_JSON_BYTES
 from td_cli.daemon.runtime_files import load_or_create_token, secure_layout
 from td_cli.daemon.transport import create_transport_app
@@ -33,6 +31,7 @@ from td_cli.protocol import Command
 PORT = 19982
 TOUCHDESIGNER = Path(r"C:\Program Files\Derivative\TouchDesigner\bin\TouchDesigner.exe")
 COMP = "/project1/menu_limit"
+NATIVE_TD = Path(__file__).parents[1] / "native" / "td" / "target" / "release" / "td.exe"
 
 
 def _wait_for(predicate, seconds: float, what: str) -> Any:
@@ -72,7 +71,7 @@ class Harness:
 
     def run(self, label: str, name: str, payload: dict[str, Any]) -> dict[str, Any]:
         command = Command.model_validate({"name": name, "input": payload}).model_dump(mode="json")
-        request_id = _uuid7()
+        request_id = new_request_id()
         started = time.monotonic()
         self.client.submit(request_id, self.instance_id, command)
         snapshot = self.client.wait(request_id)
@@ -119,11 +118,11 @@ class Harness:
 
 
 def _cli_rejection(argv: list[str], env: dict[str, str]) -> dict[str, Any]:
-    # The checkout's own console script, with the scratch LOCALAPPDATA: even if validation
-    # unexpectedly passed, the scratch token cannot authorize a Request on another Daemon.
+    # The checkout's native td against this isolated Daemon, which validates the Command and
+    # rejects it before admission; the scratch LOCALAPPDATA holds this Daemon's token.
     completed = subprocess.run(
-        [str(Path(sys.executable).with_name("td.exe")), "--json", *argv],
-        env=env,
+        [str(NATIVE_TD), "--json", *argv],
+        env={**env, "TDCLI_TEST_ENDPOINT": f"127.0.0.1:{PORT}"},
         capture_output=True,
         text=True,
         encoding="utf-8",

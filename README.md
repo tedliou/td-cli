@@ -103,9 +103,17 @@ Artifacts and Python packages. TouchDesigner remains subject to Derivative's lic
 
 ## Development
 
-Python 3.11 and [uv](https://docs.astral.sh/uv/) are required.
+Python 3.11, [uv](https://docs.astral.sh/uv/), and [rustup](https://rustup.rs/) are required. `td` is
+the native Rust client in `native/td`; `native/td/rust-toolchain.toml` pins its toolchain, and the tests run
+the release build of `td.exe`, so build it before `pytest`.
 
 ```powershell
+Push-Location native/td
+cargo fmt --check
+cargo clippy --release --all-targets --locked -- -D warnings
+cargo test --release --locked
+cargo build --release --locked --bins --examples
+Pop-Location
 uv sync --locked --python 3.11
 uv run pytest -q
 uv run ruff check .
@@ -653,7 +661,7 @@ Network mutations are not allowed inside `batch.execute`, while read-only
 `td --json --instance <selector> --timeout 120 commands execute --input-file plan.json`
 accepts `{"commands":[{"name":"ops.get","input":{"operator_path":"/project1"}}]}`.
 Use existing typed Command payloads for up to 256 reads or mutations (1 MiB
-input maximum). The entire plan is validated before contacting the Daemon.
+input maximum). The Daemon validates the entire plan before any Request is submitted.
 One CLI process submits independent Requests in order, stopping at the first
 non-success. This is not atomic; completed changes remain. The timeout bounds
 the entire run. JSONL progress always includes zero-based indexes and Request

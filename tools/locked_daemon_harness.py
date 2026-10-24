@@ -22,8 +22,7 @@ from typing import Any
 
 import uvicorn
 
-from td_cli.cli import _uuid7
-from td_cli.client import ClientError, DaemonClient
+from td_cli.client import ClientError, DaemonClient, new_request_id
 from td_cli.daemon.runtime_files import load_or_create_token, secure_layout
 from td_cli.daemon.transport import create_transport_app
 from td_cli.protocol import Command
@@ -50,7 +49,7 @@ class Harness:
 
     def submit(self, label: str, name: str, payload: dict[str, Any]) -> dict[str, Any]:
         command = Command.model_validate({"name": name, "input": payload}).model_dump(mode="json")
-        request_id = _uuid7()
+        request_id = new_request_id()
         started = time.monotonic()
         try:
             self.client.submit(request_id, self.instance_id, command)

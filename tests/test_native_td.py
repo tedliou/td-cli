@@ -1,8 +1,9 @@
-"""The native td must behave exactly like the Python td (ADR 0003).
+"""The native td keeps behaving exactly like the Python td it replaced (ADR 0003).
 
-Each case runs the same argv through both CLIs against a fake Daemon and compares exit code,
-stdout, stderr and the requests the Daemon received. Build the native td first:
-``cargo build --release --examples`` in ``native/td``; ``TD_NATIVE_EXE`` overrides its path.
+Each case runs the native td against a fake Daemon and compares exit code, stdout, stderr and
+the requests the Daemon received with what the Python td did for the same case, recorded in
+``tests/data/native_td_expected.json``. Build the native td first:
+``cargo build --release --bins --examples`` in ``native/td``; ``TD_NATIVE_EXE`` overrides its path.
 """
 
 from __future__ import annotations
@@ -13,7 +14,6 @@ import re
 import shutil
 import socket
 import subprocess
-import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -30,16 +30,6 @@ FAKE_TD_DAEMON = NATIVE.parent / "examples" / "fake_td_daemon.exe"
 TOKEN = "a" * 64
 REQUEST_ID = "01890a5d-ac96-774b-bcce-b302099a8057"
 UUID7 = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
-# The Python td, pointed at the fake Daemon without changing its code.
-PYTHON_TD = """
-import sys
-from td_cli import client
-client.DaemonClient.__init__.__kwdefaults__["endpoint"] = sys.argv[1]
-sys.argv = ["td", *sys.argv[2:]]
-from td_cli.cli import run
-run()
-"""
-
 pytestmark = pytest.mark.skipif(not NATIVE.exists(), reason=f"native td not built at {NATIVE}")
 
 HEALTH = {
@@ -197,7 +187,6 @@ class Run:
 
 
 def run(
-    kind: str,
     argv: list[str],
     routes: Route,
     home: Path,
@@ -209,11 +198,7 @@ def run(
 ) -> Run:
     daemon = FakeDaemon(routes, start_after)
     try:
-        command = (
-            [sys.executable, "-c", PYTHON_TD, daemon.url, *argv]
-            if kind == "python"
-            else [str(exe), *argv]
-        )
+        command = [str(exe), *argv]
         environment = {
             **os.environ,
             "LOCALAPPDATA": str(home),
@@ -237,7 +222,7 @@ def run(
     def normalized(text: str) -> str:
         for request_id in generated:
             text = text.replace(request_id, "<generated>")
-        return text
+        return portable(text.replace(daemon.url.removeprefix("http://"), "<daemon>"), home)
 
     return Run(
         completed.returncode,
@@ -249,6 +234,58 @@ def run(
         ],
         len({item.port for item in daemon.received}),
     )
+
+
+def portable(text: str, home: Path) -> str:
+    """Name the test's temporary folder ``<home>``, as typed and as JSON escapes it."""
+    forms = {str(home), str(home.resolve())}
+    for form in sorted(forms | {json.dumps(form)[1:-1] for form in forms}, key=len, reverse=True):
+        text = text.replace(form, "<home>")
+    return text
+
+
+# What the Python td did for each case, recorded before it was removed (ADR 0003). Rerun with
+# TD_NATIVE_UPDATE_EXPECTED=1 to record the native td instead, after a deliberate change.
+EXPECTED_PATH = ROOT / "tests" / "data" / "native_td_expected.json"
+UPDATE_EXPECTED = os.environ.get("TD_NATIVE_UPDATE_EXPECTED") == "1"
+_expected: dict[str, dict] = (
+    json.loads(EXPECTED_PATH.read_text(encoding="utf-8")) if EXPECTED_PATH.exists() else {}
+)
+_case = {"id": "", "count": 0}
+
+
+@pytest.fixture(autouse=True)
+def _expected_case(request):
+    _case.update(id=request.node.nodeid.split("::", 1)[1], count=0)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _write_expected():
+    yield
+    if UPDATE_EXPECTED:
+        EXPECTED_PATH.parent.mkdir(exist_ok=True)
+        text = json.dumps(dict(sorted(_expected.items())), indent=1, ensure_ascii=False)
+        EXPECTED_PATH.write_text(text + chr(10), encoding="utf-8", newline=chr(10))
+
+
+def recorded(produce) -> Run:
+    """The recorded result for this test's next comparison; ``produce`` makes it when updating."""
+    key = f"{_case['id']}#{_case['count']}"
+    _case["count"] += 1
+    if UPDATE_EXPECTED:
+        result = produce()
+        _expected[key] = {
+            "exit_code": result.exit_code,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "requests": result.requests,
+            "connections": result.connections,
+        }
+        return result
+    assert key in _expected, f"no recorded result for {key}; see EXPECTED_PATH"
+    entry = _expected[key]
+    requests = [tuple(request) for request in entry["requests"]]
+    return Run(entry["exit_code"], entry["stdout"], entry["stderr"], requests, entry["connections"])
 
 
 @pytest.fixture
@@ -267,16 +304,16 @@ def same(
     stdin: bytes | None = None,
     compare_requests: bool = True,
 ) -> Run:
-    python = run("python", argv, routes, home, stdin=stdin)
-    native = run("native", argv, routes, home, stdin=stdin)
+    expected = recorded(lambda: run(argv, routes, home, stdin=stdin))
+    native = run(argv, routes, home, stdin=stdin)
     assert (native.exit_code, native.stdout, native.stderr) == (
-        python.exit_code,
-        python.stdout,
-        python.stderr,
+        expected.exit_code,
+        expected.stdout,
+        expected.stderr,
     )
     if compare_requests:
-        assert native.requests == python.requests
-        assert native.connections == python.connections
+        assert native.requests == expected.requests
+        assert native.connections == expected.connections
     return native
 
 
@@ -574,26 +611,39 @@ def test_a_dropped_submission_is_sent_once(home):
 def test_a_refused_daemon_reads_as_unavailable(home):
     # Nothing listens on the port: every GET attempt is refused, then version reports no Daemon.
     port = free_port()
-    environment = {**os.environ, "LOCALAPPDATA": str(home)}
-    outputs = []
-    for command in (
-        [sys.executable, "-c", PYTHON_TD, f"http://127.0.0.1:{port}", "--json", "version"],
-        [str(NATIVE), "--json", "version"],
-    ):
-        environment["TDCLI_TEST_ENDPOINT"] = f"http://127.0.0.1:{port}"
+    environment = {
+        **os.environ,
+        "LOCALAPPDATA": str(home),
+        "TDCLI_TEST_ENDPOINT": f"http://127.0.0.1:{port}",
+    }
+
+    def version(command: list[str]) -> Run:
         completed = subprocess.run(
-            command, capture_output=True, env=environment, timeout=60, check=False
+            [*command, "--json", "version"],
+            capture_output=True,
+            env=environment,
+            timeout=60,
+            check=False,
         )
-        outputs.append((completed.returncode, completed.stdout, completed.stderr))
-    assert outputs[0] == outputs[1]
-    assert json.loads(outputs[1][1])["data"]["daemon_release_version"] is None
+        return Run(
+            completed.returncode, completed.stdout.decode(), completed.stderr.decode(), [], 0
+        )
+
+    expected = recorded(lambda: version([str(NATIVE)]))
+    native = version([str(NATIVE)])
+    assert (native.exit_code, native.stdout, native.stderr) == (
+        expected.exit_code,
+        expected.stdout,
+        expected.stderr,
+    )
+    assert json.loads(native.stdout)["data"]["daemon_release_version"] is None
 
 
 def test_a_refused_get_is_retried_with_backoff(home):
-    # The Python td starts too slowly to meet a port that opens 0.2 s later, so only the native
-    # timing is checked: attempts at 0, 0.1 and 0.4 s, the last one answered.
+    # The timing has no recording, so it is checked directly: attempts at 0, 0.1 and 0.4 s,
+    # the last one answered.
     started = time.perf_counter()
-    native = run("native", ["--json", "version"], daemon(), home, start_after=0.2)
+    native = run(["--json", "version"], daemon(), home, start_after=0.2)
     assert native.exit_code == 0, native.stderr
     assert json.loads(native.stdout)["data"]["daemon_release_version"] == "0.11.0"
     assert time.perf_counter() - started >= 0.4
@@ -606,8 +656,8 @@ def test_long_polls_ask_for_the_rest_of_the_command_deadline(home):
         **daemon(),
         ("GET", REQUEST): [(200, snapshot(status="running")), (200, snapshot(result={}))],
     }
-    for kind in ("python", "native"):
-        result = run(kind, argv, routes, home)
+    expected = recorded(lambda: run(argv, routes, home))
+    for kind, result in (("python", expected), ("native", run(argv, routes, home))):
         assert result.exit_code == 0, result.stderr
         polls = [path for method, path, _ in result.requests if path.startswith(REQUEST)]
         waits = [int(path.split("wait_ms=")[1]) for path in polls]
@@ -615,7 +665,7 @@ def test_long_polls_ask_for_the_rest_of_the_command_deadline(home):
         assert waits[1] < waits[0]
 
 
-# The Python td would start a real Daemon here, so the native start path is checked alone.
+# The Python td would have started a real Daemon here, so the start path has no recording.
 
 
 @pytest.fixture
@@ -633,7 +683,6 @@ def test_missing_daemon_is_started_with_the_remaining_deadline(native_beside_fak
     log = tmp_path / "start.log"
     home = tmp_path / "home"
     result = run(
-        "native",
         ["--json", "--timeout", "8", "instances", "list"],
         INSTANCES,
         home,
@@ -654,7 +703,6 @@ def test_missing_daemon_is_started_with_the_remaining_deadline(native_beside_fak
 def test_failed_start_reports_its_reason(native_beside_fake_daemon, tmp_path):
     reason = "Daemon startup timed out; inspect C:\\logs\\daemon.log"
     result = run(
-        "native",
         ["--json", "instances", "list"],
         INSTANCES,
         tmp_path / "home",
@@ -676,7 +724,6 @@ def test_failed_start_reports_its_reason(native_beside_fake_daemon, tmp_path):
 def test_a_start_that_never_finishes_is_stopped(native_beside_fake_daemon, tmp_path):
     started = time.perf_counter()
     result = run(
-        "native",
         ["--json", "--timeout", "0.2", "instances", "list"],
         INSTANCES,
         tmp_path / "home",
@@ -1030,12 +1077,12 @@ def test_project_open_launches_detached(folder, tmp_path, home):
     shutil.copy(FAKE_TD_DAEMON, project / "TouchDesigner.exe")
     argv = ["--json", "project", "open", str(project / "scene.TOE")]
     argv += ["--executable", str(project / "TouchDesigner.exe")]
-    results = [run(kind, argv, daemon(), home) for kind in ("python", "native")]
+    results = [recorded(lambda: run(argv, daemon(), home)), run(argv, daemon(), home)]
     data = [json.loads(result.stdout)["data"] for result in results]
     assert [result.exit_code for result in results] == [0, 0]
     assert data[0]["pid"] > 0 and data[1]["pid"] > 0
     assert {**data[1], "pid": 0} == {**data[0], "pid": 0}
-    assert data[1]["path"] == str((project / "scene.TOE").resolve())
+    assert data[1]["path"] == portable(str((project / "scene.TOE").resolve()), home)
 
 
 def test_project_open_reports_a_rejected_launch(project, home):
@@ -1136,3 +1183,22 @@ def test_commands_execute_stops_at_the_deadline(home):
     assert [event["event"] for event in events[:2]] == ["submitting", "stopped"]
     assert events[1]["error"]["code"] == "wait_timeout"
     assert native.exit_code == 6
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [
+        (["dat", "text", "get"], ["32768", "td commands schema dat.text.get"]),
+        (["project", "snapshot"], ["1000", "1-1000"]),
+        (["batch", "execute"], ["16", "commands execute"]),
+        (["ops", "destroy"], ["non-empty COMP", "detached_connections"]),
+    ],
+)
+def test_help_states_option_meaning_and_limits(argv, expected):
+    completed = subprocess.run(
+        [str(NATIVE), *argv, "--help"], capture_output=True, timeout=60, check=False
+    )
+    assert completed.returncode == 0, completed.stderr
+    text = " ".join(completed.stdout.decode().split())
+    for fragment in expected:
+        assert fragment in text
