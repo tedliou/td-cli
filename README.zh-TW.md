@@ -97,6 +97,7 @@ td-cli 自有程式碼採用 [MIT 授權](LICENSE)。
 `td.exe`，所以先建置再跑 `pytest`：
 
 ```powershell
+rustup set default-host x86_64-pc-windows-gnu
 Push-Location native/td
 cargo fmt --check
 cargo clippy --release --all-targets --locked -- -D warnings

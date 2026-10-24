@@ -34,6 +34,8 @@ def test_native_td_builds_locked_without_machine_paths(
     calls = []
 
     def cargo(command, **kwargs):
+        if command[0] == "rustc":
+            return subprocess.CompletedProcess(command, 0, "host: x86_64-pc-windows-gnu\n")
         calls.append((command, kwargs))
         return subprocess.CompletedProcess(command, 0)
 
@@ -53,3 +55,23 @@ def test_native_td_builds_locked_without_machine_paths(
     flags = env["CARGO_ENCODED_RUSTFLAGS"].split(chr(0x1F))
     assert f"--remap-path-prefix={Path.cwd().resolve()}=td-cli" in flags
     assert sorted(path.name for path in (tmp_path / "dist/td").iterdir()) == ["td.exe"]
+
+
+def test_native_td_refuses_a_non_gnu_host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    sys.path.insert(0, "scripts")
+    try:
+        import build_release
+    finally:
+        sys.path.remove("scripts")
+    commands = []
+
+    def run(command, **kwargs):
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 0, "host: x86_64-pc-windows-msvc\n")
+
+    monkeypatch.setattr(build_release.subprocess, "run", run)
+    monkeypatch.setattr(build_release, "NATIVE_TD", tmp_path)
+
+    with pytest.raises(SystemExit, match="x86_64-pc-windows-gnu"):
+        build_release.build_native_td(tmp_path / "dist", 1_700_000_000)
+    assert commands == [["rustc", "-vV"]]

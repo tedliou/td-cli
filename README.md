@@ -108,6 +108,7 @@ the native Rust client in `native/td`; `native/td/rust-toolchain.toml` pins its 
 the release build of `td.exe`, so build it before `pytest`.
 
 ```powershell
+rustup set default-host x86_64-pc-windows-gnu
 Push-Location native/td
 cargo fmt --check
 cargo clippy --release --all-targets --locked -- -D warnings

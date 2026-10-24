@@ -26,6 +26,7 @@ jobs:
           download-from-astral-mirror: false
       - run: uv sync --locked --python 3.11
       # The pinned GNU toolchain from native/td/rust-toolchain.toml; it needs no Visual Studio.
+      - run: rustup set default-host x86_64-pc-windows-gnu
       - run: rustup toolchain install
         working-directory: native/td
       - run: cargo fmt --check
@@ -62,6 +63,7 @@ jobs:
           prune-cache: true
           download-from-astral-mirror: false
       - run: uv sync --locked --python 3.11
+      - run: rustup set default-host x86_64-pc-windows-gnu
       - run: rustup toolchain install
         working-directory: native/td
       - run: uv run python scripts/check_licenses.py --runtime

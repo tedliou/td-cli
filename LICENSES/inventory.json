@@ -2792,5 +2792,5 @@
     "zmij": "1.0.23"
   },
   "cargo_lock_sha256": "d2853e0432637da39306ff1a93512657f772cd1c6f4dbb41c472f6c1183c1f52",
-  "rust_toolchain": "1.99.1-x86_64-pc-windows-gnu"
+  "rust_toolchain": "1.99.1"
 }

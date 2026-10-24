@@ -12,6 +12,8 @@ from td_cli.licensing import license_files
 from td_cli.release import package_release
 
 NATIVE_TD = Path("native/td")
+# The license inventory covers the GNU toolchain runtime; an MSVC build would link other code.
+NATIVE_HOST = "x86_64-pc-windows-gnu"
 # Every build step finishes well within this; a hung toolchain must not hang the release.
 BUILD_TIMEOUT_SECONDS = 1800
 VERSION_SMOKE_TIMEOUT_SECONDS = 60
@@ -30,6 +32,16 @@ def build_native_td(binaries: Path, source_epoch: int) -> None:
         "CARGO_ENCODED_RUSTFLAGS": rustflags,
     }
     env.pop("RUSTFLAGS", None)
+    rustc = subprocess.run(
+        ["rustc", "-vV"],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=NATIVE_TD,
+        timeout=VERSION_SMOKE_TIMEOUT_SECONDS,
+    )
+    if f"host: {NATIVE_HOST}" not in rustc.stdout.splitlines():
+        raise SystemExit(f"td.exe must be built on the {NATIVE_HOST} host toolchain")
     subprocess.run(
         ["cargo", "build", "--release", "--locked"],
         check=True,
