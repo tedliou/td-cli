@@ -7,6 +7,11 @@ from td_cli.client import ClientError, DaemonClient
 from td_cli.error_catalog import ERROR_CATALOG
 
 
+def patch_http(monkeypatch, request) -> None:
+    """Route every request of the shared connection to ``request(method, url, **kwargs)``."""
+    monkeypatch.setattr(httpx.Client, "request", lambda self, *a, **k: request(*a, **k))
+
+
 def client(tmp_path: Path) -> DaemonClient:
     state = tmp_path / "state"
     state.mkdir()
@@ -32,11 +37,11 @@ def test_autostart_occurs_once_before_http_and_never_retries_a_mutation(tmp_path
             raise httpx.ConnectError("lost response")
         return httpx.Response(200, json=[])
 
-    monkeypatch.setattr(httpx, "request", request)
+    patch_http(monkeypatch, request)
     assert instance_client.instances() == []
     with pytest.raises(ClientError) as error:
         instance_client.submit("known-request", "instance", {})
-    assert events == ["start", "GET", "POST"]
+    assert events == ["GET", "start", "GET", "POST"]  # unready health probe, then start
     assert error.value.details["request_id"] == "known-request"
 
 
@@ -63,7 +68,7 @@ def test_read_only_query_retries_with_fixed_backoffs(tmp_path: Path, monkeypatch
             raise httpx.ConnectError("not ready")
         return httpx.Response(200, json=[])
 
-    monkeypatch.setattr(httpx, "request", request)
+    patch_http(monkeypatch, request)
     monkeypatch.setattr("td_cli.client.time.sleep", sleeps.append)
 
     assert client(tmp_path).instances() == []
@@ -72,8 +77,8 @@ def test_read_only_query_retries_with_fixed_backoffs(tmp_path: Path, monkeypatch
 
 
 def test_command_transport_failure_preserves_known_request_id(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr(
-        httpx, "request", lambda *args, **kwargs: (_ for _ in ()).throw(httpx.ConnectError("down"))
+    patch_http(
+        monkeypatch, lambda *args, **kwargs: (_ for _ in ()).throw(httpx.ConnectError("down"))
     )
 
     with pytest.raises(ClientError) as caught:
@@ -93,9 +98,7 @@ def test_accepted_request_remains_queryable_while_execution_is_authorized(
         "result": None,
         "error": None,
     }
-    monkeypatch.setattr(
-        httpx, "request", lambda *args, **kwargs: httpx.Response(200, json=snapshot)
-    )
+    patch_http(monkeypatch, lambda *args, **kwargs: httpx.Response(200, json=snapshot))
 
     assert client(tmp_path).get_request("request-1") == snapshot
 
@@ -109,7 +112,7 @@ def test_read_timeout_is_not_retried(tmp_path: Path, monkeypatch) -> None:
         attempts += 1
         raise httpx.ReadTimeout("response stalled")
 
-    monkeypatch.setattr(httpx, "request", request)
+    patch_http(monkeypatch, request)
 
     with pytest.raises(ClientError) as caught:
         client(tmp_path).instances()
@@ -121,9 +124,8 @@ def test_read_timeout_is_not_retried(tmp_path: Path, monkeypatch) -> None:
 def test_unknown_parameter_result_enum_is_protocol_incompatible(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setattr(
-        httpx,
-        "request",
+    patch_http(
+        monkeypatch,
         lambda *args, **kwargs: httpx.Response(
             200,
             json={
@@ -143,9 +145,8 @@ def test_unknown_parameter_result_enum_is_protocol_incompatible(
 
 
 def test_network_mutation_error_remains_typed(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr(
-        httpx,
-        "request",
+    patch_http(
+        monkeypatch,
         lambda *args, **kwargs: httpx.Response(
             200,
             json={
@@ -168,9 +169,8 @@ def test_network_mutation_error_remains_typed(tmp_path: Path, monkeypatch) -> No
 
 @pytest.mark.parametrize("code", sorted(ERROR_CATALOG.codes))
 def test_every_catalogued_error_code_remains_typed(tmp_path: Path, monkeypatch, code: str) -> None:
-    monkeypatch.setattr(
-        httpx,
-        "request",
+    patch_http(
+        monkeypatch,
         lambda *args, **kwargs: httpx.Response(
             200,
             json={
@@ -195,7 +195,7 @@ def test_uncatalogued_error_code_is_incompatible_without_losing_the_request(
         "result": None,
         "error": ERROR_CATALOG.error("future_outcome_unknown"),
     }
-    monkeypatch.setattr(httpx, "request", lambda *a, **k: httpx.Response(200, json=snapshot))
+    patch_http(monkeypatch, lambda *a, **k: httpx.Response(200, json=snapshot))
 
     with pytest.raises(ClientError) as caught:
         client(tmp_path).wait("request-1")
@@ -231,9 +231,7 @@ def test_parameter_list_accepts_locked_introspection_enums(
         "result": {"parameters": [{"mode": mode, "value_kind": value_kind}]},
         "error": None,
     }
-    monkeypatch.setattr(
-        httpx, "request", lambda *args, **kwargs: httpx.Response(200, json=snapshot)
-    )
+    patch_http(monkeypatch, lambda *args, **kwargs: httpx.Response(200, json=snapshot))
     assert client(tmp_path).get_request("request-1") == snapshot
 
 
@@ -244,9 +242,8 @@ def test_parameter_list_accepts_locked_introspection_enums(
 def test_parameter_list_rejects_unknown_introspection_enums(
     tmp_path: Path, monkeypatch, parameter: dict[str, str]
 ) -> None:
-    monkeypatch.setattr(
-        httpx,
-        "request",
+    patch_http(
+        monkeypatch,
         lambda *args, **kwargs: httpx.Response(
             200,
             json={
@@ -279,9 +276,9 @@ def test_startup_uses_visible_budget_and_http_receives_only_remaining(tmp_path, 
         return httpx.Response(200, json=[])
 
     monkeypatch.setattr("td_cli.client.ensure_running", startup)
-    monkeypatch.setattr(httpx, "request", request)
+    patch_http(monkeypatch, request)
     assert instance_client.instances() == []
-    assert observed == [30, 18]
+    assert observed == [0.5, 30, 18]  # health probe, start budget, remaining HTTP budget
 
 
 def test_client_start_reaches_the_daemon_start_routine(monkeypatch) -> None:
@@ -292,3 +289,106 @@ def test_client_start_reaches_the_daemon_start_routine(monkeypatch) -> None:
     monkeypatch.setattr(td_cli.daemon.cli, "ensure_running", lambda **kw: observed.append(kw))
     td_cli.client.ensure_running(timeout=3.5)
     assert observed == [{"timeout": 3.5}]
+
+
+HEALTHY = {"ready": True, "protocol_versions": [3], "release_version": "test"}
+
+
+def test_healthy_daemon_serves_a_command_on_one_connection_without_starting(
+    tmp_path: Path, monkeypatch
+) -> None:
+    calls = []
+    starts = []
+    monkeypatch.setattr("td_cli.client.ensure_running", lambda **kw: starts.append(kw))
+
+    def request(self, method, url, **kwargs):
+        calls.append((id(self), method, url.rsplit("/", 1)[-1]))
+        return httpx.Response(200, json=HEALTHY if url.endswith("/health") else [])
+
+    monkeypatch.setattr(httpx.Client, "request", request)
+    instance_client = client(tmp_path)
+    instance_client._autostart = True
+    assert instance_client.instances() == []
+    assert instance_client.instances() == []
+    assert starts == []
+    assert [call[1:] for call in calls] == [
+        ("GET", "health"),
+        ("GET", "instances"),
+        ("GET", "instances"),
+    ]
+    assert len({call[0] for call in calls}) == 1
+
+
+@pytest.mark.parametrize(
+    "health",
+    [
+        {"ready": False, "protocol_versions": [3]},
+        {"ready": True, "protocol_versions": [2]},
+        {"ready": True, "protocol_versions": "3"},
+        [],
+    ],
+)
+def test_doubtful_health_is_left_to_the_start_routine(tmp_path: Path, monkeypatch, health) -> None:
+    from td_cli.processes import LaunchError
+
+    starts = []
+
+    def start(**kwargs):
+        starts.append(kwargs)
+        raise LaunchError("Daemon is starting/unhealthy")
+
+    monkeypatch.setattr("td_cli.client.ensure_running", start)
+    patch_http(monkeypatch, lambda *a, **k: httpx.Response(200, json=health))
+    instance_client = client(tmp_path)
+    instance_client._autostart = True
+    with pytest.raises(ClientError) as error:
+        instance_client.instances()
+    assert error.value.code == "daemon_unavailable"
+    assert error.value.details == {"reason": "Daemon is starting/unhealthy"}
+    assert len(starts) == 1
+
+
+def test_missing_token_starts_the_daemon_without_probing(tmp_path: Path, monkeypatch) -> None:
+    events = []
+
+    def start(**kwargs):
+        events.append("start")
+        state = tmp_path / "state"
+        state.mkdir()
+        (state / "auth.token").write_text("a" * 64, encoding="ascii")
+
+    def request(method, url, **kwargs):
+        events.append(url.rsplit("/", 1)[-1])
+        return httpx.Response(200, json=[])
+
+    monkeypatch.setattr("td_cli.client.ensure_running", start)
+    patch_http(monkeypatch, request)
+    instance_client = DaemonClient(timeout=1, root=tmp_path, autostart=True)
+    assert instance_client.instances() == []
+    assert events == ["start", "instances"]
+
+
+def test_unreachable_probe_starts_with_the_remaining_budget(tmp_path: Path, monkeypatch) -> None:
+    clock = [100.0]
+    observed = []
+    monkeypatch.setattr("td_cli.client.time.monotonic", lambda: clock[0])
+
+    def request(method, url, **kwargs):
+        if url.endswith("/health"):
+            clock[0] += 0.5
+            raise httpx.ConnectError("refused")
+        return httpx.Response(200, json=[])
+
+    monkeypatch.setattr("td_cli.client.ensure_running", lambda **kw: observed.append(kw))
+    patch_http(monkeypatch, request)
+    instance_client = client(tmp_path)
+    instance_client.timeout = 10
+    instance_client._autostart = True
+    assert instance_client.instances() == []
+    assert observed == [{"timeout": 9.5}]
+
+
+def test_close_releases_the_shared_connection(tmp_path: Path) -> None:
+    instance_client = client(tmp_path)
+    instance_client.close()
+    assert instance_client._http.is_closed

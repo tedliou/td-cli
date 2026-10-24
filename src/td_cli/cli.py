@@ -86,7 +86,9 @@ def main(
 
 
 def _client(ctx: typer.Context) -> DaemonClient:
-    return DaemonClient(timeout=float(ctx.obj["timeout"]), autostart=True)
+    client = DaemonClient(timeout=float(ctx.obj["timeout"]), autostart=True)
+    ctx.call_on_close(client.close)
+    return client
 
 
 def _reject_instance_on_query(ctx: typer.Context) -> None:
