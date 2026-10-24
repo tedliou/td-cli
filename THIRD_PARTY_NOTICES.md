@@ -22,6 +22,10 @@ CPython 的歷史授權及原生元件聲明另列於 runtime 項目；Microsoft
 的條件見 CPython LICENSE。Python 原生版本快照記錄於 inventory 的 `runtime_variants`，打包前須核對。
 已核對的環境為官方 Windows Python 3.11.9（既有 CI）與 uv Python 3.11.15（本機）；
 兩者的 Python LICENSE 與原生版本均明確比對，其他環境須先重新審查。
+原生 `td.exe` 由 Rust 建置，連結 `native/td/Cargo.lock` 中標為 native td Rust crate 的套件，
+以及 Rust 1.99.1 windows-gnu 工具鏈的標準函式庫、GCC runtime 與 MinGW-w64 啟動物件。
+crate 原文取自 SHA-256 符合 `Cargo.lock` 的 crates.io 封裝；工具鏈原文取自該工具鏈的 `share/doc`。
+鎖檔中未編進 `td.exe` 的 crate 另列為 not built。
 TouchDesigner 本體與 Derivative 內建元件不隨本專案散布，仍受
 [Derivative 授權](https://derivative.ca/UserGuide/Licensing) 規範。
 
@@ -208,10 +212,28 @@ TouchDesigner 本體與 Derivative 內建元件不隨本專案散布，仍受
 | OpenSSL | 3.0.13 | Apache-2.0 | CI Python 3.11.9 native runtime | [來源](https://raw.githubusercontent.com/openssl/openssl/openssl-3.0.13/LICENSE.txt) | [原文](LICENSES/runtime__OpenSSL-3.0.13__LICENSE.txt) |
 | Expat | 2.6.0 | MIT | CI Python 3.11.9 native runtime | [來源](https://raw.githubusercontent.com/libexpat/libexpat/R_2_6_0/expat/COPYING) | [原文](LICENSES/runtime__Expat-2.6.0__COPYING) |
 | SQLite | 3.45.1 | Public domain | CI Python 3.11.9 native runtime | [原始碼](https://github.com/sqlite/sqlite/tree/version-3.45.1) | [公共領域聲明](LICENSES/runtime__SQLite__LICENSE) |
+| equivalent | 1.0.3 | Apache-2.0 OR MIT | native td Rust crate | [來源](https://static.crates.io/crates/equivalent/equivalent-1.0.3.crate) | [LICENSE-APACHE](LICENSES/rust__equivalent-1.0.3__LICENSE-APACHE)<br>[LICENSE-MIT](LICENSES/rust__equivalent-1.0.3__LICENSE-MIT) |
+| foldhash | 0.2.0 | Zlib | native td Rust crate | [來源](https://static.crates.io/crates/foldhash/foldhash-0.2.0.crate) | [LICENSE](LICENSES/rust__foldhash-0.2.0__LICENSE) |
+| hashbrown | 0.17.1 | MIT OR Apache-2.0 | native td Rust crate | [來源](https://static.crates.io/crates/hashbrown/hashbrown-0.17.1.crate) | [LICENSE-APACHE](LICENSES/rust__hashbrown-0.17.1__LICENSE-APACHE)<br>[LICENSE-MIT](LICENSES/rust__hashbrown-0.17.1__LICENSE-MIT) |
+| indexmap | 2.14.2 | Apache-2.0 OR MIT | native td Rust crate | [來源](https://static.crates.io/crates/indexmap/indexmap-2.14.2.crate) | [LICENSE-APACHE](LICENSES/rust__indexmap-2.14.2__LICENSE-APACHE)<br>[LICENSE-MIT](LICENSES/rust__indexmap-2.14.2__LICENSE-MIT) |
+| itoa | 1.0.18 | MIT OR Apache-2.0 | native td Rust crate | [來源](https://static.crates.io/crates/itoa/itoa-1.0.18.crate) | [LICENSE-APACHE](LICENSES/rust__itoa-1.0.18__LICENSE-APACHE)<br>[LICENSE-MIT](LICENSES/rust__itoa-1.0.18__LICENSE-MIT) |
+| memchr | 2.8.3 | Unlicense OR MIT | native td Rust crate | [來源](https://static.crates.io/crates/memchr/memchr-2.8.3.crate) | [COPYING](LICENSES/rust__memchr-2.8.3__COPYING)<br>[LICENSE-MIT](LICENSES/rust__memchr-2.8.3__LICENSE-MIT)<br>[UNLICENSE](LICENSES/rust__memchr-2.8.3__UNLICENSE) |
+| proc-macro2 | 1.0.107 | MIT OR Apache-2.0 | native td Cargo.lock (not built) | [來源](https://static.crates.io/crates/proc-macro2/proc-macro2-1.0.107.crate) | [LICENSE-APACHE](LICENSES/rust__proc-macro2-1.0.107__LICENSE-APACHE)<br>[LICENSE-MIT](LICENSES/rust__proc-macro2-1.0.107__LICENSE-MIT) |
+| quote | 1.0.47 | MIT OR Apache-2.0 | native td Cargo.lock (not built) | [來源](https://static.crates.io/crates/quote/quote-1.0.47.crate) | [LICENSE-APACHE](LICENSES/rust__quote-1.0.47__LICENSE-APACHE)<br>[LICENSE-MIT](LICENSES/rust__quote-1.0.47__LICENSE-MIT) |
+| serde | 1.0.229 | MIT OR Apache-2.0 | native td Cargo.lock (not built) | [來源](https://static.crates.io/crates/serde/serde-1.0.229.crate) | [LICENSE-APACHE](LICENSES/rust__serde-1.0.229__LICENSE-APACHE)<br>[LICENSE-MIT](LICENSES/rust__serde-1.0.229__LICENSE-MIT) |
+| serde_core | 1.0.229 | MIT OR Apache-2.0 | native td Rust crate | [來源](https://static.crates.io/crates/serde_core/serde_core-1.0.229.crate) | [LICENSE-APACHE](LICENSES/rust__serde_core-1.0.229__LICENSE-APACHE)<br>[LICENSE-MIT](LICENSES/rust__serde_core-1.0.229__LICENSE-MIT) |
+| serde_derive | 1.0.229 | MIT OR Apache-2.0 | native td Cargo.lock (not built) | [來源](https://static.crates.io/crates/serde_derive/serde_derive-1.0.229.crate) | [LICENSE-APACHE](LICENSES/rust__serde_derive-1.0.229__LICENSE-APACHE)<br>[LICENSE-MIT](LICENSES/rust__serde_derive-1.0.229__LICENSE-MIT) |
+| serde_json | 1.0.154 | MIT OR Apache-2.0 | native td Rust crate | [來源](https://static.crates.io/crates/serde_json/serde_json-1.0.154.crate) | [LICENSE-APACHE](LICENSES/rust__serde_json-1.0.154__LICENSE-APACHE)<br>[LICENSE-MIT](LICENSES/rust__serde_json-1.0.154__LICENSE-MIT) |
+| syn | 3.0.9 | MIT OR Apache-2.0 | native td Cargo.lock (not built) | [來源](https://static.crates.io/crates/syn/syn-3.0.9.crate) | [LICENSE-APACHE](LICENSES/rust__syn-3.0.9__LICENSE-APACHE)<br>[LICENSE-MIT](LICENSES/rust__syn-3.0.9__LICENSE-MIT) |
+| unicode-ident | 1.0.27 | (MIT OR Apache-2.0) AND Unicode-3.0 | native td Cargo.lock (not built) | [來源](https://static.crates.io/crates/unicode-ident/unicode-ident-1.0.27.crate) | [LICENSE-APACHE](LICENSES/rust__unicode-ident-1.0.27__LICENSE-APACHE)<br>[LICENSE-MIT](LICENSES/rust__unicode-ident-1.0.27__LICENSE-MIT)<br>[LICENSE-UNICODE](LICENSES/rust__unicode-ident-1.0.27__LICENSE-UNICODE) |
+| zmij | 1.0.23 | MIT | native td Rust crate | [來源](https://static.crates.io/crates/zmij/zmij-1.0.23.crate) | [LICENSE-MIT](LICENSES/rust__zmij-1.0.23__LICENSE-MIT) |
+| Rust standard library | 1.99.1 | MIT OR Apache-2.0 | native td Rust toolchain runtime | [來源](https://github.com/rust-lang/rust/tree/1.99.1) | [MIT.txt](LICENSES/toolchain__rust-1.99.1__MIT.txt)<br>[Apache-2.0.txt](LICENSES/toolchain__rust-1.99.1__Apache-2.0.txt)<br>[COPYRIGHT-library.html](LICENSES/toolchain__rust-1.99.1__COPYRIGHT-library.html) |
+| GCC runtime libraries and MinGW-w64 startup objects | Rust 1.99.1 x86_64-pc-windows-gnu | GPL-3.0-or-later WITH GCC-exception-3.1 | native td Rust toolchain runtime | [來源](https://www.mingw-w64.org/) | [README.txt](LICENSES/toolchain__rust-1.99.1-windows-gnu__README.txt)<br>[COPYING3](LICENSES/toolchain__rust-1.99.1-windows-gnu__COPYING3)<br>[COPYING.RUNTIME](LICENSES/toolchain__rust-1.99.1-windows-gnu__COPYING.RUNTIME) |
 
 ## 更新與驗證
 
 依賴、內嵌元件或 Python runtime 變動時，請依 [維護流程](https://github.com/tedliou/td-cli/blob/main/docs/licensing.md)
 重新核對上游授權及實際 PyInstaller inventory，更新原文、來源與清單。
+`native/td/Cargo.lock` 或 Rust 工具鏈變動時，同樣更新 `cargo_packages`、`cargo_lock_sha256` 與 `rust_toolchain`。
 執行 `uv run python scripts/check_licenses.py` 驗證鎖檔與文件；
 執行 `uv run python scripts/check_licenses.py --runtime` 另核對打包環境。

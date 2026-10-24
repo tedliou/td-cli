@@ -9,7 +9,6 @@ from typer.testing import CliRunner
 
 import td_cli
 from td_cli.agent_tool import app as agent_app
-from td_cli.cli import app as cli_app
 from td_cli.daemon.cli import app as daemon_app
 
 
@@ -21,9 +20,9 @@ def test_all_executable_interfaces_report_the_release_version() -> None:
         assert result.exit_code == 0, result.output
         assert result.stdout.strip() == expected
 
-    result = CliRunner().invoke(cli_app, ["--version"])
-    assert result.exit_code == 0, result.output
-    assert result.stdout.strip() == f"td {expected} (protocol 3)"
+    # The native td prints the release version embedded from its catalog.
+    catalog = json.loads(Path("native/td/catalog.json").read_text(encoding="utf-8"))
+    assert catalog["release_version"] == expected
 
 
 def test_agent_manifest_uses_the_release_version() -> None:

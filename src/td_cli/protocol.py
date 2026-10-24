@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import codecs
 import json
 from enum import StrEnum
 from typing import Any
 
-from pydantic import ValidationError, model_validator
+from pydantic import Field, ValidationError, model_validator
 from pydantic_core import InitErrorDetails
 
 from td_cli.command_catalog import (
@@ -117,3 +118,22 @@ class RequestSnapshot(StrictModel):
             result=None,
             error=None,
         )
+
+
+# A ``commands execute`` plan document, validated whole before its first Command is sent.
+MAX_PLAN_BYTES = 1024 * 1024
+
+
+def plan_document_fits(document: bytes) -> bool:
+    """A plan is at most ``MAX_PLAN_BYTES`` of UTF-8 without a byte order mark."""
+    return len(document) <= MAX_PLAN_BYTES and not document.startswith(codecs.BOM_UTF8)
+
+
+class CommandPlan(StrictModel):
+    commands: list[Command] = Field(min_length=1, max_length=256)
+
+    @model_validator(mode="after")
+    def no_nested_batch(self) -> CommandPlan:
+        if any(command.name == "batch.execute" for command in self.commands):
+            raise ValueError("nested batch is unsupported")
+        return self

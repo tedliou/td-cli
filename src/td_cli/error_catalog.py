@@ -188,3 +188,17 @@ ERROR_CATALOG = ErrorCatalog(
         "execution_capacity_full",
     ),
 )
+
+
+# The td exit code for an error code; any other error exits with DEFAULT_EXIT_CODE.
+EXIT_CODES = {
+    "invalid_arguments": 2,
+    "daemon_unavailable": 3,
+    "transport_error": 3,
+    "instance_not_found": 4,
+    "instance_selector_ambiguous": 4,
+    "instance_offline": 4,
+    "instance_draining": 4,
+    "wait_timeout": 6,
+}
+DEFAULT_EXIT_CODE = 5

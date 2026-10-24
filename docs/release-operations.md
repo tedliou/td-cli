@@ -2,7 +2,10 @@
 
 The four **Release Artifacts** are built from the version in `pyproject.toml` on
 Windows 2022 / Python 3.11 with the locked `uv.lock` and explicit PyInstaller
-specs. The localhost diagnostic bridge is development-only and is not included.
+specs for `td-daemon` and `td-agent`. `td` is the native Rust client: `cargo build
+--release --locked` with the toolchain pinned in `native/td/rust-toolchain.toml`,
+and its ZIP holds only `td.exe` and the license documents. The localhost
+diagnostic bridge is development-only and is not included.
 
 ## Agent Component staging
 

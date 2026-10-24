@@ -38,9 +38,17 @@ invariants named there, and reserve locked TouchDesigner testing for facts that 
 prove. Do not introduce automatic mutation retries, compatibility fallbacks, or alternate transports
 without an approved specification.
 
-Run the complete local gate before review:
+Run the complete local gate before review. The tests run the release build of the native `td.exe`,
+so the cargo steps come first:
 
 ```powershell
+rustup set default-host x86_64-pc-windows-gnu
+Push-Location native/td
+cargo fmt --check
+cargo clippy --release --all-targets --locked -- -D warnings
+cargo test --release --locked
+cargo build --release --locked --bins --examples
+Pop-Location
 uv run pytest -q
 uv run ruff check .
 uv run ruff format --check .
