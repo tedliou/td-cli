@@ -127,6 +127,9 @@ class RecordingDaemonClient:
     def __init__(self, **kwargs):
         del kwargs
 
+    def close(self):
+        pass
+
     def select_instance(self, selector, *, online_only=True):
         del selector, online_only
         return {"instance_id": "instance-1"}

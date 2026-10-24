@@ -13,7 +13,7 @@ def test_version_query_never_starts_a_daemon(monkeypatch):
     starts = []
     monkeypatch.setattr("td_cli.client.ensure_running", lambda **kw: starts.append(True))
     monkeypatch.setattr(
-        httpx,
+        httpx.Client,
         "request",
         lambda *a, **k: httpx.Response(
             200, json={"release_version": "test", "protocol_versions": [3]}
@@ -36,6 +36,9 @@ class FakeDaemonClient:
 
     def __init__(self, **kwargs) -> None:
         del kwargs
+
+    def close(self) -> None:
+        pass
 
     def instances(self):
         return [INSTANCE]
@@ -1072,6 +1075,35 @@ def test_cli_startup_does_not_import_the_daemon_server_stack() -> None:
     )
     result = subprocess.run(
         [sys.executable, "-c", probe], capture_output=True, text=True, timeout=60, check=True
+    )
+    assert result.stdout.strip() == "[]"
+
+
+def test_command_against_a_healthy_daemon_does_not_import_the_daemon_server_stack(
+    tmp_path,
+) -> None:
+    import subprocess
+
+    probe = (
+        "import sys, httpx, td_cli.cli\n"
+        "from pathlib import Path\n"
+        "from td_cli.client import DaemonClient\n"
+        "health = {'ready': True, 'protocol_versions': [3]}\n"
+        "httpx.Client.request = lambda self, method, url, **k: httpx.Response(\n"
+        "    200, json=health if url.endswith('/health') else [])\n"
+        "client = DaemonClient(timeout=5, root=Path(sys.argv[1]), autostart=True)\n"
+        "assert client.instances() == []\n"
+        "print(sorted(m for m in ('fastapi', 'uvicorn', 'socketio', 'td_cli.daemon.cli') "
+        "if m in sys.modules))"
+    )
+    (tmp_path / "state").mkdir()
+    (tmp_path / "state" / "auth.token").write_text("a" * 64, encoding="ascii")
+    result = subprocess.run(
+        [sys.executable, "-c", probe, str(tmp_path)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=True,
     )
     assert result.stdout.strip() == "[]"
 

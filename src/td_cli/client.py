@@ -63,6 +63,9 @@ def _validation_location(location: tuple[int | str, ...]) -> list[int | str]:
     ]
 
 
+HEALTH_PROBE_TIMEOUT = 0.5
+
+
 def ensure_running(*, timeout: float) -> None:
     """Start the Daemon; its server stack is imported only when a start is needed."""
     from td_cli.daemon.cli import ensure_running as start
@@ -108,6 +111,11 @@ class DaemonClient:
         self.endpoint = endpoint
         self._autostart = autostart
         self._deadline: float | None = None
+        # One keep-alive connection serves every request of a Command.
+        self._http = httpx.Client()
+
+    def close(self) -> None:
+        self._http.close()
 
     def _headers(self) -> dict[str, str]:
         token = load_token(self.root)
@@ -115,14 +123,43 @@ class DaemonClient:
             raise ClientError("daemon_unavailable")
         return {"Authorization": f"Bearer {token}"}
 
+    def _daemon_is_healthy(self) -> bool:
+        """Probe health on the shared connection; any doubt is left to the start routine."""
+        try:
+            response = self._http.request(
+                "GET",
+                f"{self.endpoint}/v3/health",
+                headers=self._headers(),
+                timeout=min(HEALTH_PROBE_TIMEOUT, self.timeout),
+            )
+            payload = response.json() if response.status_code == 200 else None
+        except (ClientError, OSError, RuntimeError, ValueError, httpx.HTTPError):
+            return False
+        if not isinstance(payload, dict):
+            return False
+        versions = payload.get("protocol_versions")
+        return (
+            payload.get("ready") is True
+            and isinstance(versions, list)
+            and PROTOCOL_VERSION in versions
+        )
+
     def request(self, method: str, path: str, *, json: object = None) -> Any:
         if self._autostart:
             self._autostart = False
             self._deadline = time.monotonic() + self.timeout
-            try:
-                ensure_running(timeout=self.timeout)
-            except (LaunchError, OSError) as error:
-                raise ClientError("daemon_unavailable", details={"reason": str(error)}) from error
+            if not self._daemon_is_healthy():
+                remaining = self._deadline - time.monotonic()
+                if remaining <= 0:
+                    raise ClientError(
+                        "daemon_unavailable", details={"reason": "command deadline expired"}
+                    )
+                try:
+                    ensure_running(timeout=remaining)
+                except (LaunchError, OSError) as error:
+                    raise ClientError(
+                        "daemon_unavailable", details={"reason": str(error)}
+                    ) from error
         deadline = self._deadline or (time.monotonic() + self.timeout)
         if time.monotonic() >= deadline:
             raise ClientError("daemon_unavailable", details={"reason": "command deadline expired"})
@@ -136,7 +173,7 @@ class DaemonClient:
                     break
                 time.sleep(backoff)
             try:
-                response = httpx.request(
+                response = self._http.request(
                     method,
                     f"{self.endpoint}{path}",
                     headers=self._headers(),
