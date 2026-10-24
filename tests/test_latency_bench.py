@@ -58,3 +58,14 @@ def test_bench_stops_on_a_failing_command(tmp_path: Path) -> None:
         latency_bench.main(
             ["--td", sys.executable, "--td-prefix", str(fake), "--command", "instances list"]
         )
+
+
+def test_bench_defaults_to_version_and_instances_list(tmp_path: Path, capsys) -> None:
+    fake = tmp_path / "fake_td.py"
+    fake.write_text("print('td 9.9.9')\n")
+    latency_bench.main(["--td", sys.executable, "--td-prefix", str(fake), "--runs", "1"])
+    report = json.loads(capsys.readouterr().out)
+    assert [result["command"] for result in report["results"]] == [
+        ["--version"],
+        ["--json", "instances", "list"],
+    ]
