@@ -1,0 +1,28 @@
+{
+  "td": "dist\\td\\td.exe",
+  "td_version": "td 0.11.0 (protocol 3)",
+  "results": [
+    {
+      "command": [
+        "--version"
+      ],
+      "runs": 20,
+      "p50_ms": 306.282,
+      "p95_ms": 320.202,
+      "min_ms": 300.337,
+      "max_ms": 320.785
+    },
+    {
+      "command": [
+        "--json",
+        "instances",
+        "list"
+      ],
+      "runs": 20,
+      "p50_ms": 316.815,
+      "p95_ms": 325.871,
+      "min_ms": 309.642,
+      "max_ms": 327.105
+    }
+  ]
+}
