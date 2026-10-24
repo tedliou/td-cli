@@ -6,11 +6,9 @@ def test_build_graph_has_one_spec_per_public_executable() -> None:
         text = Path(f"packaging/{name}.spec").read_text(encoding="utf-8")
         assert f'name="{name}"' in text
         assert "EXE(" in text
-        # Only td, started for every Command, is onedir; the long-lived tools stay onefile.
-        assert ("COLLECT(" in text) == (name == "td")
-    assert 'contents_directory="td-runtime"' in Path("packaging/td.spec").read_text(
-        encoding="utf-8"
-    )
+        # onedir, each with its own runtime directory: the three share one install directory.
+        assert "COLLECT(" in text
+        assert f'contents_directory="{name}-runtime"' in text
 
 
 def test_build_graph_pins_reproducibility_inputs() -> None:
