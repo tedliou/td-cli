@@ -18,7 +18,7 @@ import typer.main
 from td_cli import __version__, cli
 from td_cli.command_catalog import COMMAND_CATALOG
 from td_cli.error_catalog import ERROR_CATALOG
-from td_cli.protocol import PROTOCOL_VERSION
+from td_cli.protocol import PROTOCOL_VERSION, TERMINAL_REQUEST_STATUSES, RequestStatus
 
 OUTPUT = Path(__file__).resolve().parents[1] / "native" / "td" / "catalog.json"
 # Typer adds shell-completion installers to every app; they are not part of the td contract.
@@ -90,7 +90,10 @@ def build_catalog() -> dict[str, Any]:
             }
             for name in COMMAND_CATALOG.names
         },
+        "request_statuses": [status.value for status in RequestStatus],
+        "terminal_request_statuses": sorted(status.value for status in TERMINAL_REQUEST_STATUSES),
         "errors": {
+            "codes": sorted(ERROR_CATALOG.codes),
             "default_exit_code": _DEFAULT_EXIT_CODE,
             "exit_codes": dict(sorted(cli.EXIT_CODES.items())),
             "retryable": sorted(

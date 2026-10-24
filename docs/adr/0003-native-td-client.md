@@ -12,7 +12,8 @@ P1 之後，暖機的 `td --json instances list` 要 317 ms，`td --version` 也
 - Python 仍是 Command catalog、operator catalog 與錯誤目錄的唯一來源。建置時把它們匯出成 JSON 嵌進 exe，測試確保匯出檔與 Python 一致。
 - Command 驗證移到 Daemon。`POST /v3/requests` 可改帶 Instance selector，Daemon 依序驗證 Command、解析 selector、收件，錯誤碼、細節與優先順序和現在的 client 相同。這樣 Rust 不必重做 pydantic 驗證，selector 規則也只有一份。
 - Daemon 不在時，`td` 呼叫同目錄的 `td-daemon.exe start`，沿用既有的啟動與健康檢查，只在冷啟動多付 Python 啟動的時間。
-- `--json` 信封、人看的輸出、stderr 的錯誤碼行與 exit code 逐字不變。數字照 Daemon 回應的原文輸出，非 ASCII 字元照 Python `ensure_ascii` 的規則跳脫。`--help` 的命令與選項相同，排版可以不同。
+- `--json` 信封、人看的輸出、stderr 的錯誤碼行與 exit code 逐字不變。數字照 Python 讀進再寫出的樣子輸出，非 ASCII 字元照 Python `ensure_ascii` 的規則跳脫。`--help` 的命令與選項相同，排版可以不同。
+- 唯一刻意的差異：Python 版在 Windows 上會先展開參數裡的 `~`、`$VAR`、`%VAR%` 與萬用字元（click 的預設），所以 `--text '$x'` 或 `/project1/*` 送出的內容可能被改寫。Rust 版照原樣送出參數。
 - 等價移植完成後刪掉 Python 版 `td`，不保留 Python fallback。
 
 被拒絕的替代方案：

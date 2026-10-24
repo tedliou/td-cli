@@ -16,3 +16,6 @@ build/
 /td-diagnostic-bridge-command.txt
 
 .codex
+
+# Native td build output.
+/native/td/target/

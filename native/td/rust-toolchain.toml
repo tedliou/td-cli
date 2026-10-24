@@ -1,0 +1,6 @@
+# The GNU host builds a td.exe that only imports Windows system DLLs, without needing the
+# Visual Studio Build Tools on developer machines or in CI.
+[toolchain]
+channel = "1.99.1-x86_64-pc-windows-gnu"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
