@@ -4,8 +4,8 @@
 
 GitHub Issues are the source of truth for defects, specifications, and implementation tasks. Start
 with an issue that states the observable outcome, constraints, public test seam, acceptance criteria,
-and explicit non-goals. Use the repository's five triage labels as documented in
-`docs/agents/triage-labels.md`.
+and explicit non-goals. Issues need no labels; status comes from assignees, blockers, `Refs:`
+commit trailers, and linked pull requests.
 
 Changes to Protocol messages, Daemon request processing, TouchDesigner execution, persistence, or
 release behavior require an approved specification before implementation. Resolve design branches
@@ -62,7 +62,7 @@ ordered `doc-section` markers. Translate meaning and terminology; do not mechani
 headings, line counts, or prose.
 
 Mandatory agent execution policy belongs in `AGENTS.md`. Human contribution policy belongs here.
-Domain vocabulary belongs in `CONTEXT.md`; durable architecture decisions belong in `docs/adr/` only
+Domain vocabulary belongs in `GLOSSARY.md`; durable architecture decisions belong in `docs/adr/` only
 when a real decision needs a lasting rationale. Acceptance evidence belongs under `docs/` and must
 record the exact build, artifact, commands, observations, and limitations.
 
