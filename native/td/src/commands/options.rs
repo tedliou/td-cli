@@ -78,3 +78,23 @@ pub fn require(condition: bool) -> Result<()> {
 pub fn input_default(name: &str) -> Value {
     catalog()["input_defaults"][name].clone()
 }
+
+/// A decoded JSON-string option, or `None` when the option is absent.
+pub type Parsed = Result<Option<Value>>;
+
+/// Python `json.loads` of a JSON-string option, rejected unless `accept` holds for it.
+pub fn json_option(options: &Options, name: &str, accept: fn(&Value) -> bool) -> Parsed {
+    let Some(text) = options.0.get(name).and_then(Value::as_str) else {
+        return Ok(None);
+    };
+    let value: Value = serde_json::from_str(text).map_err(|_| invalid())?;
+    require(accept(&value))?;
+    Ok(Some(value))
+}
+
+/// A JSON list whose items all satisfy `accept`.
+pub fn list_of(value: &Value, accept: fn(&Value) -> bool) -> bool {
+    value
+        .as_array()
+        .is_some_and(|items| items.iter().all(accept))
+}

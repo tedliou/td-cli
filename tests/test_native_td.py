@@ -762,29 +762,157 @@ OPS = {
 FIXED = ["--request-id", REQUEST_ID]
 
 
-def ops_cases():
-    for name, (minimal, full, partial) in OPS.items():
-        command = ["ops", *name.split()]
+# The other submitting commands: (minimal, full, partial, takes --input); None when absent.
+OTHERS = {
+    "dat text get": (["/d"], ["/d", "--max-bytes", "10", "--offset", "2"], ["--offset", "2"], True),
+    "dat text set": (["/d", "héllo\n"], ["/d", ""], ["/d"], True),
+    "dat table get": (
+        ["/d"],
+        ["/d", "--row-offset", "1", "--column-count", "2", "--max-bytes", "9"],
+        ["--row-count", "3"],
+        True,
+    ),
+    "dat table replace": (["/d", '[["a","é"],[1]]'], ["/d", " [] "], ["/d"], True),
+    "dat table patch": (
+        ["/d", '[["x"]]'],
+        ["/d", '[["x"]]', "--row-offset", "2", "--column-offset", "1"],
+        ["--row-offset", "1"],
+        True,
+    ),
+    "chop values get": (
+        ["/c"],
+        ["/c", "--channels", "tx,,ty", "--sample-offset", "0", "--sample-count", "5"],
+        ["--channels", "tx"],
+        True,
+    ),
+    "parameters get": (["/o", "tx"], ["/o", "tx"], ["/o"], True),
+    "parameters list": (
+        ["/o"],
+        ["/o", "--names", "a,b", "--include-values", "--non-default-only", "--no-menu-options"],
+        ["--include-values"],
+        True,
+    ),
+    "parameters pulse": (["/o", "p"], ["/o", "p"], ["/o"], True),
+    "parameters set": (
+        ["/o", "p", "--integer", "3"],
+        ["/o", "p", "--export-source-operator", "/c", "--export-channel", "tx"],
+        ["/o", "p", "--integer", "1", "--number", "2"],
+        True,
+    ),
+    "parameters page-create": (None, None, None, True),
+    "parameters menu-set": (
+        ["/o", "Menu", "--names-json", '["a"]', "--labels-json", '["A"]', "--preserve", "index"],
+        ["/o", "Menu", "--names-json", "[]", "--labels-json", "[]", "--preserve", "name"],
+        ["/o", "Menu", "--names-json", '["a"]'],
+        True,
+    ),
+    "parameters sequence-get": (
+        ["/o", "seq"],
+        ["/o", "seq", "--max-blocks", "3", "--max-parameters", "4"],
+        ["/o"],
+        True,
+    ),
+    "parameters sequence-replace": (
+        ["/o", "seq", "--blocks-json", '[{"a":1}]'],
+        ["/o", "seq", "--blocks-json", "[]"],
+        ["--blocks-json", "[{}]"],
+        True,
+    ),
+    "project metadata": ([], [], None, False),
+    "project snapshot": (
+        ["/"],
+        ["/", "--max-depth", "2", "--paginate", "--cursor", "c", "--include-connections"],
+        ["--paginate"],
+        True,
+    ),
+    "project save": (["C:/p.toe"], ["C:/p.toe", "--expected-sha256", "ab"], None, True),
+    "binary export": (
+        ["/t", "--format", "png"],
+        ["/t", "--format", "png", "--max-bytes", "5"],
+        ["/t"],
+        True,
+    ),
+    "batch execute": (None, None, None, True),
+    "events read": ([], ["--after", "3", "--limit", "7", "--no-include-errors"], None, False),
+}
+
+
+def submitting_cases(table):
+    for name, entry in table.items():
+        minimal, full, partial, takes_input = entry if len(entry) == 4 else (*entry, True)
+        command = ["ops", *name.split()] if table is OPS else name.split()
         inline = ["--input", '{"operator_path":"/p","n":1.0}']
         stdin = b'{"source_path": "/a", "target_path": "/b"}'
-        yield pytest.param([*command, *minimal, *FIXED], None, False, id=f"{name}-minimal")
-        yield pytest.param([*command, *full, "--no-wait", *FIXED], None, False, id=f"{name}-full")
-        yield pytest.param([*command, *inline, *FIXED], None, False, id=f"{name}-input")
-        yield pytest.param(
-            [*command, "--input-file", "-", *FIXED], stdin, False, id=f"{name}-stdin"
-        )
+        if minimal is not None:
+            yield pytest.param([*command, *minimal, *FIXED], None, False, id=f"{name}-minimal")
+            yield pytest.param(
+                [*command, *full, "--no-wait", *FIXED], None, False, id=f"{name}-full"
+            )
+        if takes_input:
+            yield pytest.param([*command, *inline, *FIXED], None, False, id=f"{name}-input")
+            yield pytest.param(
+                [*command, "--input-file", "-", *FIXED], stdin, False, id=f"{name}-stdin"
+            )
         if partial is not None:
             yield pytest.param([*command, *partial, *FIXED], None, True, id=f"{name}-partial")
 
 
+def ops_cases():
+    yield from submitting_cases(OPS)
+
+
 @pytest.mark.parametrize(("argv", "stdin", "rejected"), ops_cases())
 def test_ops_commands(argv, stdin, rejected, home):
+    check_submission(argv, stdin, rejected, home)
+
+
+@pytest.mark.parametrize(("argv", "stdin", "rejected"), list(submitting_cases(OTHERS)))
+def test_other_submitting_commands(argv, stdin, rejected, home):
+    check_submission(argv, stdin, rejected, home)
+
+
+def check_submission(argv, stdin, rejected, home):
     native = same(["--json", *argv], submission(), home, stdin=stdin)
     if rejected:
         assert (native.exit_code, native.requests) == (2, [])
     else:
         assert native.exit_code == 0, native.stderr
         assert [method for method, _, _ in native.requests][:2] == ["GET", "POST"]
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["parameters", "set", "/o", "p", "--operators-json", "[1]"],
+        ["parameters", "set", "/o", "p", "--operators-json", "["],
+        ["parameters", "set", "/o", "p", "--bool", "maybe"],
+        ["parameters", "set", "/o", "p", "--export-channel", "tx"],
+        ["parameters", "set", "/o", "--integer", "1"],
+        ["parameters", "menu-set", "/o", "M", "--names-json", '"a"', "--labels-json", "[]"],
+        ["parameters", "sequence-replace", "/o", "s", "--blocks-json", "[1]"],
+        ["dat", "table", "replace", "/d", '{"a":1}'],
+        ["dat", "table", "patch", "/d", "nope"],
+    ],
+)
+def test_malformed_json_and_value_options_fail_before_sending(argv, home):
+    native = same(["--json", *argv, *FIXED], submission(), home)
+    assert (native.exit_code, native.requests) == (2, [])
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["parameters", "set", "/o", "p", "--bool", "false"],
+        ["parameters", "set", "/o", "p", "--number", "1e-7"],
+        ["parameters", "set", "/o", "p", "--operators-json", ' ["/a", "/b"] '],
+        ["parameters", "set", "/o", "p", "--expression", "me.time.frame"],
+        ["parameters", "set", "/o", "p", "--bind-source-operator", "/b", "--bind-parameter", "x"],
+        ["events", "read", "--include-errors"],
+    ],
+)
+def test_value_modes_and_paired_flags(argv, home):
+    native = same(["--json", *argv, *FIXED], submission(), home)
+    assert native.exit_code == 0, native.stderr
 
 
 def test_dedicated_options_and_input_are_exclusive(home):

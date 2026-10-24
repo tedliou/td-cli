@@ -5,8 +5,11 @@ use std::io::Read;
 
 use serde_json::{Map, Value, json};
 
+mod dat;
 mod ops;
 mod options;
+mod parameters;
+mod project;
 
 use options::{Builder, Options};
 
@@ -74,7 +77,9 @@ pub fn run(invocation: Invocation) -> i32 {
 fn submission(group: &str, rest: &[&str]) -> Option<(&'static str, Builder)> {
     match group {
         "ops" => ops::command(rest),
-        _ => None,
+        "parameters" => parameters::command(rest),
+        "dat" | "chop" => dat::command(group, rest),
+        _ => project::command(group, rest),
     }
 }
 
