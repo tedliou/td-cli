@@ -14,6 +14,7 @@ from td_cli.release import package_release
 NATIVE_TD = Path("native/td")
 # Every build step finishes well within this; a hung toolchain must not hang the release.
 BUILD_TIMEOUT_SECONDS = 1800
+VERSION_SMOKE_TIMEOUT_SECONDS = 60
 
 
 def build_native_td(binaries: Path, source_epoch: int) -> None:
@@ -75,7 +76,7 @@ def main() -> None:
                     [str((binaries / executable).resolve()), "--version"],
                     check=True,
                     cwd=clean,
-                    timeout=60,
+                    timeout=VERSION_SMOKE_TIMEOUT_SECONDS,
                 )
     artifacts = package_release(
         binaries,

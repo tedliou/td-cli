@@ -3,8 +3,7 @@
 
 use serde_json::{Map, Value, json};
 
-use super::options::{Builder, Dedicated, Options, input_default, invalid, require};
-use crate::client::Result;
+use super::options::{Builder, Dedicated, Options, input_default, invalid, refined, require};
 
 /// The Command and input builder for an `ops` command path.
 pub fn command(path: &[&str]) -> Option<(&'static str, Builder)> {
@@ -41,13 +40,6 @@ fn operator_only(options: &Options) -> Dedicated {
     Ok(options
         .given("operator_path")
         .then(|| json!({"operator_path": options.value("operator_path")})))
-}
-
-/// The operator path plus refinements that are only valid with it.
-fn refined(options: &Options, refinements: &[&str]) -> Result<bool> {
-    let has_path = options.given("operator_path");
-    require(has_path || !options.any_given(refinements))?;
-    Ok(has_path)
 }
 
 fn inspect(options: &Options) -> Dedicated {

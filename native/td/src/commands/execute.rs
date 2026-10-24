@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
+use super::options::invalid;
 use super::{Context, fail_unless_succeeded, text};
 use crate::args::Values;
 use crate::client::{ClientError, DaemonClient, Result, Target};
@@ -29,7 +30,6 @@ pub fn commands_execute(context: &Context, values: &Values) -> Result<()> {
 
 /// Read a bounded plan file and have the Daemon validate all of it before anything runs.
 fn read_plan(path: &str, client: &mut DaemonClient) -> Result<Vec<Value>> {
-    let invalid = || ClientError::new("invalid_arguments");
     let mut document = Vec::new();
     std::fs::File::open(path)
         .and_then(|file| file.take(MAX_PLAN_BYTES + 1).read_to_end(&mut document))

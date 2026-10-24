@@ -19,6 +19,7 @@ import time
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
 
@@ -690,11 +691,20 @@ def test_a_start_that_never_finishes_is_stopped(native_beside_fake_daemon, tmp_p
 
 
 # ops commands: the minimal dedicated arguments, every refinement, and a partial group.
+class Case(NamedTuple):
+    """A submitting command's argv after its name: ``None`` leaves that case out."""
+
+    minimal: list[str] | None
+    full: list[str] | None
+    partial: list[str] | None
+    takes_input: bool = True
+
+
 OPS = {
-    "get": (["/p"], ["/p"], None),
-    "inspect": (["/p"], ["/p", "--max-items", "7"], ["--max-items", "7"]),
-    "state get": (["/p"], ["/p"], None),
-    "state set": (
+    "get": Case(["/p"], ["/p"], None),
+    "inspect": Case(["/p"], ["/p", "--max-items", "7"], ["--max-items", "7"]),
+    "state get": Case(["/p"], ["/p"], None),
+    "state set": Case(
         ["/p"],
         [
             "/p",
@@ -711,23 +721,27 @@ OPS = {
         ],
         ["--lock"],
     ),
-    "children": (["/p"], ["/p", "--op-type", "baseCOMP"], ["--op-type", "baseCOMP"]),
-    "connections": (["/p"], ["/p", "--max-connections", "3"], ["--max-connections", "3"]),
-    "hierarchy connections": (["/p"], ["/p", "--max-connections", "0"], ["--max-connections", "1"]),
-    "hierarchy connect": (["/a", "/b"], ["/a", "/b", "--output-index", "1", "--replace"], ["/a"]),
-    "hierarchy disconnect": (
+    "children": Case(["/p"], ["/p", "--op-type", "baseCOMP"], ["--op-type", "baseCOMP"]),
+    "connections": Case(["/p"], ["/p", "--max-connections", "3"], ["--max-connections", "3"]),
+    "hierarchy connections": Case(
+        ["/p"], ["/p", "--max-connections", "0"], ["--max-connections", "1"]
+    ),
+    "hierarchy connect": Case(
+        ["/a", "/b"], ["/a", "/b", "--output-index", "1", "--replace"], ["/a"]
+    ),
+    "hierarchy disconnect": Case(
         ["/a", "/b"],
         ["/a", "/b", "--input-index", "2"],
         ["--input-index", "2"],
     ),
-    "create": (
+    "create": Case(
         ["/p", "baseCOMP", "n"],
         ["/p", "baseCOMP", "n", "--node-x", "5", "--allow-conditional"],
         ["/p", "baseCOMP"],
     ),
-    "connect": (["/a", "/b"], ["/a", "/b", "--input-index", "0", "--replace"], ["--replace"]),
-    "rename": (["/a", "b"], ["/a", "b"], ["/a"]),
-    "destroy": (
+    "connect": Case(["/a", "/b"], ["/a", "/b", "--input-index", "0", "--replace"], ["--replace"]),
+    "rename": Case(["/a", "b"], ["/a", "b"], ["/a"]),
+    "destroy": Case(
         ["/a"],
         [
             "/a",
@@ -740,17 +754,17 @@ OPS = {
         ],
         ["--recursive"],
     ),
-    "copy": (
+    "copy": Case(
         ["/a", "/b", "c"],
         ["/a", "/b", "c", "--include-docked", "--node-y", "3"],
         ["/a", "/b"],
     ),
-    "move": (
+    "move": Case(
         ["/a", "/b", "c"],
         ["/a", "/b", "c", "--allow-connected", "--max-operators", "0", "--inventory", "x"],
         ["--node-x", "1"],
     ),
-    "tox import": (
+    "tox import": Case(
         ["/p", "C:/x.tox", "C:/", "t"],
         [
             "/p",
@@ -770,90 +784,91 @@ OPS = {
         ],
         ["/p", "C:/x.tox"],
     ),
-    "disconnect": (["/a", "/b"], ["/a", "/b", "--output-index", "3"], ["/a"]),
+    "disconnect": Case(["/a", "/b"], ["/a", "/b", "--output-index", "3"], ["/a"]),
 }
 FIXED = ["--request-id", REQUEST_ID]
 
 
 # The other submitting commands: (minimal, full, partial, takes --input); None when absent.
 OTHERS = {
-    "dat text get": (["/d"], ["/d", "--max-bytes", "10", "--offset", "2"], ["--offset", "2"], True),
-    "dat text set": (["/d", "héllo\n"], ["/d", ""], ["/d"], True),
-    "dat table get": (
+    "dat text get": Case(
+        ["/d"], ["/d", "--max-bytes", "10", "--offset", "2"], ["--offset", "2"], True
+    ),
+    "dat text set": Case(["/d", "héllo\n"], ["/d", ""], ["/d"], True),
+    "dat table get": Case(
         ["/d"],
         ["/d", "--row-offset", "1", "--column-count", "2", "--max-bytes", "9"],
         ["--row-count", "3"],
         True,
     ),
-    "dat table replace": (["/d", '[["a","é"],[1]]'], ["/d", " [] "], ["/d"], True),
-    "dat table patch": (
+    "dat table replace": Case(["/d", '[["a","é"],[1]]'], ["/d", " [] "], ["/d"], True),
+    "dat table patch": Case(
         ["/d", '[["x"]]'],
         ["/d", '[["x"]]', "--row-offset", "2", "--column-offset", "1"],
         ["--row-offset", "1"],
         True,
     ),
-    "chop values get": (
+    "chop values get": Case(
         ["/c"],
         ["/c", "--channels", "tx,,ty", "--sample-offset", "0", "--sample-count", "5"],
         ["--channels", "tx"],
         True,
     ),
-    "parameters get": (["/o", "tx"], ["/o", "tx"], ["/o"], True),
-    "parameters list": (
+    "parameters get": Case(["/o", "tx"], ["/o", "tx"], ["/o"], True),
+    "parameters list": Case(
         ["/o"],
         ["/o", "--names", "a,b", "--include-values", "--non-default-only", "--no-menu-options"],
         ["--include-values"],
         True,
     ),
-    "parameters pulse": (["/o", "p"], ["/o", "p"], ["/o"], True),
-    "parameters set": (
+    "parameters pulse": Case(["/o", "p"], ["/o", "p"], ["/o"], True),
+    "parameters set": Case(
         ["/o", "p", "--integer", "3"],
         ["/o", "p", "--export-source-operator", "/c", "--export-channel", "tx"],
         ["/o", "p", "--integer", "1", "--number", "2"],
         True,
     ),
-    "parameters page-create": (None, None, None, True),
-    "parameters menu-set": (
+    "parameters page-create": Case(None, None, None, True),
+    "parameters menu-set": Case(
         ["/o", "Menu", "--names-json", '["a"]', "--labels-json", '["A"]', "--preserve", "index"],
         ["/o", "Menu", "--names-json", "[]", "--labels-json", "[]", "--preserve", "name"],
         ["/o", "Menu", "--names-json", '["a"]'],
         True,
     ),
-    "parameters sequence-get": (
+    "parameters sequence-get": Case(
         ["/o", "seq"],
         ["/o", "seq", "--max-blocks", "3", "--max-parameters", "4"],
         ["/o"],
         True,
     ),
-    "parameters sequence-replace": (
+    "parameters sequence-replace": Case(
         ["/o", "seq", "--blocks-json", '[{"a":1}]'],
         ["/o", "seq", "--blocks-json", "[]"],
         ["--blocks-json", "[{}]"],
         True,
     ),
-    "project metadata": ([], [], None, False),
-    "project snapshot": (
+    "project metadata": Case([], [], None, False),
+    "project snapshot": Case(
         ["/"],
         ["/", "--max-depth", "2", "--paginate", "--cursor", "c", "--include-connections"],
         ["--paginate"],
         True,
     ),
-    "project save": (["C:/p.toe"], ["C:/p.toe", "--expected-sha256", "ab"], None, True),
-    "binary export": (
+    "project save": Case(["C:/p.toe"], ["C:/p.toe", "--expected-sha256", "ab"], None, True),
+    "binary export": Case(
         ["/t", "--format", "png"],
         ["/t", "--format", "png", "--max-bytes", "5"],
         ["/t"],
         True,
     ),
-    "batch execute": (None, None, None, True),
-    "events read": ([], ["--after", "3", "--limit", "7", "--no-include-errors"], None, False),
+    "batch execute": Case(None, None, None, True),
+    "events read": Case([], ["--after", "3", "--limit", "7", "--no-include-errors"], None, False),
 }
 
 
-def submitting_cases(table):
-    for name, entry in table.items():
-        minimal, full, partial, takes_input = entry if len(entry) == 4 else (*entry, True)
-        command = ["ops", *name.split()] if table is OPS else name.split()
+def submitting_cases(table: dict[str, Case], prefix: tuple[str, ...] = ()):
+    for name, (minimal, full, partial, takes_input) in table.items():
+        command = [*prefix, *name.split()]
         inline = ["--input", '{"operator_path":"/p","n":1.0}']
         stdin = b'{"source_path": "/a", "target_path": "/b"}'
         if minimal is not None:
@@ -871,7 +886,7 @@ def submitting_cases(table):
 
 
 def ops_cases():
-    yield from submitting_cases(OPS)
+    yield from submitting_cases(OPS, ("ops",))
 
 
 @pytest.mark.parametrize(("argv", "stdin", "rejected"), ops_cases())
@@ -905,6 +920,11 @@ def check_submission(argv, stdin, rejected, home):
         ["parameters", "sequence-replace", "/o", "s", "--blocks-json", "[1]"],
         ["dat", "table", "replace", "/d", '{"a":1}'],
         ["dat", "table", "patch", "/d", "nope"],
+        ["dat", "table", "patch", "--row-offset", "1"],
+        ["parameters", "set", "/o", "p", "--bind-source-operator", "/b"],
+        ["parameters", "menu-set", "/o", "M", "--names-json", "[]", "--labels-json", '{"a":1}'],
+        ["parameters", "menu-set", "/o", "M", "--names-json", '["a"]', "--labels-json", '["A"]'],
+        ["parameters", "menu-set", "--names-json", "["],
     ],
 )
 def test_malformed_json_and_value_options_fail_before_sending(argv, home):
@@ -921,11 +941,27 @@ def test_malformed_json_and_value_options_fail_before_sending(argv, home):
         ["parameters", "set", "/o", "p", "--expression", "me.time.frame"],
         ["parameters", "set", "/o", "p", "--bind-source-operator", "/b", "--bind-parameter", "x"],
         ["events", "read", "--include-errors"],
+        ["parameters", "set", "/o", "p", "--bool", "true"],
+        ["parameters", "set", "/o", "p", "--string", ""],
+        ["parameters", "set", "/o", "p", "--operator", "/x"],
+        ["project", "snapshot", "/", "--max-operators", "5"],
     ],
 )
 def test_value_modes_and_paired_flags(argv, home):
     native = same(["--json", *argv, *FIXED], submission(), home)
     assert native.exit_code == 0, native.stderr
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["project", "save", "--expected-sha256", "AB"],
+        ["binary", "export", "--max-bytes", "5"],
+        ["binary", "export", "/t", "--max-bytes", "5"],
+    ],
+)
+def test_lone_refinements_match(argv, home):
+    same(["--json", *argv, *FIXED], submission(), home)
 
 
 def test_dedicated_options_and_input_are_exclusive(home):
@@ -986,15 +1022,28 @@ def test_project_open_rejects_before_launching(toe, exe, extra, project, home):
     assert native.exit_code == 2
 
 
-def test_project_open_launches_detached(project, home):
+@pytest.mark.parametrize("folder", ["my project", "專案 資料夾"])
+def test_project_open_launches_detached(folder, tmp_path, home):
+    project = tmp_path / folder
+    project.mkdir()
+    (project / "scene.TOE").write_bytes(b"")
+    shutil.copy(FAKE_TD_DAEMON, project / "TouchDesigner.exe")
     argv = ["--json", "project", "open", str(project / "scene.TOE")]
-    argv += ["--executable", str(project / "touchdesigner.exe")]
+    argv += ["--executable", str(project / "TouchDesigner.exe")]
     results = [run(kind, argv, daemon(), home) for kind in ("python", "native")]
     data = [json.loads(result.stdout)["data"] for result in results]
     assert [result.exit_code for result in results] == [0, 0]
     assert data[0]["pid"] > 0 and data[1]["pid"] > 0
     assert {**data[1], "pid": 0} == {**data[0], "pid": 0}
     assert data[1]["path"] == str((project / "scene.TOE").resolve())
+
+
+def test_project_open_reports_a_rejected_launch(project, home):
+    (project / "touchdesigner.exe").write_bytes(b"not a program")
+    argv = ["--json", "project", "open", str(project / "scene.TOE")]
+    native = same([*argv, "--executable", str(project / "touchdesigner.exe")], daemon(), home)
+    assert native.exit_code == 5
+    assert json.loads(native.stdout)["error"]["code"] == "process_launch_failed"
 
 
 def test_project_open_reports_a_launch_that_outlives_the_timeout(project, home):

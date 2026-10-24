@@ -11,6 +11,8 @@ permissions:
 jobs:
   quality-and-tests:
     runs-on: windows-2022
+    # A hung toolchain or test must fail the run instead of holding a runner for hours.
+    timeout-minutes: 60
     steps:
       # actions/checkout v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -45,6 +47,7 @@ jobs:
 
   executable-build-smoke:
     runs-on: windows-2022
+    timeout-minutes: 60
     env:
       PYTHONHASHSEED: "0"
     steps:

@@ -74,7 +74,7 @@ pub fn launch_detached(command: &[&str], cwd: &Path, timeout: f64) -> Result<u32
             }
         }
     };
-    let (stdout, stderr) = (text(stdout), text(stderr));
+    let (stdout, stderr) = (decode_pipe(stdout), decode_pipe(stderr));
     if !status.success() {
         return Err(LaunchError(format!(
             "Windows process service rejected launch: {}",
@@ -91,7 +91,7 @@ pub fn launch_detached(command: &[&str], cwd: &Path, timeout: f64) -> Result<u32
         .and_then(python_int)
         .ok_or_else(unverifiable)?;
     let pid = match fields.get("ProcessId").ok_or_else(unverifiable)? {
-        value if is_falsy(value) => 0,
+        value if python::is_falsy(value) => 0,
         value => python_int(value).ok_or_else(unverifiable)?,
     };
     if code != 0 || pid <= 0 {
@@ -115,23 +115,12 @@ fn collect(mut pipe: impl Read + Send + 'static) -> mpsc::Receiver<Vec<u8>> {
 
 /// What the pipe held, decoded as `utf-8-sig` with replacement. A process that inherited the
 /// pipe could keep it open after PowerShell exits; its output is not worth waiting for.
-fn text(received: mpsc::Receiver<Vec<u8>>) -> String {
+fn decode_pipe(received: mpsc::Receiver<Vec<u8>>) -> String {
     let bytes = received
         .recv_timeout(Duration::from_secs(1))
         .unwrap_or_default();
     let text = String::from_utf8_lossy(&bytes);
     text.strip_prefix('\u{feff}').unwrap_or(&text).to_string()
-}
-
-fn is_falsy(value: &Value) -> bool {
-    match value {
-        Value::Null => true,
-        Value::Bool(flag) => !flag,
-        Value::Number(number) => number.as_f64() == Some(0.0),
-        Value::String(text) => text.is_empty(),
-        Value::Array(items) => items.is_empty(),
-        Value::Object(entries) => entries.is_empty(),
-    }
 }
 
 /// Python `int(value)` for the JSON values PowerShell can print.

@@ -74,6 +74,14 @@ pub fn require(condition: bool) -> Result<()> {
     if condition { Ok(()) } else { Err(invalid()) }
 }
 
+/// Whether the operator path is given; refinements that only make sense with it are rejected
+/// without it.
+pub fn refined(options: &Options, refinements: &[&str]) -> Result<bool> {
+    let has_path = options.given("operator_path");
+    require(has_path || !options.any_given(refinements))?;
+    Ok(has_path)
+}
+
 /// A default the Python commands take from the Command catalog.
 pub fn input_default(name: &str) -> Value {
     catalog()["input_defaults"][name].clone()

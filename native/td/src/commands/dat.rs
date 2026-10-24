@@ -2,7 +2,9 @@
 
 use serde_json::{Map, Value};
 
-use super::options::{Builder, Dedicated, Options, Parsed, input_default, json_option, require};
+use super::options::{
+    Builder, Dedicated, Options, Parsed, input_default, json_option, refined, require,
+};
 
 pub fn command(group: &str, path: &[&str]) -> Option<(&'static str, Builder)> {
     let entry: (&'static str, Builder) = match (group, path) {
@@ -22,9 +24,7 @@ fn with_path(options: &Options) -> Map<String, Value> {
 }
 
 fn text_get(options: &Options) -> Dedicated {
-    let has_path = options.given("operator_path");
-    require(has_path || !options.any_given(&["max_bytes", "offset"]))?;
-    if !has_path {
+    if !refined(options, &["max_bytes", "offset"])? {
         return Ok(None);
     }
     let mut input = with_path(options);
@@ -52,9 +52,7 @@ const TABLE_WINDOW: &[&str] = &[
 ];
 
 fn table_get(options: &Options) -> Dedicated {
-    let has_path = options.given("operator_path");
-    require(has_path || !options.any_given(TABLE_WINDOW))?;
-    if !has_path {
+    if !refined(options, TABLE_WINDOW)? {
         return Ok(None);
     }
     let mut input = with_path(options);
@@ -87,8 +85,8 @@ fn table_replace(options: &Options) -> Dedicated {
 
 fn table_patch(options: &Options) -> Dedicated {
     let paired = options.given("operator_path") == options.given("rows");
-    let refined = options.any_given(&["row_offset", "column_offset"]);
-    require(paired && (options.given("operator_path") || !refined))?;
+    let offset = options.any_given(&["row_offset", "column_offset"]);
+    require(paired && (options.given("operator_path") || !offset))?;
     let rows = rows(options)?;
     let Some(rows) = rows.filter(|_| options.given("operator_path")) else {
         return Ok(None);
@@ -101,9 +99,7 @@ fn table_patch(options: &Options) -> Dedicated {
 }
 
 fn values_get(options: &Options) -> Dedicated {
-    let has_path = options.given("operator_path");
-    require(has_path || !options.any_given(&["channels", "sample_offset", "sample_count"]))?;
-    if !has_path {
+    if !refined(options, &["channels", "sample_offset", "sample_count"])? {
         return Ok(None);
     }
     let mut input = with_path(options);

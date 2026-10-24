@@ -6,15 +6,12 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
 
+use super::options::invalid;
 use super::{Context, text};
 use crate::args::Values;
 use crate::catalog;
 use crate::client::{ClientError, Result, details};
 use crate::launch::launch_detached;
-
-fn invalid() -> ClientError {
-    ClientError::new("invalid_arguments")
-}
 
 /// List Command names, or one Command's input JSON Schema.
 pub fn commands_schema(context: &Context, values: &Values) -> Result<()> {

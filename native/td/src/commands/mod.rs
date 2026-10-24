@@ -7,7 +7,7 @@ use serde_json::{Map, Value, json};
 
 mod dat;
 mod execute;
-mod local;
+mod offline;
 mod ops;
 mod options;
 mod parameters;
@@ -67,10 +67,10 @@ fn handler(path: &[&str]) -> Option<Handler> {
         ["instances", "get"] => instances_get,
         ["requests", "get"] => requests_get,
         ["requests", "wait"] => requests_wait,
-        ["commands", "schema"] => local::commands_schema,
+        ["commands", "schema"] => offline::commands_schema,
         ["commands", "execute"] => execute::commands_execute,
-        ["ops", "types"] => local::ops_types,
-        ["project", "open"] => local::project_open,
+        ["ops", "types"] => offline::ops_types,
+        ["project", "open"] => offline::project_open,
         [group, rest @ ..] => {
             let (name, build) = submission(group, rest)?;
             return Some(Box::new(move |context, values| {

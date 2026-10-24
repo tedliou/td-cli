@@ -21,7 +21,7 @@ def test_release_build_refuses_unreviewed_native_runtime(monkeypatch: pytest.Mon
 
 # td is one native exe; the Python executables are PyInstaller onedir bundles, so no
 # invocation pays a onefile extraction.
-ONEDIR_RUNTIME_FILES = {
+RUNTIME_FILES_BY_BUNDLE = {
     "td": (),
     **{
         name: (f"{name}-runtime/base_library.zip", f"{name}-runtime/python311.dll")
@@ -31,7 +31,7 @@ ONEDIR_RUNTIME_FILES = {
 
 
 def _write_executables(root: Path) -> None:
-    for bundle, runtime in ONEDIR_RUNTIME_FILES.items():
+    for bundle, runtime in RUNTIME_FILES_BY_BUNDLE.items():
         for name in (f"{bundle}.exe", *runtime):
             path = root / bundle / name
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -85,10 +85,10 @@ def test_release_packaging_creates_the_four_root_layouts_and_sorted_checksums(
         "td-v0.11.0-windows-x86_64.zip",
     ]
     expected_entries = {
-        artifacts[0].name: ["td-agent.exe", *ONEDIR_RUNTIME_FILES["td-agent"]],
+        artifacts[0].name: ["td-agent.exe", *RUNTIME_FILES_BY_BUNDLE["td-agent"]],
         artifacts[1].name: ["manifest.json", "td-agent.tox", "verification.json"],
-        artifacts[2].name: ["td-daemon.exe", *ONEDIR_RUNTIME_FILES["td-daemon"]],
-        artifacts[3].name: ["td.exe", *ONEDIR_RUNTIME_FILES["td"]],
+        artifacts[2].name: ["td-daemon.exe", *RUNTIME_FILES_BY_BUNDLE["td-daemon"]],
+        artifacts[3].name: ["td.exe", *RUNTIME_FILES_BY_BUNDLE["td"]],
     }
     for archive in artifacts:
         with zipfile.ZipFile(archive) as opened:
