@@ -5,7 +5,7 @@
 
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpStream};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub enum Failure {
     /// Nothing was sent.
@@ -14,9 +14,46 @@ pub enum Failure {
     Exchange,
 }
 
+/// A socket whose every read and write only gets the time left in the current exchange.
+struct Socket {
+    stream: TcpStream,
+    end: Instant,
+}
+
+impl Socket {
+    fn remaining(&self) -> io::Result<Duration> {
+        let left = self.end.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "the exchange ran out of time",
+            ));
+        }
+        Ok(left)
+    }
+}
+
+impl Read for Socket {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        self.stream.set_read_timeout(Some(self.remaining()?))?;
+        self.stream.read(buffer)
+    }
+}
+
+impl Write for Socket {
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        self.stream.set_write_timeout(Some(self.remaining()?))?;
+        self.stream.write(buffer)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.stream.flush()
+    }
+}
+
 pub struct Connection {
     address: SocketAddr,
-    idle: Option<BufReader<TcpStream>>,
+    idle: Option<BufReader<Socket>>,
 }
 
 impl Connection {
@@ -35,52 +72,46 @@ impl Connection {
         body: Option<&[u8]>,
         timeout: Duration,
     ) -> Result<(u16, Vec<u8>), Failure> {
+        let end = Instant::now() + timeout;
         let mut stream = match self.reusable() {
             Some(stream) => stream,
-            None => BufReader::new(
-                TcpStream::connect_timeout(&self.address, timeout).map_err(|_| Failure::Connect)?,
-            ),
+            None => {
+                let stream = TcpStream::connect_timeout(&self.address, timeout)
+                    .map_err(|_| Failure::Connect)?;
+                stream.set_nodelay(true).map_err(|_| Failure::Connect)?;
+                BufReader::new(Socket { stream, end })
+            }
         };
-        let (status, content, keep_alive) = send(
-            &mut stream,
-            &self.address,
-            method,
-            path,
-            headers,
-            body,
-            timeout,
-        )
-        .map_err(|_| Failure::Exchange)?;
+        stream.get_mut().end = end;
+        let (status, content, keep_alive) =
+            send(&mut stream, &self.address, method, path, headers, body)
+                .map_err(|_| Failure::Exchange)?;
         if keep_alive {
             self.idle = Some(stream);
         }
         Ok((status, content))
     }
 
-    fn reusable(&mut self) -> Option<BufReader<TcpStream>> {
+    fn reusable(&mut self) -> Option<BufReader<Socket>> {
         let stream = self.idle.take()?;
         // An idle connection only becomes readable when the Daemon closed it.
-        stream.get_ref().set_nonblocking(true).ok()?;
+        let socket = &stream.get_ref().stream;
+        socket.set_nonblocking(true).ok()?;
         let mut probe = [0u8; 1];
-        let closed = !matches!(stream.get_ref().peek(&mut probe), Err(error) if error.kind() == io::ErrorKind::WouldBlock);
-        stream.get_ref().set_nonblocking(false).ok()?;
+        let closed = !matches!(socket.peek(&mut probe), Err(error) if error.kind() == io::ErrorKind::WouldBlock);
+        socket.set_nonblocking(false).ok()?;
         (!closed && stream.buffer().is_empty()).then_some(stream)
     }
 }
 
 fn send(
-    stream: &mut BufReader<TcpStream>,
+    stream: &mut BufReader<Socket>,
     address: &SocketAddr,
     method: &str,
     path: &str,
     headers: &[(&str, String)],
     body: Option<&[u8]>,
-    timeout: Duration,
 ) -> io::Result<(u16, Vec<u8>, bool)> {
-    let socket = stream.get_ref();
-    socket.set_read_timeout(Some(timeout))?;
-    socket.set_write_timeout(Some(timeout))?;
-    socket.set_nodelay(true)?;
     let mut request =
         format!("{method} {path} HTTP/1.1\r\nHost: {address}\r\nAccept-Encoding: identity\r\n");
     for (name, value) in headers {
@@ -148,7 +179,7 @@ fn send(
     Ok((status, content, keep_alive))
 }
 
-fn read_line(stream: &mut BufReader<TcpStream>) -> io::Result<String> {
+fn read_line(stream: &mut BufReader<Socket>) -> io::Result<String> {
     let mut line = Vec::new();
     if stream.read_until(b'\n', &mut line)? == 0 {
         return Err(io::Error::new(

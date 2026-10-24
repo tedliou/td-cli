@@ -136,13 +136,13 @@ fn requests_wait(context: &Context, values: &Values) -> Result<()> {
     context.reject_instance_on_query()?;
     let request_id = text(values, "request_id").expect("required argument");
     let snapshot = context.client().wait(request_id)?;
-    succeeded(&snapshot)?;
+    fail_unless_succeeded(&snapshot)?;
     context.printer.emit(snapshot, None);
     Ok(())
 }
 
 /// A settled Request that did not succeed fails the command with its own error code.
-fn succeeded(snapshot: &Value) -> Result<()> {
+fn fail_unless_succeeded(snapshot: &Value) -> Result<()> {
     if snapshot["status"] == "succeeded" {
         return Ok(());
     }
@@ -237,7 +237,7 @@ fn submit_command(
             .ok_or_else(|| ClientError::new("protocol_incompatible"))?
             .to_string();
         snapshot = client.wait(&admitted)?;
-        succeeded(&snapshot)?;
+        fail_unless_succeeded(&snapshot)?;
     }
     let data = if no_wait {
         snapshot.clone()

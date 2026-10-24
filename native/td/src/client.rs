@@ -5,6 +5,7 @@ use std::io::Read;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -13,6 +14,7 @@ use serde_json::{Map, Value};
 use crate::catalog;
 use crate::http::{Connection, Failure};
 use crate::json::compact;
+use crate::python;
 
 const DEFAULT_PORT: u16 = 9982;
 const HEALTH_PROBE_TIMEOUT: f64 = 0.5;
@@ -21,6 +23,8 @@ const MAX_REQUEST_WAIT_MS: i64 = 25_000;
 const WAIT_RESPONSE_MARGIN: f64 = 0.1;
 /// `td-daemon start` bounds itself by `--timeout`; this only covers its own Python startup.
 const START_PROCESS_MARGIN: f64 = 5.0;
+/// No single read or write waits longer than this, whatever the Command deadline.
+const MAX_SINGLE_WAIT: f64 = 60.0;
 /// Tests point the client at a fake Daemon; only a loopback address is accepted.
 const TEST_ENDPOINT_VARIABLE: &str = "TDCLI_TEST_ENDPOINT";
 
@@ -49,11 +53,13 @@ impl ClientError {
         Self::with(code, details([("reason", Value::String(reason.into()))]))
     }
 
-    /// Python's `details.setdefault(key, value)`.
-    pub fn set_default(&mut self, key: &str, value: Value) {
-        if !self.details.contains_key(key) {
-            self.details.insert(key.into(), value);
+    /// Name the Request the error belongs to, unless the error already names one.
+    fn for_request(mut self, request_id: &str) -> Self {
+        if !self.details.contains_key("request_id") {
+            self.details
+                .insert("request_id".into(), Value::String(request_id.into()));
         }
+        self
     }
 }
 
@@ -81,6 +87,12 @@ impl DaemonClient {
             deadline: None,
             connection: Connection::new(endpoint()),
         }
+    }
+
+    /// The Command deadline once autostart set it, otherwise a fresh one for this call.
+    fn deadline(&self) -> Instant {
+        self.deadline
+            .unwrap_or_else(|| Instant::now() + seconds(self.timeout))
     }
 
     fn headers(&self) -> Result<Vec<(&'static str, String)>> {
@@ -130,9 +142,7 @@ impl DaemonClient {
                 start_daemon(remaining)?;
             }
         }
-        let deadline = self
-            .deadline
-            .unwrap_or_else(|| Instant::now() + seconds(self.timeout));
+        let deadline = self.deadline();
         if Instant::now() >= deadline {
             return Err(ClientError::reason(
                 "daemon_unavailable",
@@ -160,7 +170,7 @@ impl DaemonClient {
                 path.to_string()
             };
             let headers = self.headers()?;
-            let timeout = seconds(remaining(deadline).max(0.001));
+            let timeout = seconds(remaining(deadline).clamp(0.001, MAX_SINGLE_WAIT));
             match self
                 .connection
                 .exchange(method, &target, &headers, body, timeout)
@@ -183,8 +193,7 @@ impl DaemonClient {
                 Some(Value::String(text)) if text == "Not Found" => {
                     "daemon_unavailable".to_string()
                 }
-                Some(Value::String(text)) => text.clone(),
-                Some(other) => compact(other),
+                Some(other) => python::str_of(other),
             };
             let details = match payload.get("details") {
                 Some(Value::Object(details)) => details.clone(),
@@ -248,10 +257,7 @@ impl DaemonClient {
         }
         let document = compact(&Value::Object(body));
         self.request("POST", "/v3/requests", Some(document.as_bytes()), false)
-            .map_err(|mut error| {
-                error.set_default("request_id", Value::String(request_id.into()));
-                error
-            })
+            .map_err(|error| error.for_request(request_id))
     }
 
     /// Read a Request; with `long_poll` the Daemon answers once it settles.
@@ -268,9 +274,7 @@ impl DaemonClient {
     }
 
     pub fn wait(&mut self, request_id: &str) -> Result<Value> {
-        let deadline = self
-            .deadline
-            .unwrap_or_else(|| Instant::now() + seconds(self.timeout));
+        let deadline = self.deadline();
         let mut snapshot = Value::Null;
         loop {
             if Instant::now() >= deadline {
@@ -280,10 +284,9 @@ impl DaemonClient {
                     details([("request_id", id), ("request", snapshot)]),
                 ));
             }
-            snapshot = self.get_request(request_id, true).map_err(|mut error| {
-                error.set_default("request_id", Value::String(request_id.into()));
-                error
-            })?;
+            snapshot = self
+                .get_request(request_id, true)
+                .map_err(|error| error.for_request(request_id))?;
             if snapshot["status"]
                 .as_str()
                 .is_some_and(catalog::is_terminal_status)
@@ -449,10 +452,11 @@ fn start_daemon(remaining: f64) -> Result<()> {
         .spawn()
         .map_err(|error| ClientError::reason("daemon_unavailable", error.to_string()))?;
     let mut stderr = child.stderr.take().expect("piped stderr");
-    let reader = thread::spawn(move || {
+    let (sender, received) = mpsc::channel();
+    thread::spawn(move || {
         let mut text = Vec::new();
         let _ = stderr.read_to_end(&mut text);
-        text
+        let _ = sender.send(text);
     });
     let limit = Instant::now() + seconds(remaining + START_PROCESS_MARGIN);
     let status = loop {
@@ -473,7 +477,10 @@ fn start_daemon(remaining: f64) -> Result<()> {
     if status.success() {
         return Ok(());
     }
-    let text = reader.join().unwrap_or_default();
+    // A process that inherited the pipe could keep it open; the reason is not worth waiting for.
+    let text = received
+        .recv_timeout(Duration::from_secs(1))
+        .unwrap_or_default();
     Err(ClientError::reason(
         "daemon_unavailable",
         String::from_utf8_lossy(&text).trim(),

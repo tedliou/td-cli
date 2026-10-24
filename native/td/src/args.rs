@@ -111,12 +111,12 @@ fn usage_tail(node: &Value) -> String {
 }
 
 /// Where a usage error was raised: its command path and node, for the usage lines.
-struct Place<'a> {
+struct CommandSite<'a> {
     path: &'a [String],
     node: &'a Value,
 }
 
-impl Place<'_> {
+impl CommandSite<'_> {
     fn fail(&self, message: impl Into<String>) -> UsageError {
         let line = command_line(self.path);
         UsageError {
@@ -130,7 +130,7 @@ impl Place<'_> {
 }
 
 /// click reports a malformed option value without the usage lines.
-fn bare(message: String) -> UsageError {
+fn error_without_usage(message: String) -> UsageError {
     UsageError {
         message,
         usage: None,
@@ -155,7 +155,7 @@ fn parse_tree(root: &Value, argv: &[String]) -> Result<Outcome, UsageError> {
     let mut globals = Values::new();
     loop {
         // A group reads its own options up to the first other token, its subcommand.
-        let place = Place { path: &path, node };
+        let place = CommandSite { path: &path, node };
         let mut raw = BTreeMap::new();
         let mut wants_help = false;
         while index < argv.len() && is_option(&argv[index]) {
@@ -212,7 +212,7 @@ fn parse_leaf(
     globals: Values,
     argv: &[String],
 ) -> Result<Outcome, UsageError> {
-    let place = Place { path: &path, node };
+    let place = CommandSite { path: &path, node };
     let mut raw = BTreeMap::new();
     let mut positional = Vec::new();
     let mut wants_help = false;
@@ -262,7 +262,7 @@ enum Raw {
 }
 
 fn take_option(
-    place: &Place,
+    place: &CommandSite,
     argv: &[String],
     index: &mut usize,
     raw: &mut BTreeMap<String, Raw>,
@@ -301,7 +301,9 @@ fn take_option(
     };
     if param.is_flag() {
         if inline.is_some() {
-            return Err(bare(format!("Option '{name}' does not take a value.")));
+            return Err(error_without_usage(format!(
+                "Option '{name}' does not take a value."
+            )));
         }
         raw.insert(param.name().to_string(), Raw::Flag(primary));
         return Ok(());
@@ -313,7 +315,7 @@ fn take_option(
         *index += 1;
     }
     if values.len() < nargs {
-        return Err(bare(if nargs == 1 {
+        return Err(error_without_usage(if nargs == 1 {
             format!("Option '{name}' requires an argument.")
         } else {
             format!("Option '{name}' requires {nargs} arguments.")
@@ -323,7 +325,7 @@ fn take_option(
     Ok(())
 }
 
-fn convert(place: &Place, mut raw: BTreeMap<String, Raw>) -> Result<Values, UsageError> {
+fn convert(place: &CommandSite, mut raw: BTreeMap<String, Raw>) -> Result<Values, UsageError> {
     let mut values = Values::new();
     for param in params(place.node) {
         let value = match raw.remove(param.name()) {
@@ -333,16 +335,15 @@ fn convert(place: &Place, mut raw: BTreeMap<String, Raw>) -> Result<Values, Usag
                 let converted = texts
                     .iter()
                     .zip(items)
-                    .map(|(text, kind)| typed(text, kind, &param));
+                    .map(|(text, kind)| convert_text(text, kind, &param));
                 Value::Array(
                     converted
                         .collect::<Result<_, _>>()
                         .map_err(|message| place.fail(message))?,
                 )
             }
-            Some(Raw::Text(texts)) => {
-                typed(&texts[0], param.kind(), &param).map_err(|message| place.fail(message))?
-            }
+            Some(Raw::Text(texts)) => convert_text(&texts[0], param.kind(), &param)
+                .map_err(|message| place.fail(message))?,
             None if param.is_required() => {
                 let what = if param.is_argument() {
                     "argument"
@@ -358,7 +359,7 @@ fn convert(place: &Place, mut raw: BTreeMap<String, Raw>) -> Result<Values, Usag
     Ok(values)
 }
 
-fn typed(text: &str, kind: &Value, param: &Param) -> Result<Value, String> {
+fn convert_text(text: &str, kind: &Value, param: &Param) -> Result<Value, String> {
     let ranged = kind.get("min").is_some() || kind.get("max").is_some();
     let invalid = |what: &str| {
         let what = if ranged {

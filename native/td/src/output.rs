@@ -54,33 +54,37 @@ impl Printer {
     pub fn fail(&self, error: ClientError) -> i32 {
         let code = catalog::exit_code(&error.code);
         if self.json {
-            let request = error
-                .details
-                .get("request")
-                .filter(|request| request.is_object())
-                .map(request_summary);
-            let mut body = Map::new();
-            body.insert("code".into(), Value::String(error.code.clone()));
-            body.insert("message".into(), Value::String(error.code.clone()));
-            body.insert("details".into(), Value::Object(error.details));
-            body.insert(
-                "retryable".into(),
-                Value::Bool(catalog::is_retryable(&error.code)),
+            echo(
+                Stream::Out,
+                &compact(&error_envelope(&error.code, error.details)),
             );
-            let mut envelope = Map::new();
-            envelope.insert(
-                "protocol_version".into(),
-                catalog::protocol_version().clone(),
-            );
-            envelope.insert("error".into(), Value::Object(body));
-            if let Some(request) = request {
-                envelope.insert("request".into(), request);
-            }
-            echo(Stream::Out, &compact(&Value::Object(envelope)));
         }
         echo(Stream::Err, &error.code);
         code
     }
+}
+
+/// The Protocol v3 error envelope; a Request snapshot in the details is summarised beside it.
+pub fn error_envelope(code: &str, details: Map<String, Value>) -> Value {
+    let request = details
+        .get("request")
+        .filter(|request| request.is_object())
+        .map(request_summary);
+    let mut body = Map::new();
+    body.insert("code".into(), Value::String(code.into()));
+    body.insert("message".into(), Value::String(code.into()));
+    body.insert("details".into(), Value::Object(details));
+    body.insert("retryable".into(), Value::Bool(catalog::is_retryable(code)));
+    let mut envelope = Map::new();
+    envelope.insert(
+        "protocol_version".into(),
+        catalog::protocol_version().clone(),
+    );
+    envelope.insert("error".into(), Value::Object(body));
+    if let Some(request) = request {
+        envelope.insert("request".into(), request);
+    }
+    Value::Object(envelope)
 }
 
 fn request_summary(snapshot: &Value) -> Value {

@@ -49,13 +49,8 @@ fn main() {
 /// carries a Protocol v3 error envelope and stderr only the message.
 fn usage(argv: &[String], error: UsageError) -> i32 {
     if argv.iter().any(|arg| arg == "--json") {
-        echo(
-            Stream::Out,
-            &format!(
-                r#"{{"protocol_version":{},"error":{{"code":"invalid_arguments","message":"invalid_arguments","details":{{}},"retryable":false}}}}"#,
-                catalog::protocol_version()
-            ),
-        );
+        let envelope = output::error_envelope("invalid_arguments", Default::default());
+        echo(Stream::Out, &json::compact(&envelope));
         echo(Stream::Err, &error.message);
     } else {
         let usage = error.usage.map(|usage| usage + "\n").unwrap_or_default();

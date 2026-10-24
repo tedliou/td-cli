@@ -1,5 +1,42 @@
-//! The two Python behaviours click's messages depend on: `repr(str)` and
+//! The Python behaviours the CLI's messages depend on: `repr`, `str` and
 //! `difflib.get_close_matches`.
+
+use serde_json::Value;
+
+use crate::json::number_text;
+
+/// Python `str(value)` for a value `json.loads` produced.
+pub fn str_of(value: &Value) -> String {
+    match value {
+        Value::String(text) => text.clone(),
+        other => repr_value(other),
+    }
+}
+
+fn repr_value(value: &Value) -> String {
+    match value {
+        Value::Null => "None".into(),
+        Value::Bool(true) => "True".into(),
+        Value::Bool(false) => "False".into(),
+        Value::Number(number) => match number_text(number).as_str() {
+            "Infinity" => "inf".into(),
+            "-Infinity" => "-inf".into(),
+            text => text.into(),
+        },
+        Value::String(text) => repr(text),
+        Value::Array(items) => {
+            let items: Vec<String> = items.iter().map(repr_value).collect();
+            format!("[{}]", items.join(", "))
+        }
+        Value::Object(entries) => {
+            let entries: Vec<String> = entries
+                .iter()
+                .map(|(key, item)| format!("{}: {}", repr(key), repr_value(item)))
+                .collect();
+            format!("{{{}}}", entries.join(", "))
+        }
+    }
+}
 
 /// Python `repr(text)`: single quotes unless the text has a single quote and no double quote,
 /// with backslash escapes for the quote, backslash and characters Python cannot print.
@@ -111,6 +148,17 @@ fn longest_match(a: &[char], b: &[char]) -> (usize, usize, usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn str_of_json_values_matches_python() {
+        let value: Value =
+            serde_json::from_str(r#"{"a":[1,"x",null,true,1.5,1e400],"it's":{}}"#).unwrap();
+        assert_eq!(
+            str_of(&value),
+            r#"{'a': [1, 'x', None, True, 1.5, inf], "it's": {}}"#
+        );
+        assert_eq!(str_of(&Value::String("plain".into())), "plain");
+    }
 
     #[test]
     fn repr_matches_python() {

@@ -59,7 +59,7 @@ fn write(out: &mut String, value: &Value, indent: Option<usize>, depth: usize) {
 }
 
 /// Python reads a number with a fraction or exponent as a float and an integer as an int.
-fn number_text(number: &Number) -> String {
+pub fn number_text(number: &Number) -> String {
     let raw = number.to_string();
     if raw.contains(['.', 'e', 'E']) {
         return python_float(raw.parse().expect("a JSON number parses as f64"));

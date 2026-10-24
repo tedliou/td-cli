@@ -11,6 +11,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -69,7 +70,7 @@ def snapshot(status="succeeded", **fields):
     }
 
 
-Route = dict[tuple[str, str], list[tuple[int, object]]]
+Route = dict[tuple[str, str], list[tuple]]
 
 
 @dataclass
@@ -81,11 +82,27 @@ class Received:
     port: int
 
 
+# A scripted response that closes the connection without answering.
+DROP = (0, None)
+# Append to a response to close the connection after it, without saying so in a header.
+CLOSE = "close"
+
+
+def free_port() -> int:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
 @dataclass
 class FakeDaemon:
-    """Answer each (method, path) with its scripted responses in turn; the last one repeats."""
+    """Answer each (method, path) with its scripted responses in turn; the last one repeats.
+
+    With ``start_after`` the port stays closed that long, so first connections are refused.
+    """
 
     routes: Route
+    start_after: float = 0.0
     received: list[Received] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -114,26 +131,44 @@ class FakeDaemon:
                 responses = daemon.routes.get((self.command, route)) or [
                     (404, {"detail": "Not Found"})
                 ]
-                status, payload = responses.pop(0) if len(responses) > 1 else responses[0]
+                status, payload, *after = responses.pop(0) if len(responses) > 1 else responses[0]
+                if (status, payload) == DROP:
+                    self.close_connection = True
+                    return
                 content = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
                 self.send_response(status)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(content)))
                 self.end_headers()
                 self.wfile.write(content)
+                if CLOSE in after:
+                    self.close_connection = True
 
             do_GET = answer
             do_POST = answer
 
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        self.server.daemon_threads = True
-        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.port = free_port() if self.start_after else 0
+        self.server: ThreadingHTTPServer | None = None
+        self.ready = threading.Event()
+
+        def serve() -> None:
+            time.sleep(self.start_after)
+            self.server = ThreadingHTTPServer(("127.0.0.1", self.port), Handler)
+            self.server.daemon_threads = True
+            self.port = self.server.server_address[1]
+            self.ready.set()
+            self.server.serve_forever()
+
+        threading.Thread(target=serve, daemon=True).start()
+        if not self.start_after:
+            self.ready.wait(5)
 
     @property
     def url(self) -> str:
-        return f"http://127.0.0.1:{self.server.server_address[1]}"
+        return f"http://127.0.0.1:{self.port}"
 
     def close(self) -> None:
+        assert self.ready.wait(5) and self.server is not None
         self.server.shutdown()
         self.server.server_close()
 
@@ -156,8 +191,9 @@ def run(
     stdin: bytes | None = None,
     exe: Path = NATIVE,
     env: dict[str, str] | None = None,
+    start_after: float = 0.0,
 ) -> Run:
-    daemon = FakeDaemon(routes)
+    daemon = FakeDaemon(routes, start_after)
     try:
         command = (
             [sys.executable, "-c", PYTHON_TD, daemon.url, *argv]
@@ -255,10 +291,28 @@ INSTANCES = {("GET", "/v3/instances"): [(200, [INSTANCE, {**INSTANCE, "status": 
         ),
         (["--json", "version"], {("GET", "/v3/health"): [(200, b"not json")]}),
         (["--json", "--instance", "x", "version"], daemon()),
+        (["--version"], daemon()),
+        (["--timeout", "0", "version"], daemon()),
+        (["--json", "--timeout", "abc", "version"], daemon()),
+        (["--timeout", "3601", "--json", "version"], daemon()),
     ],
 )
 def test_version(argv, routes, home):
     same(argv, routes, home)
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["instances", "list"],
+        ["instances", "get", "a"],
+        ["requests", "get", REQUEST_ID],
+        ["requests", "wait", REQUEST_ID],
+    ],
+)
+def test_queries_reject_an_instance_selector(argv, home):
+    native = same(["--json", "--instance", "x", *argv], daemon(), home)
+    assert (native.exit_code, native.requests) == (2, [])
 
 
 def test_version_without_a_token(tmp_path):
@@ -300,6 +354,19 @@ def test_version_without_a_token(tmp_path):
         (
             ["--json", "instances", "list"],
             {("GET", "/v3/instances"): [(422, {"detail": [{"loc": "x"}]})]},
+        ),
+        (["--json", "instances", "list"], {("GET", "/v3/instances"): [(401, {"detail": "nope"})]}),
+        (["--json", "instances", "list"], {("GET", "/v3/instances"): [(503, {"detail": None})]}),
+        (["--json", "instances", "list"], {("GET", "/v3/instances"): [(500, {"detail": 5})]}),
+        (
+            ["--json", "instances", "list"],
+            {("GET", "/v3/instances"): [(500, {"detail": {"a": [1, "x", None, True, 1.5]}})]},
+        ),
+        (["--json", "instances", "list"], {("GET", "/v3/instances"): [(418, {})]}),
+        (["--json", "instances", "list"], {("GET", "/v3/instances"): [(400, b"not json")]}),
+        (
+            ["--json", "instances", "list"],
+            {("GET", "/v3/instances"): [(409, {"detail": "instance_busy", "details": [1]})]},
         ),
     ],
 )
@@ -467,6 +534,71 @@ def test_one_keep_alive_connection_serves_a_command(home):
     )
     assert [method for method, _, _ in native.requests] == ["GET", "POST", "GET"]
     assert native.connections == 1
+
+
+def test_an_idle_connection_the_daemon_closed_is_replaced(home):
+    routes = {**submission(), ("GET", "/v3/health"): [(200, HEALTH, CLOSE)]}
+    native = same(["--json", "ops", "get", "/project1", "--request-id", REQUEST_ID], routes, home)
+    assert (native.exit_code, native.connections) == (0, 2)
+
+
+def test_a_dropped_get_is_not_retried(home):
+    routes = {**daemon(), ("GET", REQUEST): [DROP]}
+    native = same(["--json", "requests", "get", REQUEST_ID], routes, home)
+    assert native.exit_code == 3
+    assert [method for method, _, _ in native.requests] == ["GET", "GET"]
+
+
+def test_a_dropped_submission_is_sent_once(home):
+    routes = {**daemon(), ("POST", "/v3/requests"): [DROP]}
+    native = same(["--json", "ops", "get", "/project1", "--request-id", REQUEST_ID], routes, home)
+    assert native.exit_code == 3
+    assert json.loads(native.stdout)["error"]["details"] == {"request_id": REQUEST_ID}
+    assert [method for method, _, _ in native.requests] == ["GET", "POST"]
+
+
+def test_a_refused_daemon_reads_as_unavailable(home):
+    # Nothing listens on the port: every GET attempt is refused, then version reports no Daemon.
+    port = free_port()
+    environment = {**os.environ, "LOCALAPPDATA": str(home)}
+    outputs = []
+    for command in (
+        [sys.executable, "-c", PYTHON_TD, f"http://127.0.0.1:{port}", "--json", "version"],
+        [str(NATIVE), "--json", "version"],
+    ):
+        environment["TDCLI_TEST_ENDPOINT"] = f"http://127.0.0.1:{port}"
+        completed = subprocess.run(
+            command, capture_output=True, env=environment, timeout=60, check=False
+        )
+        outputs.append((completed.returncode, completed.stdout, completed.stderr))
+    assert outputs[0] == outputs[1]
+    assert json.loads(outputs[1][1])["data"]["daemon_release_version"] is None
+
+
+def test_a_refused_get_is_retried_with_backoff(home):
+    # The Python td starts too slowly to meet a port that opens 0.2 s later, so only the native
+    # timing is checked: attempts at 0, 0.1 and 0.4 s, the last one answered.
+    started = time.perf_counter()
+    native = run("native", ["--json", "version"], daemon(), home, start_after=0.2)
+    assert native.exit_code == 0, native.stderr
+    assert json.loads(native.stdout)["data"]["daemon_release_version"] == "0.11.0"
+    assert time.perf_counter() - started >= 0.4
+    assert len(native.requests) == 1
+
+
+def test_long_polls_ask_for_the_rest_of_the_command_deadline(home):
+    argv = ["--json", "--timeout", "10", "requests", "wait", REQUEST_ID]
+    routes = {
+        **daemon(),
+        ("GET", REQUEST): [(200, snapshot(status="running")), (200, snapshot(result={}))],
+    }
+    for kind in ("python", "native"):
+        result = run(kind, argv, routes, home)
+        assert result.exit_code == 0, result.stderr
+        polls = [path for method, path, _ in result.requests if path.startswith(REQUEST)]
+        waits = [int(path.split("wait_ms=")[1]) for path in polls]
+        assert len(waits) == 2 and all(8_500 < wait <= 9_900 for wait in waits), (kind, waits)
+        assert waits[1] < waits[0]
 
 
 # The Python td would start a real Daemon here, so the native start path is checked alone.
