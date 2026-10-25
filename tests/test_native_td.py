@@ -35,7 +35,7 @@ pytestmark = pytest.mark.skipif(not NATIVE.exists(), reason=f"native td not buil
 HEALTH = {
     "ready": True,
     "logging_healthy": True,
-    "release_version": "0.11.0",
+    "release_version": "1.0.0",
     "protocol_versions": [4],
     "schema_version": 2,
 }
@@ -645,7 +645,7 @@ def test_a_refused_get_is_retried_with_backoff(home):
     started = time.perf_counter()
     native = run(["--json", "version"], daemon(), home, start_after=0.2)
     assert native.exit_code == 0, native.stderr
-    assert json.loads(native.stdout)["data"]["daemon_release_version"] == "0.11.0"
+    assert json.loads(native.stdout)["data"]["daemon_release_version"] == "1.0.0"
     assert time.perf_counter() - started >= 0.4
     assert len(native.requests) == 1
 

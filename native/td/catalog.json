@@ -1,5 +1,5 @@
 {
- "release_version": "0.11.0",
+ "release_version": "1.0.0",
  "protocol_version": 4,
  "cli": {
   "help": "Control supported TouchDesigner Instances through the local Daemon.",

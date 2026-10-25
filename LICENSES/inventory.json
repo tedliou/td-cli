@@ -2445,7 +2445,7 @@
     "LICENSES/toolchain__rust-1.99.1-windows-gnu__COPYING3": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
     "LICENSES/toolchain__rust-1.99.1-windows-gnu__COPYING.RUNTIME": "28e85c5aa4af9b4f1dfe6b4817aa3eefb3eaaee7fd735045016f29ccf50276a1"
   },
-  "lock_sha256": "2a0ca6e01f76ebad1741fb478114e23f597c1935afdf3c42e1f88b91459c004e",
+  "lock_sha256": "f465f3fb3a63f39e71271de6d7e77cc66d352e757b17a23eff02668ec8fa3a44",
   "original_paths": {
     "LICENSES/pydantic-core__sbom.json": "LICENSES/pydantic-core/sbom.json",
     "LICENSES/python__aiohappyeyeballs__aiohappyeyeballs-2.7.1.dist-info__licenses__LICENSE": "LICENSES/python/aiohappyeyeballs/aiohappyeyeballs-2.7.1.dist-info/licenses/LICENSE",
@@ -2791,6 +2791,6 @@
     "unicode-ident": "1.0.27",
     "zmij": "1.0.23"
   },
-  "cargo_lock_sha256": "d2853e0432637da39306ff1a93512657f772cd1c6f4dbb41c472f6c1183c1f52",
+  "cargo_lock_sha256": "59b1f42a0f335835e5f36e2d80bad0690f8ae07199886c7e017e4f18bca6b06f",
   "rust_toolchain": "1.99.1"
 }
