@@ -241,6 +241,43 @@ async def test_v4_dispatch_and_outcome_are_ordered_durable_and_redacted(
 
 
 @pytest.mark.asyncio
+async def test_reconnect_without_a_record_dispatches_the_request_again(tmp_path: Path) -> None:
+    server, thread, port = await start_server(create_transport_app(tmp_path, token=TOKEN))
+    first = socketio.AsyncClient(reconnection=False)
+    dispatched: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
+    first.on("request_dispatch", lambda data: dispatched.set_result(data))
+    second = socketio.AsyncClient(reconnection=False)
+    redispatched: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
+    second.on("request_dispatch", lambda data: redispatched.set_result(data))
+    try:
+        await register(first, port)
+        async with ClientSession() as session:
+            response = await session.post(
+                f"http://127.0.0.1:{port}/v3/requests",
+                headers={"Authorization": f"Bearer {TOKEN}"},
+                json={
+                    "request_id": REQUEST_ID,
+                    "instance_id": INSTANCE_ID,
+                    "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
+                },
+            )
+            assert response.status == 201
+        dispatch = await asyncio.wait_for(dispatched, 2)
+        await first.disconnect()  # before the Agent recorded the dispatch
+
+        second_connection = await register(second, port)
+        again = await asyncio.wait_for(redispatched, 2)
+        assert again["request_id"] == REQUEST_ID
+        assert again["connection_id"] == second_connection["connection_id"]
+        assert again["execution_id"] != dispatch["execution_id"]
+    finally:
+        for client in (first, second):
+            if client.connected:
+                await client.disconnect()
+        stop_server(server, thread)
+
+
+@pytest.mark.asyncio
 async def test_reconnect_reconciles_matching_retained_outcome(tmp_path: Path) -> None:
     server, thread, port = await start_server(create_transport_app(tmp_path, token=TOKEN))
     first = socketio.AsyncClient(reconnection=False)

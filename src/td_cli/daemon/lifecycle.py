@@ -331,8 +331,8 @@ class RequestLifecycle:
             if stored is None or stored["instance_id"] != instance_id:
                 self._emit("record_release", instance_id, connection_id, request_id=request_id)
                 continue
-            pending = self._awaiting_sync.get(instance_id)
-            held = pending is not None and pending["request_id"] == request_id
+            held_dispatch = self._awaiting_sync.get(instance_id)
+            held = held_dispatch is not None and held_dispatch["request_id"] == request_id
             if held:
                 # The Agent has a record of the held dispatch, so it is never requeued.
                 self._awaiting_sync.pop(instance_id)
@@ -454,11 +454,11 @@ class RequestLifecycle:
 
     async def _requeue_unrecorded(self, instance_id: str) -> None:
         """Put a held dispatch back at the head of its lane: no record means it never executed."""
-        pending = self._awaiting_sync.pop(instance_id, None)
-        if pending is None:
+        held_dispatch = self._awaiting_sync.pop(instance_id, None)
+        if held_dispatch is None:
             return
         requeued = await self._store.compare_and_set(
-            str(pending["request_id"]),
+            str(held_dispatch["request_id"]),
             expected_statuses={"dispatched"},
             changes={"status": "queued", "execution_id": None, "dispatched_at": None},
         )
@@ -584,9 +584,9 @@ class RequestLifecycle:
             if current_time < offline.deadline:
                 continue
             self._offline.pop(instance_id, None)
-            pending = self._awaiting_sync.pop(instance_id, None)
-            if pending is not None:
-                await self._mark_unknown(pending)
+            held_dispatch = self._awaiting_sync.pop(instance_id, None)
+            if held_dispatch is not None:
+                await self._mark_unknown(held_dispatch)
             while self._lanes[instance_id]:
                 queued = self._lanes[instance_id].popleft()
                 await self._store.compare_and_set(

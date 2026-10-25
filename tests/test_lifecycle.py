@@ -250,6 +250,46 @@ async def test_held_dispatch_with_an_unmatched_record_becomes_unknown() -> None:
 
 
 @pytest.mark.asyncio
+async def test_registration_that_replaces_a_live_connection_holds_its_dispatch() -> None:
+    store = MemoryStore()
+    ids = iter(["execution-1", "execution-2"])
+    lifecycle = RequestLifecycle(store, execution_id=lambda: next(ids))
+    await lifecycle.start()
+    item = request(1)
+    try:
+        await lifecycle.register(INSTANCE_ID, CONNECTION_ID, {"ops.get"})
+        await effect(lifecycle, "registered")
+        await lifecycle.synchronized(INSTANCE_ID, CONNECTION_ID)
+        await lifecycle.submit(item)
+        await effect(lifecycle, "request_dispatch")
+
+        await reregister(lifecycle)  # the old connection never reported a disconnect
+        assert (await store.get(str(item["request_id"])))["status"] == "dispatched"
+        await lifecycle.synchronized(INSTANCE_ID, RECONNECTION_ID, [])
+        redispatched = await effect(lifecycle, "request_dispatch")
+        assert redispatched.request_id == item["request_id"]
+        assert redispatched.execution_id == "execution-2"
+    finally:
+        await lifecycle.close()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_makes_a_held_dispatch_unknown() -> None:
+    store = MemoryStore()
+    lifecycle = RequestLifecycle(store, execution_id=lambda: "execution-1")
+    await lifecycle.start()
+    item = request(1)
+    try:
+        await dispatch_then_disconnect(lifecycle, item)
+        await lifecycle.drain()
+        held = await store.get(str(item["request_id"]))
+        assert held is not None and held["status"] == "unknown"
+        assert held["error"]["code"] == "request_outcome_unknown"
+    finally:
+        await lifecycle.close()
+
+
+@pytest.mark.asyncio
 async def test_held_dispatch_becomes_unknown_when_offline_retention_expires() -> None:
     store = MemoryStore()
     clock = [0.0]
