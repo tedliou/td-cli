@@ -670,3 +670,34 @@ async def test_queued_feature_request_fails_when_the_agent_returns_without_the_f
         assert persisted.get("dispatched_at") is None
     finally:
         await lifecycle.close()
+
+
+def frame_batch_request() -> dict[str, Any]:
+    return RequestSnapshot.pending(
+        request_id="018f47ec-7f3b-7a34-8f31-2ad70b6f6e02",
+        instance_id=INSTANCE_ID,
+        command=Command(
+            name="plan.execute",
+            input={"commands": [{"name": "ops.get", "input": {"operator_path": "/project1"}}]},
+        ),
+        submitted_at="2026-09-01T00:00:01.000Z",
+    ).model_dump(mode="json")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("capabilities", [{"ops.get"}, {"plan.execute"}])
+async def test_a_frame_batch_needs_the_agent_to_advertise_it_and_each_nested_command(
+    capabilities: set[str],
+) -> None:
+    store = MemoryStore()
+    lifecycle = RequestLifecycle(store)
+    await lifecycle.start()
+    try:
+        await lifecycle.register(INSTANCE_ID, CONNECTION_ID, capabilities)
+        await effect(lifecycle, "registered")
+        with pytest.raises(AdmissionRejected) as rejected:
+            await lifecycle.submit(frame_batch_request())
+        assert rejected.value.code == "command_unsupported"
+        assert store.requests == {}
+    finally:
+        await lifecycle.close()

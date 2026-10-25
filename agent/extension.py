@@ -2921,6 +2921,8 @@ class AgentExt:
     MAX_ERROR_TEXT_BYTES = 16 * 1024
     # A Frame Batch stops between Commands after half a 60 fps frame (ADR 0005).
     FRAME_BATCH_BUDGET_SECONDS = 0.008
+    # Room kept in an outcome for the envelope around a Frame Batch report.
+    FRAME_BATCH_ENVELOPE_BYTES = 4 * 1024
 
     CAPABILITIES = tuple(OperatorControl.HANDLERS) + (
         "batch.execute",
@@ -3239,19 +3241,19 @@ class AgentExt:
             "result": result,
             "error": error_payload,
         }
-        size = len(json.dumps(outcome, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+        size = self._outcome_size(outcome)
         if size > self.MAX_OUTCOME_BYTES:
             status = "failed" if command["name"] in self.read_only_commands else "unknown"
             code = "result_too_large" if status == "failed" else "request_outcome_unknown"
             outcome.update(status=status, result=None, error=self._outcome_error(code))
-            size = len(json.dumps(outcome, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+            size = self._outcome_size(outcome)
         if self._state["outcome_bytes"] + size > self.MAX_TOTAL_OUTCOME_BYTES:
             outcome.update(
                 status="unknown",
                 result=None,
                 error=self._outcome_error("outcome_capacity_exceeded"),
             )
-            size = len(json.dumps(outcome, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+            size = self._outcome_size(outcome)
         record.update(phase="outcome", outcome=outcome, outcome_bytes=size)
         self._state["outcome_bytes"] += size
         self._record_event(
@@ -3388,13 +3390,18 @@ class AgentExt:
         raise AgentCommandError("command_unsupported")
 
     def _batch_item(self, command):
-        """Run one read of a batch; a failed read is reported in place, not raised."""
+        """Run one Command of a batch; its failure is reported in place, not raised."""
         try:
             return {"ok": True, "result": self.execute_command(command)}
         except AgentCommandError as error:
             return {"ok": False, "error": self._outcome_error(error.code, error.details)}
-        except Exception:  # noqa: BLE001 - a read has no side effect to classify as unknown
-            return {"ok": False, "error": self._outcome_error("internal_error")}
+        except Exception:  # noqa: BLE001 - a failed mutation may have changed the project
+            code = (
+                "internal_error"
+                if command["name"] in self.read_only_commands
+                else "request_outcome_unknown"
+            )
+            return {"ok": False, "error": self._outcome_error(code)}
 
     def _frame_batch(self, commands):
         """Run Commands in order until one fails or the frame budget is spent; never roll back."""
@@ -3407,7 +3414,7 @@ class AgentExt:
             if results and self.clock() - started > self.FRAME_BATCH_BUDGET_SECONDS:
                 stopped_reason = "frame_budget"
                 break
-            results.append(self._frame_batch_item(command))
+            results.append(self._batch_item(command))
             if not results[-1]["ok"]:
                 stopped_reason = "failed"
                 break
@@ -3416,26 +3423,13 @@ class AgentExt:
             "executed_count": len(results),
             "stopped_reason": stopped_reason,
         }
-        if self._outcome_size(report) > self.MAX_OUTCOME_BYTES:
+        if self._outcome_size(report) > self.MAX_OUTCOME_BYTES - self.FRAME_BATCH_ENVELOPE_BYTES:
             # The Commands already ran, so only their results are dropped, never their status.
             report["results"] = [
                 {key: value for key, value in item.items() if key != "result"} for item in results
             ]
             report["results_omitted"] = True
         return report
-
-    def _frame_batch_item(self, command):
-        try:
-            return {"ok": True, "result": self.execute_command(command)}
-        except AgentCommandError as error:
-            return {"ok": False, "error": self._outcome_error(error.code, error.details)}
-        except Exception:  # noqa: BLE001 - a failed mutation may have changed the project
-            code = (
-                "internal_error"
-                if command["name"] in self.read_only_commands
-                else "request_outcome_unknown"
-            )
-            return {"ok": False, "error": self._outcome_error(code)}
 
     @staticmethod
     def _outcome_size(value):

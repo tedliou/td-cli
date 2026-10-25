@@ -717,7 +717,11 @@ class PlanExecuteInput(StrictModel):
 
 
 def frame_batch_bytes(commands: list[dict[str, Any]]) -> int:
-    """Size of the Commands as the dispatch carries them: compact, ASCII-escaped JSON."""
+    """Size of the Commands as the dispatch carries them: compact, ASCII-escaped JSON.
+
+    Only the Command list counts, as in the proven `parameters.menu.set` case
+    (docs/menu-item-limit-acceptance.md), whose dispatch also carried its envelope on top.
+    """
     return len(json.dumps(commands, separators=(",", ":")))
 
 

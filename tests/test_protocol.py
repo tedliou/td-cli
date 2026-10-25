@@ -1257,3 +1257,36 @@ def test_frame_batch_size_is_the_ascii_escaped_dispatch_text() -> None:
 def test_command_plan_rejects_a_nested_frame_batch() -> None:
     with pytest.raises(ValidationError):
         CommandPlan.model_validate({"commands": [plan_execute(OPS_GET)]})
+
+
+def test_plan_execute_results_are_normalized_per_command_and_keep_the_stop_facts() -> None:
+    connect = {"name": "ops.connect", "input": {}}
+    result = COMMAND_CATALOG.normalize_result(
+        plan_execute(connect, connect),
+        {
+            "results": [{"ok": True, "result": {"connected": True}}, {"ok": False, "error": {}}],
+            "executed_count": 2,
+            "stopped_reason": "failed",
+        },
+    )
+
+    assert result == {
+        "results": [
+            {"ok": True, "result": {"connected": True, "previous_connection": None}},
+            {"ok": False, "error": {}},
+        ],
+        "executed_count": 2,
+        "stopped_reason": "failed",
+    }
+
+
+def test_plan_execute_needs_its_own_capability_and_every_nested_one() -> None:
+    set_display = {
+        "name": "parameters.set",
+        "input": {"operator_path": "/project1", "parameter": "display", "value": True},
+    }
+    assert COMMAND_CATALOG.required_capabilities(plan_execute(OPS_GET, set_display)) == {
+        "plan.execute",
+        "ops.get",
+        "parameters.set",
+    }
