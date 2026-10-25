@@ -4,6 +4,10 @@
 
 ## 用語
 
+- Request：td 送給 Daemon 的一次 Command 執行，以 Request ID 追蹤狀態。
+- Instance：一個連上 Daemon 的 TouchDesigner 專案，裡面的 Agent 負責執行 Command。
+- dispatch：Daemon 把一個 Request 送給 Agent，訊息名稱是 `request_dispatch`。
+- outcome：Agent 回報的執行結果，成功或失敗，以分塊訊息送回 Daemon。
 - frame：TouchDesigner 每秒更新 60 次，每次是一個 frame，間隔 16.67 ms。
 - timeline：TouchDesigner 的播放時間軸；暫停時畫面時間停住，但程式照樣更新。
 - SocketIO DAT：TouchDesigner 內建、Agent 用來連 Daemon 的 operator。callback 是它收到訊息時呼叫的函式。
@@ -31,7 +35,12 @@ uv run python -m tools.locked_frame_timing_acceptance --work <scratch>\ft-run --
 uv run python -m tools.locked_frame_timing_acceptance --work <scratch>\ft-pause --project .codex\frame-timing\probe.toe --source agent --pause --evidence docs\evidence\v100\frame-timing-v4-paused.json
 ```
 
-本分支是 commit `4534034` 加上本票的探針改動。使用者的 Daemon 與其他 TouchDesigner 程序全程沒有被碰到。
+量測的原始碼等於 commit `465e099`：產品程式碼與 `4534034` 相同，探針改動在 `465e099` 提交時沒有再改。兩輪各自建出 Agent artifact（Agent 版本字串 0.11.0，Protocol 4）：
+
+- timeline 執行中：`<scratch>\ft-run\td-agent.tox`，SHA-256 `d72d653edf50157a28b8635b6b094cb1312bf52fb50901f1fe0f274097df8001`
+- timeline 暫停：`<scratch>\ft-pause\td-agent.tox`，SHA-256 `50bc8a4945bb1cc0b45e7006a2a13a98a72828c159f4d88bc84e05047fb0cd8b`
+
+使用者的 Daemon 與其他 TouchDesigner 程序全程沒有被碰到。
 
 ## 結果
 
@@ -50,7 +59,7 @@ timeline 執行中，40 次，單位 ms，中位數／p95：
 
 - 整個 Request 從 33.3 ms 降到 16.7 ms，等於一個 frame。省下的就是第二段握手：Daemon 往返 5.7 ms 加上等下一個 frame 開頭的 11.0 ms。
 - 登記與執行在同一個 frame：40 次的 dispatch 與執行都落在同一個 frame（frame 差 0），callback 在 frame 開始後約 0.4 ms 執行。
-- 40 次中最慢一次是 35.8 ms：它的 `request_dispatch` 晚於該 frame 的 callback 時點，多等了一個 frame（15.6 ms）。p95 不受影響。
+- 40 次中最慢一次是 35.8 ms。這次 Daemon 從收到到送出 `request_dispatch` 花了 13.6 ms（中位數 6.4 ms），晚了約 7 ms，剛好錯過該 frame 的 callback 時點，於是多等一個 frame（15.6 ms）。Daemon 那 7 ms 的原因沒有追查；只出現一次，p50 與 p95 不受影響。
 - 其他分段與 P1 相差都在 0.5 ms 內，沒有變慢的分段。
 
 timeline 暫停，40 次：
@@ -73,6 +82,14 @@ Agent reload，兩輪結果相同：
 - `reload_outcome`：Agent 重新註冊時先送出保留的 outcome，Daemon 記錄成功，沒有重送 dispatch，Command 只執行一次。
 
 第一次暫停輪的 `reload_requeue` 等到 60 秒逾時：探針當時用 `run(delayFrames=1)` 排 reload，預設跟著 timeline，暫停時永遠不會跑。Agent 沒有斷線，Request 正確地停在 `dispatched`。探針改用 `TDResources` 後重跑兩輪，上面是重跑的結果。
+
+## 限制
+
+- 每輪只量 40 次 `ops.get`，Command 本身不到 0.1 ms。執行時間長的 Command 會多等它自己的執行時間，frame 等待不變。
+- 只在 60 fps、本機迴路位址量過。其他 frame rate 下，往返約為一個 frame 間隔加上約 10 ms 的 Daemon 與 client 時間。
+- 暫停輪沒有 frame 位置的欄位，因為探針收不到 frame 開始的時間。
+- Agent reload 由探針觸發，丟掉 dispatch 或擋下 outcome 都是模擬 reload 的時機，不是真的網路中斷。真的斷線由 `tests/test_socket_transport.py` 與 `tests/test_process_crash_integration.py` 涵蓋。
+- 兩個 reload 情況都是唯讀 Command。mutation 走同一條路徑：沒有紀錄就證明沒執行，所以同樣重新排隊。
 
 ## 結論
 
