@@ -12,13 +12,16 @@ from td_cli.licensing import license_files
 
 RELEASE_VERSION = version("touchdesigner-cli")
 LOCKED_TOUCHDESIGNER_VERSION = "2025.32050"
-PRE_1_RELEASE_VERSION = re.compile(
-    r"^0\.(?:[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9]\d*))?$"
+# Canonical SemVer from 0.1.0 on, with an optional alpha, beta, or rc pre-release; 0.0.x stays
+# unreleasable and build metadata is never accepted.
+RELEASE_VERSION_PATTERN = re.compile(
+    r"^(?:0\.[1-9]\d*|[1-9]\d*\.(?:0|[1-9]\d*))\.(?:0|[1-9]\d*)"
+    r"(?:-(?:alpha|beta|rc)\.(?:0|[1-9]\d*))?$"
 )
 
 
 def is_approved_release_version(value: str) -> bool:
-    return PRE_1_RELEASE_VERSION.fullmatch(value) is not None
+    return RELEASE_VERSION_PATTERN.fullmatch(value) is not None
 
 
 def _load_json(path: Path) -> dict[str, object]:
