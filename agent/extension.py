@@ -2919,10 +2919,13 @@ class AgentExt:
     OUTCOME_CHUNK_BYTES = 24 * 1024
     MAX_TOTAL_OUTCOME_BYTES = 16 * 1024 * 1024
     MAX_ERROR_TEXT_BYTES = 16 * 1024
+    # A Frame Batch stops between Commands after half a 60 fps frame (ADR 0005).
+    FRAME_BATCH_BUDGET_SECONDS = 0.008
 
     CAPABILITIES = tuple(OperatorControl.HANDLERS) + (
         "batch.execute",
         "batch.execute:item_results",
+        "plan.execute",
         "dat.text.get:offset",
         "parameters.list:options",
         "binary.export",
@@ -2955,6 +2958,9 @@ class AgentExt:
             self.protocol_versions = [int(version) for version in manifest["protocol_versions"]]
             self.read_only_commands = frozenset(
                 str(name) for name in manifest["read_only_commands"]
+            )
+            self.frame_batch_commands = frozenset(
+                str(name) for name in manifest["frame_batch_commands"]
             )
             operator_catalog = OperatorCatalog(json.loads(catalog_dat.text))
         except (KeyError, TypeError, ValueError) as error:
@@ -3024,6 +3030,7 @@ class AgentExt:
         self.last_heartbeat_at = 0.0
         self._heartbeat_generation = None
         self.runtime_active = False
+        self.clock = time.perf_counter
 
     def onInitTD(self):
         if getattr(builtins, "_td_cli_building_artifact", False):
@@ -3367,6 +3374,8 @@ class AgentExt:
                 "results": results,
                 "failed_count": sum(not item["ok"] for item in results),
             }
+        if name == "plan.execute":
+            return self._frame_batch(payload["commands"])
         if name in OperatorControl.HANDLERS:
             return self.operator_control.execute(command)
         operator = self.operator_lookup(payload["operator_path"])
@@ -3386,6 +3395,51 @@ class AgentExt:
             return {"ok": False, "error": self._outcome_error(error.code, error.details)}
         except Exception:  # noqa: BLE001 - a read has no side effect to classify as unknown
             return {"ok": False, "error": self._outcome_error("internal_error")}
+
+    def _frame_batch(self, commands):
+        """Run Commands in order until one fails or the frame budget is spent; never roll back."""
+        if any(item["name"] not in self.frame_batch_commands for item in commands):
+            raise AgentCommandError("command_unsupported")
+        started = self.clock()
+        results = []
+        stopped_reason = "completed"
+        for command in commands:
+            if results and self.clock() - started > self.FRAME_BATCH_BUDGET_SECONDS:
+                stopped_reason = "frame_budget"
+                break
+            results.append(self._frame_batch_item(command))
+            if not results[-1]["ok"]:
+                stopped_reason = "failed"
+                break
+        report = {
+            "results": results,
+            "executed_count": len(results),
+            "stopped_reason": stopped_reason,
+        }
+        if self._outcome_size(report) > self.MAX_OUTCOME_BYTES:
+            # The Commands already ran, so only their results are dropped, never their status.
+            report["results"] = [
+                {key: value for key, value in item.items() if key != "result"} for item in results
+            ]
+            report["results_omitted"] = True
+        return report
+
+    def _frame_batch_item(self, command):
+        try:
+            return {"ok": True, "result": self.execute_command(command)}
+        except AgentCommandError as error:
+            return {"ok": False, "error": self._outcome_error(error.code, error.details)}
+        except Exception:  # noqa: BLE001 - a failed mutation may have changed the project
+            code = (
+                "internal_error"
+                if command["name"] in self.read_only_commands
+                else "request_outcome_unknown"
+            )
+            return {"ok": False, "error": self._outcome_error(code)}
+
+    @staticmethod
+    def _outcome_size(value):
+        return len(json.dumps(value, separators=(",", ":"), sort_keys=True).encode("utf-8"))
 
     def _snapshot(self, root, payload):
         maximum = payload["max_operators"]

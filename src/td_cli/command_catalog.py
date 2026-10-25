@@ -688,6 +688,39 @@ class BatchExecuteInput(StrictModel):
     commands: list[BatchItem] = Field(min_length=1, max_length=BATCH_MAX_COMMANDS)
 
 
+# A Frame Batch runs in one dispatch callback (docs/adr/0005-frame-batch-instead-of-session.md).
+FRAME_BATCH_MAX_COMMANDS = 256
+# The locked SocketIO DAT is proven to deliver a dispatch of about 65 KB; larger is unmeasured.
+FRAME_BATCH_MAX_BYTES = 65_536
+
+
+class FrameBatchItem(StrictModel):
+    name: str
+    input: dict[str, Any]
+
+    @model_validator(mode="after")
+    def validate_input(self) -> FrameBatchItem:
+        self.input = COMMAND_CATALOG.validate_input(self.name, self.input, frame_batch=True)
+        return self
+
+
+class PlanExecuteInput(StrictModel):
+    commands: list[FrameBatchItem] = Field(min_length=1, max_length=FRAME_BATCH_MAX_COMMANDS)
+
+    @model_validator(mode="after")
+    def fits_one_dispatch(self) -> PlanExecuteInput:
+        if frame_batch_bytes([item.model_dump(mode="json") for item in self.commands]) > (
+            FRAME_BATCH_MAX_BYTES
+        ):
+            raise ValueError(f"commands must not exceed {FRAME_BATCH_MAX_BYTES} bytes")
+        return self
+
+
+def frame_batch_bytes(commands: list[dict[str, Any]]) -> int:
+    """Size of the Commands as the dispatch carries them: compact, ASCII-escaped JSON."""
+    return len(json.dumps(commands, separators=(",", ":")))
+
+
 def _identity_result(result: dict[str, Any]) -> dict[str, Any]:
     return result
 
@@ -871,7 +904,18 @@ class CommandDefinition:
 
     @property
     def batchable(self) -> bool:
-        return self.effect is CommandEffect.READ_ONLY and self.name != "batch.execute"
+        return self.effect is CommandEffect.READ_ONLY and self.name not in NESTING_COMMANDS
+
+    @property
+    def frame_batchable(self) -> bool:
+        return (
+            self.execution_class in {ExecutionClass.FAST_READ, ExecutionClass.BOUNDED_MUTATION}
+            and self.name not in NESTING_COMMANDS
+        )
+
+
+# Commands that carry other Commands; neither runs inside a batch.
+NESTING_COMMANDS = frozenset({"batch.execute", "plan.execute"})
 
 
 class CommandEffect(StrEnum):
@@ -921,7 +965,7 @@ class CommandCatalog:
         required.update(
             capability for capability, requested in definition.features if requested(command_input)
         )
-        if definition.name == "batch.execute":
+        if definition.name in NESTING_COMMANDS:
             for nested in command_input.get("commands") or ():
                 required.update(self.required_capabilities(nested))
         return frozenset(required)
@@ -930,9 +974,23 @@ class CommandCatalog:
     def batch_names(self) -> tuple[str, ...]:
         return tuple(definition.name for definition in self._definitions if definition.batchable)
 
-    def validate_input(self, name: str, value: Any, *, batch: bool = False) -> dict[str, Any]:
+    @property
+    def frame_batch_names(self) -> tuple[str, ...]:
+        return tuple(
+            definition.name for definition in self._definitions if definition.frame_batchable
+        )
+
+    def validate_input(
+        self, name: str, value: Any, *, batch: bool = False, frame_batch: bool = False
+    ) -> dict[str, Any]:
         definition = self._by_name.get(name)
-        if definition is None or batch and not definition.batchable:
+        if (
+            definition is None
+            or batch
+            and not definition.batchable
+            or frame_batch
+            and not definition.frame_batchable
+        ):
             raise ValueError("unsupported Command")
         return definition.input_model.model_validate(value).model_dump(mode="json")
 
@@ -957,7 +1015,7 @@ class CommandCatalog:
         if not isinstance(name, str):
             return result
         normalized = dict(result)
-        if name == "batch.execute":
+        if name in NESTING_COMMANDS:
             command_input = command.get("input")
             nested_commands = (
                 command_input.get("commands") if isinstance(command_input, dict) else None
@@ -1252,6 +1310,12 @@ COMMAND_CATALOG = CommandCatalog(
                 ("batch.execute:item_results", lambda _value: True),
             ),
         ),
+        CommandDefinition(
+            "plan.execute",
+            PlanExecuteInput,
+            CommandEffect.MUTATION,
+            ExecutionClass.BOUNDED_MUTATION,
+        ),
     )
 )
 
@@ -1289,4 +1353,5 @@ CommandInput = (
     | BinaryExportInput
     | EventsReadInput
     | BatchExecuteInput
+    | PlanExecuteInput
 )

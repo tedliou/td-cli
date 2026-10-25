@@ -5029,6 +5029,7 @@
   "ops.get": {
    "effect": "read_only",
    "batchable": true,
+   "frame_batchable": true,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -5047,6 +5048,7 @@
   "ops.inspect": {
    "effect": "read_only",
    "batchable": true,
+   "frame_batchable": false,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -5072,6 +5074,7 @@
   "ops.children": {
    "effect": "read_only",
    "batchable": true,
+   "frame_batchable": false,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -5102,6 +5105,7 @@
   "ops.connections": {
    "effect": "read_only",
    "batchable": true,
+   "frame_batchable": false,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -5127,6 +5131,7 @@
   "ops.hierarchy.connections": {
    "effect": "read_only",
    "batchable": true,
+   "frame_batchable": false,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -5152,6 +5157,7 @@
   "ops.state.get": {
    "effect": "read_only",
    "batchable": true,
+   "frame_batchable": true,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -5170,6 +5176,7 @@
   "ops.state.set": {
    "effect": "mutation",
    "batchable": false,
+   "frame_batchable": true,
    "input_schema": {
     "$defs": {
      "OperatorColorInput": {
@@ -5372,6 +5379,7 @@
   "dat.text.get": {
    "effect": "read_only",
    "batchable": true,
+   "frame_batchable": false,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -5411,6 +5419,7 @@
   "chop.values.get": {
    "effect": "read_only",
    "batchable": true,
+   "frame_batchable": true,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -5477,6 +5486,7 @@
   "dat.text.set": {
    "effect": "mutation",
    "batchable": false,
+   "frame_batchable": true,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -5500,6 +5510,7 @@
   "dat.table.get": {
    "effect": "read_only",
    "batchable": true,
+   "frame_batchable": false,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -5553,6 +5564,7 @@
   "dat.table.replace": {
    "effect": "mutation",
    "batchable": false,
+   "frame_batchable": true,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -5582,6 +5594,7 @@
   "dat.table.patch": {
    "effect": "mutation",
    "batchable": false,
+   "frame_batchable": true,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -5625,6 +5638,7 @@
   "parameters.get": {
    "effect": "read_only",
    "batchable": true,
+   "frame_batchable": true,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -5648,6 +5662,7 @@
   "parameters.page.create": {
    "effect": "mutation",
    "batchable": false,
+   "frame_batchable": true,
    "input_schema": {
     "$defs": {
      "CustomFloatDefinition": {
@@ -5833,6 +5848,7 @@
   "parameters.list": {
    "effect": "read_only",
    "batchable": true,
+   "frame_batchable": false,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -5889,6 +5905,7 @@
   "parameters.set": {
    "effect": "mutation",
    "batchable": false,
+   "frame_batchable": true,
    "input_schema": {
     "$defs": {
      "ParameterSourceInput": {
@@ -6014,6 +6031,7 @@
   "parameters.menu.set": {
    "effect": "mutation",
    "batchable": false,
+   "frame_batchable": true,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -6066,6 +6084,7 @@
   "parameters.pulse": {
    "effect": "mutation",
    "batchable": false,
+   "frame_batchable": true,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -6089,6 +6108,7 @@
   "parameters.sequence.get": {
    "effect": "read_only",
    "batchable": true,
+   "frame_batchable": false,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -6128,6 +6148,7 @@
   "parameters.sequence.replace": {
    "effect": "mutation",
    "batchable": false,
+   "frame_batchable": true,
    "input_schema": {
     "$defs": {
      "ParameterSourceInput": {
@@ -6325,6 +6346,7 @@
   "ops.create": {
    "effect": "mutation",
    "batchable": false,
+   "frame_batchable": true,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -6372,6 +6394,7 @@
   "ops.rename": {
    "effect": "mutation",
    "batchable": false,
+   "frame_batchable": true,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -6395,6 +6418,7 @@
   "ops.destroy": {
    "effect": "mutation",
    "batchable": false,
+   "frame_batchable": true,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -6442,6 +6466,7 @@
   "ops.copy": {
    "effect": "mutation",
    "batchable": false,
+   "frame_batchable": true,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -6520,6 +6545,7 @@
   "ops.move": {
    "effect": "mutation",
    "batchable": false,
+   "frame_batchable": true,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -6599,6 +6625,7 @@
   "ops.tox.import": {
    "effect": "mutation",
    "batchable": false,
+   "frame_batchable": false,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -6679,6 +6706,7 @@
   "ops.connect": {
    "effect": "mutation",
    "batchable": false,
+   "frame_batchable": true,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -6721,6 +6749,7 @@
   "ops.disconnect": {
    "effect": "mutation",
    "batchable": false,
+   "frame_batchable": true,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -6758,6 +6787,7 @@
   "ops.hierarchy.connect": {
    "effect": "mutation",
    "batchable": false,
+   "frame_batchable": true,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -6800,6 +6830,7 @@
   "ops.hierarchy.disconnect": {
    "effect": "mutation",
    "batchable": false,
+   "frame_batchable": true,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -6837,6 +6868,7 @@
   "project.snapshot": {
    "effect": "read_only",
    "batchable": true,
+   "frame_batchable": false,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -6896,6 +6928,7 @@
   "project.metadata": {
    "effect": "read_only",
    "batchable": true,
+   "frame_batchable": false,
    "input_schema": {
     "additionalProperties": false,
     "properties": {},
@@ -6906,6 +6939,7 @@
   "project.save": {
    "effect": "mutation",
    "batchable": false,
+   "frame_batchable": false,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -6931,6 +6965,7 @@
   "binary.export": {
    "effect": "read_only",
    "batchable": true,
+   "frame_batchable": false,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -6965,6 +7000,7 @@
   "events.read": {
    "effect": "read_only",
    "batchable": true,
+   "frame_batchable": false,
    "input_schema": {
     "additionalProperties": false,
     "properties": {
@@ -6994,6 +7030,7 @@
   "batch.execute": {
    "effect": "read_only",
    "batchable": false,
+   "frame_batchable": false,
    "input_schema": {
     "$defs": {
      "BatchItem": {
@@ -7033,6 +7070,52 @@
      "commands"
     ],
     "title": "BatchExecuteInput",
+    "type": "object"
+   }
+  },
+  "plan.execute": {
+   "effect": "mutation",
+   "batchable": false,
+   "frame_batchable": false,
+   "input_schema": {
+    "$defs": {
+     "FrameBatchItem": {
+      "additionalProperties": false,
+      "properties": {
+       "name": {
+        "title": "Name",
+        "type": "string"
+       },
+       "input": {
+        "additionalProperties": true,
+        "title": "Input",
+        "type": "object"
+       }
+      },
+      "required": [
+       "name",
+       "input"
+      ],
+      "title": "FrameBatchItem",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "properties": {
+     "commands": {
+      "items": {
+       "$ref": "#/$defs/FrameBatchItem"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "title": "Commands",
+      "type": "array"
+     }
+    },
+    "required": [
+     "commands"
+    ],
+    "title": "PlanExecuteInput",
     "type": "object"
    }
   }
