@@ -85,9 +85,6 @@ class FakeAgentExtension:
         return []
 
     def dispatch(self, request):
-        # The real Agent records each execution once; a repeated delivery executes nothing.
-        if request["execution_id"] in self.dispatched:
-            return None, None
         self.dispatched.append(request["execution_id"])
         return "execute", {**self.heartbeat_payload(), "request_id": request["request_id"]}
 
@@ -392,9 +389,11 @@ def test_dispatch_executes_in_the_same_callback_and_chunks_outcomes() -> None:
     assert json.loads(chunk["payload"]) == failed
 
 
-def test_repeated_dispatch_runs_the_command_once() -> None:
+def test_dispatch_the_agent_already_recorded_emits_nothing() -> None:
+    # The Agent answers a redelivered execution with no event (tests/test_agent_runtime.py).
     extension = FakeAgentExtension()
     extension.connection_id = "connection-1"
+    extension.dispatch = lambda request: (None, None)
     executed = []
     original = extension.execute_authorized
     extension.execute_authorized = lambda *arguments: (
@@ -409,9 +408,8 @@ def test_repeated_dispatch_runs_the_command_once() -> None:
         "command": json.dumps({"name": "ops.get", "input": {"operator_path": "/project1"}}),
     }
     callbacks["onReceiveEvent"](socket, 0, message, "request_dispatch")
-    callbacks["onReceiveEvent"](socket, 0, message, "request_dispatch")
-    assert executed == [("request-2", "execution-1")]
-    assert [event for event, _ in socket.emitted] == ["request_outcome_chunk"]
+    assert executed == []
+    assert socket.emitted == []
 
 
 def test_registration_executes_retained_authorizations_after_synchronizing() -> None:

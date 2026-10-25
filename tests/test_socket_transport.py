@@ -199,16 +199,15 @@ async def test_v4_dispatch_and_outcome_are_ordered_durable_and_redacted(
                 },
             )
             assert response.status == 201
-        request = await asyncio.wait_for(dispatched, 2)
-        assert request["status"] == "dispatched"
-        assert isinstance(request["command"], str)
-        assert json.loads(request["command"])["input"]["operator_path"] == "/secret-path"
-        authorization = request
-        assert authorization["execution_id"]
+        dispatch = await asyncio.wait_for(dispatched, 2)
+        assert dispatch["status"] == "dispatched"
+        assert isinstance(dispatch["command"], str)
+        assert json.loads(dispatch["command"])["input"]["operator_path"] == "/secret-path"
+        assert dispatch["execution_id"]
         outcome = {
             **connection,
             "request_id": REQUEST_ID,
-            "execution_id": authorization["execution_id"],
+            "execution_id": dispatch["execution_id"],
             "status": outcome_status,
             "result": outcome_result,
             "error": outcome_error,
@@ -218,14 +217,14 @@ async def test_v4_dispatch_and_outcome_are_ordered_durable_and_redacted(
             {
                 **connection,
                 "request_id": REQUEST_ID,
-                "execution_id": authorization["execution_id"],
+                "execution_id": dispatch["execution_id"],
                 "chunk_index": 0,
                 "chunk_count": 1,
                 "payload": json.dumps(outcome, separators=(",", ":"), sort_keys=True),
             },
         )
         acknowledgment = await asyncio.wait_for(recorded, 2)
-        assert acknowledgment["execution_id"] == authorization["execution_id"]
+        assert acknowledgment["execution_id"] == dispatch["execution_id"]
         assert order == ["dispatch", "recorded"]
         _, snapshot = await get_json(port, f"/v3/requests/{REQUEST_ID}")
         assert snapshot["status"] == outcome_status
@@ -263,7 +262,7 @@ async def test_reconnect_reconciles_matching_retained_outcome(tmp_path: Path) ->
                 },
             )
             assert response.status == 201
-        authorization = await asyncio.wait_for(dispatched, 2)
+        dispatch = await asyncio.wait_for(dispatched, 2)
         await first.disconnect()
         for _ in range(50):
             _, unknown = await get_json(port, f"/v3/requests/{REQUEST_ID}")
@@ -281,7 +280,7 @@ async def test_reconnect_reconciles_matching_retained_outcome(tmp_path: Path) ->
                     {
                         "phase": "outcome",
                         "request_id": REQUEST_ID,
-                        "execution_id": authorization["execution_id"],
+                        "execution_id": dispatch["execution_id"],
                         "status": "succeeded",
                         "result": {"path": "/project1"},
                         "error": None,
@@ -323,14 +322,14 @@ async def test_reconnect_reassembles_bounded_outcome_chunks_before_synchronizing
                 },
             )
             assert response.status == 201
-        authorization = await asyncio.wait_for(dispatched, 2)
+        dispatch = await asyncio.wait_for(dispatched, 2)
         await first.disconnect()
 
         second_connection = await register(second, port, synchronize=False)
         outcome = {
             **second_connection,
             "request_id": REQUEST_ID,
-            "execution_id": authorization["execution_id"],
+            "execution_id": dispatch["execution_id"],
             "status": "succeeded",
             "result": {"payload": "x" * 70_000},
             "error": None,
@@ -344,7 +343,7 @@ async def test_reconnect_reassembles_bounded_outcome_chunks_before_synchronizing
                 {
                     **second_connection,
                     "request_id": REQUEST_ID,
-                    "execution_id": authorization["execution_id"],
+                    "execution_id": dispatch["execution_id"],
                     "chunk_index": index,
                     "chunk_count": len(payloads),
                     "payload": payload,
