@@ -123,7 +123,7 @@ impl Run<'_> {
     fn in_frame_batches(&mut self) -> Result<()> {
         let mut index = 0;
         while index < self.commands.len() {
-            let count = self.batch_length(index);
+            let count = self.frame_batch_size(index);
             if count == 0 {
                 self.single(index)?;
                 index += 1;
@@ -135,7 +135,7 @@ impl Run<'_> {
     }
 
     /// How many Commands from `index` on fit one Frame Batch; 0 when that Command cannot join one.
-    fn batch_length(&self, index: usize) -> usize {
+    fn frame_batch_size(&self, index: usize) -> usize {
         let mut bytes = 2; // the enclosing brackets
         let mut count = 0;
         for command in &self.commands[index..] {
@@ -210,42 +210,35 @@ impl Run<'_> {
             "request_id": request_id,
             "instance_id": self.instance["instance_id"],
         }));
-        let batch = json!({
+        let plan_request = json!({
             "name": "plan.execute",
             "input": {"commands": &self.commands[index..index + count]},
         });
-        let report = self
-            .submit(&request_id, batch)
+        let outcome = self
+            .submit(&request_id, plan_request)
             .and_then(|snapshot| {
                 fail_unless_succeeded(&snapshot)?;
-                Ok(snapshot)
+                match snapshot["result"]["results"].as_array() {
+                    Some(results) if !results.is_empty() => Ok(results.clone()),
+                    _ => Err(ClientError::new("internal_error")),
+                }
             })
-            .map_err(|error| error.for_request(&request_id))
-            .inspect_err(|error| {
-                // Any Command of the batch may have run when the Request did not succeed.
+            .map_err(|error| error.for_request(&request_id));
+        let results = match outcome {
+            Ok(results) => results,
+            Err(error) => {
+                // Any Command of the Frame Batch may have run when the Request did not succeed.
+                let unsubmitted = total - index - count;
                 stopped(
                     index,
                     Some(&request_id),
-                    error,
+                    &error,
                     self.succeeded,
-                    total - index - count,
+                    unsubmitted,
                 );
-            })?;
-        let results = report["result"]["results"]
-            .as_array()
-            .cloned()
-            .unwrap_or_default();
-        if results.is_empty() {
-            let error = ClientError::new("internal_error").for_request(&request_id);
-            stopped(
-                index,
-                Some(&request_id),
-                &error,
-                self.succeeded,
-                total - index - count,
-            );
-            return Err(error);
-        }
+                return Err(error);
+            }
+        };
         for (offset, item) in results.iter().enumerate() {
             let position = index + offset;
             if item["ok"] != true {

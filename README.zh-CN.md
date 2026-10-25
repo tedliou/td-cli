@@ -545,8 +545,8 @@ Command 之间停下；下一段从第一个没执行的 Command 开始。其他
 一个。JSONL：每个 Request 一行 `submitting`（`index` 是第一个 Command，Frame Batch 另有
 `count`）；每个已执行的 Command 一行 `completed`，含 `index`、所属 Frame Batch 的
 `request_id` 与 `result`；最后是 `stopped` 或 `finished`。整段 Frame Batch 为 `unknown`
-时，`stopped` 指向该段第一个 Command，段内任何 Command 都可能已执行。需要 1.1.0 Agent，
-较旧的 Agent 会以 `command_unsupported` 拒绝。不加此选项时输出不变。
+时，`stopped` 指向该段第一个 Command，段内任何 Command 都可能已执行。需要提供 `plan.execute`
+能力的 Agent，Agent 较旧时 Daemon 以 `command_unsupported` 拒绝。不加此选项时输出不变。
 
 0.11.0 离线升级除现有来源（含 0.7.0、0.7.1、0.8.0、0.9.0）外，新增精确 canonical 0.10.0 Agent 白名单，保留 Connectionstate 定义。Agent 读取接口新增：`batch execute` 逐项结果、Instance 的 `project`、`ops inspect` 的 COMP 接口摘要、Execute 系列与 byte offset 的 `dat text get`、`chop values get`、`parameters list` 的值与筛选选项、可分页的 `project snapshot`，以及 `ops destroy`／`copy`／`move` 的 `--inventory summary`。`td` 改以 onedir 发布，启动约 0.4 秒。新选项需要 0.11.0 Agent；内嵌较旧 Agent 时，CLI 与 Daemon 会以 `command_unsupported` 拒绝。下一个 patch 版缩短预热后的命令延迟：Daemon 健康时，在线 `td` 命令不再导入 Daemon 服务器包，并复用同一条 HTTP 连接，`td --json instances list` 从约 1.5 秒降到约 0.5 秒。`td-daemon` 与 `td-agent` 也改以 onedir 发布，`td-daemon-runtime\`、`td-agent-runtime\` 与 `td-runtime\` 并存于同一个版本目录。下一个 minor 版再缩短：已授权的 Command 在授权的同一个 TouchDesigner frame 内执行；`td` 等待 Request 改用长轮询，不再每 50 ms 查询一次；`td` 启动不读取包 metadata、不导入 httpx。TouchDesigner 往返时间从约 62 ms 降到约 33 ms，`td --json instances list` 降到约 0.3 秒。
 

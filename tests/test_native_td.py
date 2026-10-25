@@ -1242,7 +1242,7 @@ def run_frame_batch(plan, waits, home, *globals_):
     return native, submitted, [line for line in lines if "event" in line]
 
 
-def batch(*commands):
+def frame_batch_request(*commands):
     return {"name": "plan.execute", "input": {"commands": list(commands)}}
 
 
@@ -1258,7 +1258,12 @@ def test_frame_batch_groups_batchable_commands_and_resumes_after_the_frame_budge
     native, submitted, events = run_frame_batch(plan, waits, home)
 
     assert native.exit_code == 0, native.stderr
-    assert submitted == [batch(*plan[:2]), batch(plan[1]), SAVE, batch(*plan[3:])]
+    assert submitted == [
+        frame_batch_request(*plan[:2]),
+        frame_batch_request(plan[1]),
+        SAVE,
+        frame_batch_request(*plan[3:]),
+    ]
     assert [(event["event"], event.get("index"), event.get("count")) for event in events] == [
         ("submitting", 0, 2),
         ("completed", 0, None),
@@ -1293,10 +1298,10 @@ def test_frame_batch_splits_at_the_command_count_and_escaped_byte_limits(home):
 
     # 6,000 é are 12,000 UTF-8 bytes but 36,000 escaped ones, so the two cannot share a batch.
     assert [len(command["input"]["commands"]) for command in submitted] == [256, 2, 1]
-    assert submitted[1:] == [batch(get("/a"), wide[0]), batch(wide[1])]
+    assert submitted[1:] == [frame_batch_request(get("/a"), wide[0]), frame_batch_request(wide[1])]
 
 
-def test_frame_batch_stops_at_the_failed_command_of_a_batch(home):
+def test_frame_batch_stops_at_its_failed_command(home):
     plan = [get("/a"), get("/b"), get("/c"), get("/d")]
     error = {"code": "operator_not_found", "message": "missing", "details": {"path": "/b"}}
     waits = [(200, frame_batch_report(1, failed=error))]
@@ -1318,7 +1323,7 @@ def test_frame_batch_stops_at_the_failed_command_of_a_batch(home):
     }
 
 
-def test_frame_batch_points_at_the_first_command_when_the_batch_is_unknown(home):
+def test_frame_batch_points_at_its_first_command_when_it_is_unknown(home):
     plan = [SAVE, get("/a"), get("/b"), SAVE]
     unknown = snapshot(status="unknown", error={"code": "request_outcome_unknown", "message": ""})
     waits = [(200, snapshot(result={"saved": True})), (200, unknown)]
@@ -1326,7 +1331,7 @@ def test_frame_batch_points_at_the_first_command_when_the_batch_is_unknown(home)
     native, submitted, events = run_frame_batch(plan, waits, home)
 
     assert native.exit_code != 0
-    assert submitted == [SAVE, batch(*plan[1:3])]
+    assert submitted == [SAVE, frame_batch_request(*plan[1:3])]
     stopped = events[-1]
     assert stopped["event"] == "stopped"
     assert (stopped["index"], stopped["succeeded"], stopped["unsubmitted"]) == (1, 1, 1)

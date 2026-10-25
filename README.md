@@ -687,8 +687,8 @@ that did not run. Other Commands still run as one Request each. JSONL: one
 Batch), one `completed` per executed Command with its `index`, the Frame Batch
 `request_id`, and its `result`, then `stopped` or `finished`. When a whole Frame
 Batch is `unknown`, `stopped` points at its first Command and any Command of it
-may have run. It needs a 1.1.0 Agent; an older one rejects it with
-`command_unsupported`. Without the option the output is unchanged.
+may have run. It needs an Agent that advertises `plan.execute`; the Daemon rejects
+it with `command_unsupported` for an older one. Without the option the output is unchanged.
 
 The 0.11.0 upgrade accepts the exact canonical 0.10.0 Agent in addition to the existing verified sources (including 0.7.0, 0.7.1, 0.8.0, and 0.9.0), preserving its Connectionstate definition. The Agent read surface adds per-item `batch execute` results, Instance `project` identity, COMP interface summaries in `ops inspect`, Execute-family and byte-offset `dat text get`, `chop values get`, `parameters list` value and filter options, paginated `project snapshot`, and `--inventory summary` for `ops destroy`/`copy`/`move`. `td` now ships as an onedir bundle and starts in about 0.4 seconds. The new options need a 0.11.0 Agent; the CLI and Daemon reject them with `command_unsupported` for an older embedded Agent. The next patch release cuts warm Command latency: with a healthy Daemon, an online `td` Command no longer imports the Daemon server packages and reuses one HTTP connection, so `td --json instances list` drops from about 1.5 seconds to about 0.5 seconds. `td-daemon` and `td-agent` also ship as onedir bundles; their `td-daemon-runtime\` and `td-agent-runtime\` folders sit beside `td-runtime\` in the same version folder. The next minor release cuts it further. An authorized Command runs in the same TouchDesigner frame it is authorized in, `td` waits for a Request with a long poll instead of querying every 50 ms, and `td` starts without reading package metadata or importing httpx. A TouchDesigner round trip drops from about 62 ms to about 33 ms, and `td --json instances list` to about 0.3 seconds.
 

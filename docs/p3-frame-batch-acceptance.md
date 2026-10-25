@@ -47,7 +47,7 @@ uv run python -m tools.locked_frame_batch_acceptance --work <scratch>\fb-run --p
 | 讀回 | 256 個 Constant CHOP，值正確 | 256 個 Constant CHOP，值正確 |
 
 - 總時間快 4.35 倍。
-- 沒有一段超過 8 ms 加一個 Command 的時間：上限取逐一模式中最慢的單一 Command，為 11.56 ms，Frame Batch 最慢的一段是 9.69 ms。
+- 沒有一段超過 8 ms 加一個 Command 的時間。「一個 Command 的時間」取逐一模式中最慢的單一 Command（3.56 ms），是近似值，不是逐段量出的。上限因此是 11.56 ms，Frame Batch 最慢的一段是 9.69 ms。
 - 兩種模式的 frame 間隔最大值都約 31 ms。Frame Batch 沒有讓 frame 間隔變長。中位數多 1.7 ms，因為每段在 frame 內多執行約 9 ms。
 - `parameters.set` 很快，256 個只用了 2 段（158 個與 98 個）。
 - `ops.create` 每個約 1.7 ms，所以 8 ms 預算內每段約 5 個，256 個要 53 段。
@@ -65,7 +65,23 @@ uv run python -m tools.locked_frame_batch_acceptance --work <scratch>\fb-run --p
 
 逐一模式的 outcome 在 frame 開頭約 2.6 ms 送出，td 與 Daemon 約 11 ms 送出下一個 dispatch，趕得上下一個 frame。Frame Batch 先執行約 9 ms，outcome 在第 11 ms 才送出，td 與 Daemon 又要約 19 ms，下一個 dispatch 錯過下一個 frame，等到再下一個 frame 才執行。
 
-Daemon 收到 outcome 後多出的約 8 ms 花在 td 與 Daemon 之間：Frame Batch 的 Command 與結果都比單一 Command 大，Daemon 要驗證與保存整段，td 要逐行輸出每個 Command 的進度。這段時間沒有拆開量。原因清楚，也不影響 frame 間隔，所以不構成 #217 的停止條件。
+Daemon 收到 outcome 後多出的約 8 ms 花在 td 與 Daemon 之間：Frame Batch 的 Command 與結果都比單一 Command 大，Daemon 要驗證與保存整段，td 要逐行輸出每個 Command 的進度。這 8 ms 在 td 與 Daemon 內各佔多少沒有拆開量。多出的 frame 是哪一段造成的已經量到：outcome 晚送出，加上這段較長的往返。frame 間隔也沒有變長。所以判定不構成 #217 的停止條件（frame 間隔明顯超過一個 frame 且原因不明）。
+
+## Invariant 與失敗邊界
+
+依 `.agents/skills/td-runtime-reliability/SKILL.md` 列出本 spec 影響的 invariant。Daemon 端的 FIFO、一次一個 dispatched Request、lease、斷線與 sync 規則都沒改，`plan.execute` 在 Daemon 端是一個普通的 Request。
+
+| Invariant 或失敗邊界 | 可觀察的狀態 | 證據 |
+|---|---|---|
+| 沒有紀錄就沒有執行：登記與整段執行在同一個 callback | 重送的 dispatch 回傳保存的 outcome，不再執行 | `tests/test_agent_runtime.py` 重送測試 |
+| 遇到第一個失敗就停，不回復 | Request `succeeded`，`stopped_reason: failed`，前面的變更保留 | Agent runtime 與原生 `td` 測試 |
+| mutation 執行時拋出例外 | 該項 `request_outcome_unknown`，`td` 的 `stopped` 指向該 Command | Agent runtime 測試 |
+| 8 ms 預算只在兩個 Command 之間檢查 | `stopped_reason: frame_budget`，`td` 從第一個沒執行的接著送 | Agent runtime 與原生 `td` 測試、本次鎖定版 |
+| 結果過大 | `result` 省略並標 `results_omitted`，`ok` 與 `error` 保留，Request 仍 `succeeded` | Agent runtime 測試（含剛好低於上限的情況） |
+| 整段 Request `unknown`（斷線逾時、Daemon 重啟） | `stopped` 指向該段第一個 Command，段內都可能已執行，`td` 不自動重送 | 原生 `td` 測試 |
+| 總逾時 | `stopped` 的 `wait_timeout`，結束碼 6，不重送 | 原生 `td` 測試 |
+| 舊 Agent 或缺巢狀能力 | 送出前 `command_unsupported`，沒有 Request | lifecycle 測試 |
+| 取消 | 與一般 Request 相同，Frame Batch 沒有新增取消路徑 | 不另測，Daemon 端未改 |
 
 ## 限制
 
