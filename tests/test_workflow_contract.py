@@ -8,7 +8,7 @@ from td_cli.release import is_approved_release_version
 def test_release_workflow_gates_publication_on_main_and_remote_digests() -> None:
     workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
     assert "Release source must be the current main tip" in workflow
-    assert "Release Version must be an approved pre-1.0 SemVer" in workflow
+    assert "Release Version must be an approved SemVer" in workflow
     assert "is_approved_release_version" in workflow
     assert "Remote asset digest mismatch" in workflow
     assert "SHA256SUMS does not match remote asset" in workflow
@@ -22,9 +22,20 @@ def test_release_workflow_gates_publication_on_main_and_remote_digests() -> None
 
 @pytest.mark.parametrize(
     "value",
-    ["0.1.2", "0.2.0", "0.2.1", "0.2.0-alpha.0", "0.2.0-beta.1", "0.2.0-rc.2"],
+    [
+        "0.1.2",
+        "0.2.0",
+        "0.2.1",
+        "0.2.0-alpha.0",
+        "0.2.0-beta.1",
+        "0.2.0-rc.2",
+        "1.0.0",
+        "1.0.0-rc.1",
+        "1.1.0",
+        "10.2.3",
+    ],
 )
-def test_release_version_policy_accepts_supported_pre_1_semver(value: str) -> None:
+def test_release_version_policy_accepts_supported_semver(value: str) -> None:
     assert is_approved_release_version(value)
 
 
@@ -37,7 +48,9 @@ def test_release_version_policy_accepts_supported_pre_1_semver(value: str) -> No
         "0.2.0-rc.01",
         "0.2.0-preview.1",
         "0.2.0+build.1",
-        "1.0.0",
+        "01.0.0",
+        "1.00.0",
+        "1.0.0+build.1",
     ],
 )
 def test_release_version_policy_rejects_unapproved_or_noncanonical_versions(value: str) -> None:
