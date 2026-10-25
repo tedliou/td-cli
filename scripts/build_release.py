@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -9,6 +10,49 @@ from pathlib import Path
 
 from td_cli.licensing import license_files
 from td_cli.release import package_release
+
+NATIVE_TD = Path("native/td")
+# The license inventory covers the GNU toolchain runtime; an MSVC build would link other code.
+NATIVE_HOST = "x86_64-pc-windows-gnu"
+# Every build step finishes well within this; a hung toolchain must not hang the release.
+BUILD_TIMEOUT_SECONDS = 1800
+VERSION_SMOKE_TIMEOUT_SECONDS = 60
+
+
+def build_native_td(binaries: Path, source_epoch: int) -> None:
+    """Build td.exe with the pinned Rust toolchain, without machine paths in the binary."""
+    root = Path.cwd().resolve()
+    cargo_home = Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo")).resolve()
+    rustflags = "\x1f".join(
+        [f"--remap-path-prefix={root}=td-cli", f"--remap-path-prefix={cargo_home}=cargo"]
+    )
+    env = {
+        **os.environ,
+        "SOURCE_DATE_EPOCH": str(source_epoch),
+        "CARGO_ENCODED_RUSTFLAGS": rustflags,
+    }
+    env.pop("RUSTFLAGS", None)
+    rustc = subprocess.run(
+        ["rustc", "-vV"],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=NATIVE_TD,
+        timeout=VERSION_SMOKE_TIMEOUT_SECONDS,
+    )
+    if f"host: {NATIVE_HOST}" not in rustc.stdout.splitlines():
+        raise SystemExit(f"td.exe must be built on the {NATIVE_HOST} host toolchain")
+    subprocess.run(
+        ["cargo", "build", "--release", "--locked"],
+        check=True,
+        cwd=NATIVE_TD,
+        env=env,
+        timeout=BUILD_TIMEOUT_SECONDS,
+    )
+    bundle = binaries / "td"
+    shutil.rmtree(bundle, ignore_errors=True)
+    bundle.mkdir(parents=True)
+    shutil.copy2(NATIVE_TD / "target/release/td.exe", bundle / "td.exe")
 
 
 def main() -> None:
@@ -23,7 +67,7 @@ def main() -> None:
     binaries = Path("dist")
     if not args.skip_build:
         env = {**os.environ, "PYTHONHASHSEED": "0", "SOURCE_DATE_EPOCH": str(args.source_epoch)}
-        for spec in ("td.spec", "td-daemon.spec", "td-agent.spec"):
+        for spec in ("td-daemon.spec", "td-agent.spec"):
             subprocess.run(
                 [
                     sys.executable,
@@ -35,11 +79,16 @@ def main() -> None:
                 ],
                 check=True,
                 env=env,
+                timeout=BUILD_TIMEOUT_SECONDS,
             )
+        build_native_td(binaries, args.source_epoch)
         with tempfile.TemporaryDirectory(prefix="td-cli-clean-") as clean:
             for executable in ("td/td.exe", "td-daemon/td-daemon.exe", "td-agent/td-agent.exe"):
                 subprocess.run(
-                    [str((binaries / executable).resolve()), "--version"], check=True, cwd=clean
+                    [str((binaries / executable).resolve()), "--version"],
+                    check=True,
+                    cwd=clean,
+                    timeout=VERSION_SMOKE_TIMEOUT_SECONDS,
                 )
     artifacts = package_release(
         binaries,

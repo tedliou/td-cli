@@ -6,12 +6,11 @@ import ast
 import re
 from pathlib import Path
 
-from td_cli import cli
-from td_cli.error_catalog import ERROR_CATALOG
+from td_cli.error_catalog import ERROR_CATALOG, EXIT_CODES
 
 ROOT = Path(__file__).parents[1]
 _CODE = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$")
-_CODE_CONSTRUCTORS = {"ClientError", "AdmissionRejected", "AgentCommandError"}
+_CODE_CONSTRUCTORS = {"ClientError", "AdmissionRejected", "AgentCommandError", "SelectionError"}
 _AGENT_OUTCOME_CONSTRUCTORS = {"AgentCommandError", "_outcome_error"}
 
 
@@ -169,8 +168,17 @@ def _produced(path: Path, select=_public_code_expressions) -> set[str]:
     return codes
 
 
+_NATIVE_ERROR = re.compile(r'ClientError::(?:new|with|reason)\(\s*"([a-z0-9_]+)"')
+
+
+def _native_produced() -> set[str]:
+    """Error codes the native td creates itself, such as a failed project launch."""
+    sources = (ROOT / "native" / "td" / "src").rglob("*.rs")
+    return {code for path in sources for code in _NATIVE_ERROR.findall(path.read_text("utf-8"))}
+
+
 def test_catalog_matches_every_produced_error_code() -> None:
-    produced = set().union(*(_produced(path) for path in _producer_sources()))
+    produced = set().union(*(_produced(path) for path in _producer_sources()), _native_produced())
 
     assert sorted(produced - ERROR_CATALOG.codes) == [], "produced but not catalogued"
     assert sorted(ERROR_CATALOG.codes - produced) == [], "catalogued but never produced"
@@ -211,4 +219,4 @@ def test_persisted_error_object_carries_catalogued_retry_safety() -> None:
 
 
 def test_cli_exit_codes_name_catalogued_errors() -> None:
-    assert set(cli.EXIT_CODES) <= ERROR_CATALOG.codes
+    assert set(EXIT_CODES) <= ERROR_CATALOG.codes

@@ -1173,3 +1173,10 @@ def test_parameter_list_keeps_omitted_menu_options_null() -> None:
     assert result["parameters"][0]["menu_labels"] is None
     listed = _normalized("parameters.list", {"parameters": [{"name": "m", "value_kind": "menu"}]})
     assert listed["parameters"][0]["menu_names"] == []
+
+
+def test_a_git_bash_converted_operator_path_names_the_workaround() -> None:
+    # Git Bash (MSYS) rewrites "/project1/" into this before td sees it.
+    command = {"name": "ops.children", "input": {"operator_path": "C:/Program Files/Git/project1/"}}
+    with pytest.raises(ValidationError, match="MSYS_NO_PATHCONV=1"):
+        Command.model_validate(command)

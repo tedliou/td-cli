@@ -1,0 +1,28 @@
+{
+  "td": "copy of dist/td built at P1 commit 1fca570, beside this branch's td-daemon",
+  "td_version": "td 0.11.0 (protocol 3)",
+  "results": [
+    {
+      "command": [
+        "--version"
+      ],
+      "runs": 20,
+      "p50_ms": 318.277,
+      "p95_ms": 320.685,
+      "min_ms": 316.803,
+      "max_ms": 320.839
+    },
+    {
+      "command": [
+        "--json",
+        "instances",
+        "list"
+      ],
+      "runs": 20,
+      "p50_ms": 325.892,
+      "p95_ms": 333.032,
+      "min_ms": 324.102,
+      "max_ms": 344.673
+    }
+  ]
+}

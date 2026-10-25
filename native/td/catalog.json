@@ -1,0 +1,7215 @@
+{
+ "release_version": "0.11.0",
+ "protocol_version": 3,
+ "cli": {
+  "help": "Control supported TouchDesigner Instances through the local Daemon.",
+  "params": [
+   {
+    "kind": "option",
+    "name": "version",
+    "opts": [
+     "--version"
+    ],
+    "secondary_opts": [],
+    "type": {
+     "name": "bool"
+    },
+    "default": null,
+    "required": false,
+    "is_flag": true,
+    "help": null
+   },
+   {
+    "kind": "option",
+    "name": "as_json",
+    "opts": [
+     "--json"
+    ],
+    "secondary_opts": [],
+    "type": {
+     "name": "bool"
+    },
+    "default": false,
+    "required": false,
+    "is_flag": true,
+    "help": null
+   },
+   {
+    "kind": "option",
+    "name": "timeout",
+    "opts": [
+     "--timeout"
+    ],
+    "secondary_opts": [],
+    "type": {
+     "name": "float",
+     "min": 0.1,
+     "max": 3600
+    },
+    "default": 30.0,
+    "required": false,
+    "is_flag": false,
+    "help": null
+   },
+   {
+    "kind": "option",
+    "name": "instance",
+    "opts": [
+     "--instance"
+    ],
+    "secondary_opts": [],
+    "type": {
+     "name": "string"
+    },
+    "default": null,
+    "required": false,
+    "is_flag": false,
+    "help": null
+   }
+  ],
+  "commands": {
+   "version": {
+    "help": null,
+    "params": [
+     {
+      "kind": "option",
+      "name": "as_json",
+      "opts": [
+       "--json"
+      ],
+      "secondary_opts": [],
+      "type": {
+       "name": "bool"
+      },
+      "default": false,
+      "required": false,
+      "is_flag": true,
+      "help": null
+     }
+    ]
+   },
+   "instances": {
+    "help": null,
+    "params": [],
+    "commands": {
+     "list": {
+      "help": null,
+      "params": [
+       {
+        "kind": "option",
+        "name": "status",
+        "opts": [
+         "--status"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Keep only online, offline or draining."
+       }
+      ]
+     },
+     "get": {
+      "help": null,
+      "params": [
+       {
+        "kind": "argument",
+        "name": "selector",
+        "opts": [
+         "selector"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       }
+      ]
+     }
+    }
+   },
+   "requests": {
+    "help": null,
+    "params": [],
+    "commands": {
+     "get": {
+      "help": null,
+      "params": [
+       {
+        "kind": "argument",
+        "name": "request_id",
+        "opts": [
+         "request_id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": true,
+        "is_flag": false,
+        "help": null
+       }
+      ]
+     },
+     "wait": {
+      "help": null,
+      "params": [
+       {
+        "kind": "argument",
+        "name": "request_id",
+        "opts": [
+         "request_id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": true,
+        "is_flag": false,
+        "help": null
+       }
+      ]
+     }
+    }
+   },
+   "ops": {
+    "help": null,
+    "params": [],
+    "commands": {
+     "get": {
+      "help": "Submit the ops.get Command; full input schema: td commands schema ops.get.",
+      "params": [
+       {
+        "kind": "argument",
+        "name": "operator_path",
+        "opts": [
+         "operator_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "input",
+        "opts": [
+         "--input"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Command input as one JSON object; see td commands schema NAME."
+       },
+       {
+        "kind": "option",
+        "name": "input_file",
+        "opts": [
+         "--input-file"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+       },
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Return the queued Request snapshot instead of waiting for its outcome."
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+       }
+      ]
+     },
+     "inspect": {
+      "help": "Submit the ops.inspect Command; full input schema: td commands schema ops.inspect.",
+      "params": [
+       {
+        "kind": "argument",
+        "name": "operator_path",
+        "opts": [
+         "operator_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "max_items",
+        "opts": [
+         "--max-items"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "int"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "1-1000; default 100"
+       },
+       {
+        "kind": "option",
+        "name": "input",
+        "opts": [
+         "--input"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Command input as one JSON object; see td commands schema NAME."
+       },
+       {
+        "kind": "option",
+        "name": "input_file",
+        "opts": [
+         "--input-file"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+       },
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Return the queued Request snapshot instead of waiting for its outcome."
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+       }
+      ]
+     },
+     "children": {
+      "help": "Submit the ops.children Command; full input schema: td commands schema ops.children.",
+      "params": [
+       {
+        "kind": "argument",
+        "name": "operator_path",
+        "opts": [
+         "operator_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "op_type",
+        "opts": [
+         "--op-type"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Keep only children of this exact type."
+       },
+       {
+        "kind": "option",
+        "name": "input",
+        "opts": [
+         "--input"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Command input as one JSON object; see td commands schema NAME."
+       },
+       {
+        "kind": "option",
+        "name": "input_file",
+        "opts": [
+         "--input-file"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+       },
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Return the queued Request snapshot instead of waiting for its outcome."
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+       }
+      ]
+     },
+     "connections": {
+      "help": "Submit the ops.connections Command; full input schema: td commands schema ops.connections.",
+      "params": [
+       {
+        "kind": "argument",
+        "name": "operator_path",
+        "opts": [
+         "operator_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "max_connections",
+        "opts": [
+         "--max-connections"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "int"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "1-1000; default 256"
+       },
+       {
+        "kind": "option",
+        "name": "input",
+        "opts": [
+         "--input"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Command input as one JSON object; see td commands schema NAME."
+       },
+       {
+        "kind": "option",
+        "name": "input_file",
+        "opts": [
+         "--input-file"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+       },
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Return the queued Request snapshot instead of waiting for its outcome."
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+       }
+      ]
+     },
+     "create": {
+      "help": "Submit the ops.create Command; full input schema: td commands schema ops.create.",
+      "params": [
+       {
+        "kind": "argument",
+        "name": "parent_path",
+        "opts": [
+         "parent_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "argument",
+        "name": "op_type",
+        "opts": [
+         "op_type"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "argument",
+        "name": "name",
+        "opts": [
+         "name"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "node_x",
+        "opts": [
+         "--node-x"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "int"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "-32768-32767; default 0"
+       },
+       {
+        "kind": "option",
+        "name": "node_y",
+        "opts": [
+         "--node-y"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "int"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "-32768-32767; default 0"
+       },
+       {
+        "kind": "option",
+        "name": "allow_conditional",
+        "opts": [
+         "--allow-conditional"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "default false"
+       },
+       {
+        "kind": "option",
+        "name": "input",
+        "opts": [
+         "--input"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Command input as one JSON object; see td commands schema NAME."
+       },
+       {
+        "kind": "option",
+        "name": "input_file",
+        "opts": [
+         "--input-file"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+       },
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Return the queued Request snapshot instead of waiting for its outcome."
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+       }
+      ]
+     },
+     "connect": {
+      "help": "Submit the ops.connect Command; full input schema: td commands schema ops.connect.",
+      "params": [
+       {
+        "kind": "argument",
+        "name": "source_path",
+        "opts": [
+         "source_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "argument",
+        "name": "target_path",
+        "opts": [
+         "target_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "output_index",
+        "opts": [
+         "--output-index"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "int"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "0-255; default 0"
+       },
+       {
+        "kind": "option",
+        "name": "input_index",
+        "opts": [
+         "--input-index"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "int"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "0-255; default 0"
+       },
+       {
+        "kind": "option",
+        "name": "replace",
+        "opts": [
+         "--replace"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "default false"
+       },
+       {
+        "kind": "option",
+        "name": "input",
+        "opts": [
+         "--input"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Command input as one JSON object; see td commands schema NAME."
+       },
+       {
+        "kind": "option",
+        "name": "input_file",
+        "opts": [
+         "--input-file"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+       },
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Return the queued Request snapshot instead of waiting for its outcome."
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+       }
+      ]
+     },
+     "rename": {
+      "help": "Submit the ops.rename Command; full input schema: td commands schema ops.rename.",
+      "params": [
+       {
+        "kind": "argument",
+        "name": "operator_path",
+        "opts": [
+         "operator_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "argument",
+        "name": "new_name",
+        "opts": [
+         "new_name"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "input",
+        "opts": [
+         "--input"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Command input as one JSON object; see td commands schema NAME."
+       },
+       {
+        "kind": "option",
+        "name": "input_file",
+        "opts": [
+         "--input-file"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+       },
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Return the queued Request snapshot instead of waiting for its outcome."
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+       }
+      ]
+     },
+     "destroy": {
+      "help": "Submit the ops.destroy Command; full input schema: td commands schema ops.destroy.",
+      "params": [
+       {
+        "kind": "argument",
+        "name": "operator_path",
+        "opts": [
+         "operator_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "recursive",
+        "opts": [
+         "--recursive"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Also destroy a non-empty COMP and its whole subtree; default false"
+       },
+       {
+        "kind": "option",
+        "name": "allow_connected",
+        "opts": [
+         "--allow-connected"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Destroy even when wired; the result lists the removed detached_connections; default false"
+       },
+       {
+        "kind": "option",
+        "name": "max_operators",
+        "opts": [
+         "--max-operators"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "int"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "1-10000; default 256"
+       },
+       {
+        "kind": "option",
+        "name": "inventory",
+        "opts": [
+         "--inventory"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "summary: report a digest and type counts instead of every Operator; one of full|summary; default \"full\""
+       },
+       {
+        "kind": "option",
+        "name": "input",
+        "opts": [
+         "--input"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Command input as one JSON object; see td commands schema NAME."
+       },
+       {
+        "kind": "option",
+        "name": "input_file",
+        "opts": [
+         "--input-file"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+       },
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Return the queued Request snapshot instead of waiting for its outcome."
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+       }
+      ]
+     },
+     "copy": {
+      "help": "Submit the ops.copy Command; full input schema: td commands schema ops.copy.",
+      "params": [
+       {
+        "kind": "argument",
+        "name": "source_path",
+        "opts": [
+         "source_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "argument",
+        "name": "target_parent_path",
+        "opts": [
+         "target_parent_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "argument",
+        "name": "new_name",
+        "opts": [
+         "new_name"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "node_x",
+        "opts": [
+         "--node-x"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "int"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "-32768-32767"
+       },
+       {
+        "kind": "option",
+        "name": "node_y",
+        "opts": [
+         "--node-y"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "int"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "-32768-32767"
+       },
+       {
+        "kind": "option",
+        "name": "include_docked",
+        "opts": [
+         "--include-docked"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "default false"
+       },
+       {
+        "kind": "option",
+        "name": "max_operators",
+        "opts": [
+         "--max-operators"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "int"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "1-10000; default 256"
+       },
+       {
+        "kind": "option",
+        "name": "inventory",
+        "opts": [
+         "--inventory"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "summary: report a digest and type counts instead of every Operator; one of full|summary; default \"full\""
+       },
+       {
+        "kind": "option",
+        "name": "input",
+        "opts": [
+         "--input"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Command input as one JSON object; see td commands schema NAME."
+       },
+       {
+        "kind": "option",
+        "name": "input_file",
+        "opts": [
+         "--input-file"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+       },
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Return the queued Request snapshot instead of waiting for its outcome."
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+       }
+      ]
+     },
+     "move": {
+      "help": "Submit the ops.move Command; full input schema: td commands schema ops.move.",
+      "params": [
+       {
+        "kind": "argument",
+        "name": "source_path",
+        "opts": [
+         "source_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "argument",
+        "name": "target_parent_path",
+        "opts": [
+         "target_parent_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "argument",
+        "name": "new_name",
+        "opts": [
+         "new_name"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "node_x",
+        "opts": [
+         "--node-x"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "int"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "-32768-32767"
+       },
+       {
+        "kind": "option",
+        "name": "node_y",
+        "opts": [
+         "--node-y"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "int"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "-32768-32767"
+       },
+       {
+        "kind": "option",
+        "name": "allow_connected",
+        "opts": [
+         "--allow-connected"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Move even when wired across the boundary; the result lists detached_connections; default false"
+       },
+       {
+        "kind": "option",
+        "name": "max_operators",
+        "opts": [
+         "--max-operators"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "int"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "1-10000; default 256"
+       },
+       {
+        "kind": "option",
+        "name": "inventory",
+        "opts": [
+         "--inventory"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "summary: report a digest and type counts instead of every Operator; one of full|summary; default \"full\""
+       },
+       {
+        "kind": "option",
+        "name": "input",
+        "opts": [
+         "--input"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Command input as one JSON object; see td commands schema NAME."
+       },
+       {
+        "kind": "option",
+        "name": "input_file",
+        "opts": [
+         "--input-file"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+       },
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Return the queued Request snapshot instead of waiting for its outcome."
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+       }
+      ]
+     },
+     "disconnect": {
+      "help": "Submit the ops.disconnect Command; full input schema: td commands schema ops.disconnect.",
+      "params": [
+       {
+        "kind": "argument",
+        "name": "source_path",
+        "opts": [
+         "source_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "argument",
+        "name": "target_path",
+        "opts": [
+         "target_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "output_index",
+        "opts": [
+         "--output-index"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "int"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "0-255; default 0"
+       },
+       {
+        "kind": "option",
+        "name": "input_index",
+        "opts": [
+         "--input-index"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "int"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "0-255; default 0"
+       },
+       {
+        "kind": "option",
+        "name": "input",
+        "opts": [
+         "--input"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Command input as one JSON object; see td commands schema NAME."
+       },
+       {
+        "kind": "option",
+        "name": "input_file",
+        "opts": [
+         "--input-file"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+       },
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Return the queued Request snapshot instead of waiting for its outcome."
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+       }
+      ]
+     },
+     "types": {
+      "help": "Query the bundled, locked-build create-support catalog without a Daemon.",
+      "params": [
+       {
+        "kind": "argument",
+        "name": "name",
+        "opts": [
+         "name"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "family",
+        "opts": [
+         "--family"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "limit",
+        "opts": [
+         "--limit"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "int",
+         "min": 1,
+         "max": 680
+        },
+        "default": 50,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       }
+      ]
+     },
+     "state": {
+      "help": null,
+      "params": [],
+      "commands": {
+       "get": {
+        "help": "Submit the ops.state.get Command; full input schema: td commands schema ops.state.get.",
+        "params": [
+         {
+          "kind": "argument",
+          "name": "operator_path",
+          "opts": [
+           "operator_path"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": null
+         },
+         {
+          "kind": "option",
+          "name": "input",
+          "opts": [
+           "--input"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Command input as one JSON object; see td commands schema NAME."
+         },
+         {
+          "kind": "option",
+          "name": "input_file",
+          "opts": [
+           "--input-file"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+         },
+         {
+          "kind": "option",
+          "name": "no_wait",
+          "opts": [
+           "--no-wait"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "bool"
+          },
+          "default": false,
+          "required": false,
+          "is_flag": true,
+          "help": "Return the queued Request snapshot instead of waiting for its outcome."
+         },
+         {
+          "kind": "option",
+          "name": "request_id",
+          "opts": [
+           "--request-id"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+         }
+        ]
+       },
+       "set": {
+        "help": "Submit the ops.state.set Command; full input schema: td commands schema ops.state.set.",
+        "params": [
+         {
+          "kind": "argument",
+          "name": "operator_path",
+          "opts": [
+           "operator_path"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": null
+         },
+         {
+          "kind": "option",
+          "name": "node_x",
+          "opts": [
+           "--node-x"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "int"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "-32768-32767"
+         },
+         {
+          "kind": "option",
+          "name": "node_y",
+          "opts": [
+           "--node-y"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "int"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "-32768-32767"
+         },
+         {
+          "kind": "option",
+          "name": "node_width",
+          "opts": [
+           "--node-width"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "int"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "1-32767"
+         },
+         {
+          "kind": "option",
+          "name": "node_height",
+          "opts": [
+           "--node-height"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "int"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "1-32767"
+         },
+         {
+          "kind": "option",
+          "name": "color",
+          "opts": [
+           "--color"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "tuple",
+           "items": [
+            {
+             "name": "float"
+            },
+            {
+             "name": "float"
+            },
+            {
+             "name": "float"
+            }
+           ]
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": null
+         },
+         {
+          "kind": "option",
+          "name": "comment",
+          "opts": [
+           "--comment"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "at most 4096 chars"
+         },
+         {
+          "kind": "option",
+          "name": "bypass",
+          "opts": [
+           "--bypass"
+          ],
+          "secondary_opts": [
+           "--no-bypass"
+          ],
+          "type": {
+           "name": "bool"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": true,
+          "help": null
+         },
+         {
+          "kind": "option",
+          "name": "lock",
+          "opts": [
+           "--lock"
+          ],
+          "secondary_opts": [
+           "--no-lock"
+          ],
+          "type": {
+           "name": "bool"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": true,
+          "help": null
+         },
+         {
+          "kind": "option",
+          "name": "viewer",
+          "opts": [
+           "--viewer"
+          ],
+          "secondary_opts": [
+           "--no-viewer"
+          ],
+          "type": {
+           "name": "bool"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": true,
+          "help": null
+         },
+         {
+          "kind": "option",
+          "name": "expose",
+          "opts": [
+           "--expose"
+          ],
+          "secondary_opts": [
+           "--no-expose"
+          ],
+          "type": {
+           "name": "bool"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": true,
+          "help": null
+         },
+         {
+          "kind": "option",
+          "name": "display",
+          "opts": [
+           "--display"
+          ],
+          "secondary_opts": [
+           "--no-display"
+          ],
+          "type": {
+           "name": "bool"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": true,
+          "help": null
+         },
+         {
+          "kind": "option",
+          "name": "render",
+          "opts": [
+           "--render"
+          ],
+          "secondary_opts": [
+           "--no-render"
+          ],
+          "type": {
+           "name": "bool"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": true,
+          "help": null
+         },
+         {
+          "kind": "option",
+          "name": "input",
+          "opts": [
+           "--input"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Command input as one JSON object; see td commands schema NAME."
+         },
+         {
+          "kind": "option",
+          "name": "input_file",
+          "opts": [
+           "--input-file"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+         },
+         {
+          "kind": "option",
+          "name": "no_wait",
+          "opts": [
+           "--no-wait"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "bool"
+          },
+          "default": false,
+          "required": false,
+          "is_flag": true,
+          "help": "Return the queued Request snapshot instead of waiting for its outcome."
+         },
+         {
+          "kind": "option",
+          "name": "request_id",
+          "opts": [
+           "--request-id"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+         }
+        ]
+       }
+      }
+     },
+     "hierarchy": {
+      "help": null,
+      "params": [],
+      "commands": {
+       "connections": {
+        "help": "Submit the ops.hierarchy.connections Command; full input schema: td commands schema ops.hierarchy.connections.",
+        "params": [
+         {
+          "kind": "argument",
+          "name": "operator_path",
+          "opts": [
+           "operator_path"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": null
+         },
+         {
+          "kind": "option",
+          "name": "max_connections",
+          "opts": [
+           "--max-connections"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "int"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "1-1000; default 256"
+         },
+         {
+          "kind": "option",
+          "name": "input",
+          "opts": [
+           "--input"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Command input as one JSON object; see td commands schema NAME."
+         },
+         {
+          "kind": "option",
+          "name": "input_file",
+          "opts": [
+           "--input-file"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+         },
+         {
+          "kind": "option",
+          "name": "no_wait",
+          "opts": [
+           "--no-wait"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "bool"
+          },
+          "default": false,
+          "required": false,
+          "is_flag": true,
+          "help": "Return the queued Request snapshot instead of waiting for its outcome."
+         },
+         {
+          "kind": "option",
+          "name": "request_id",
+          "opts": [
+           "--request-id"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+         }
+        ]
+       },
+       "connect": {
+        "help": "Submit the ops.hierarchy.connect Command; full input schema: td commands schema ops.hierarchy.connect.",
+        "params": [
+         {
+          "kind": "argument",
+          "name": "source_path",
+          "opts": [
+           "source_path"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": null
+         },
+         {
+          "kind": "argument",
+          "name": "target_path",
+          "opts": [
+           "target_path"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": null
+         },
+         {
+          "kind": "option",
+          "name": "output_index",
+          "opts": [
+           "--output-index"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "int"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "0-255; default 0"
+         },
+         {
+          "kind": "option",
+          "name": "input_index",
+          "opts": [
+           "--input-index"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "int"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "0-255; default 0"
+         },
+         {
+          "kind": "option",
+          "name": "replace",
+          "opts": [
+           "--replace"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "bool"
+          },
+          "default": false,
+          "required": false,
+          "is_flag": true,
+          "help": "default false"
+         },
+         {
+          "kind": "option",
+          "name": "input",
+          "opts": [
+           "--input"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Command input as one JSON object; see td commands schema NAME."
+         },
+         {
+          "kind": "option",
+          "name": "input_file",
+          "opts": [
+           "--input-file"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+         },
+         {
+          "kind": "option",
+          "name": "no_wait",
+          "opts": [
+           "--no-wait"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "bool"
+          },
+          "default": false,
+          "required": false,
+          "is_flag": true,
+          "help": "Return the queued Request snapshot instead of waiting for its outcome."
+         },
+         {
+          "kind": "option",
+          "name": "request_id",
+          "opts": [
+           "--request-id"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+         }
+        ]
+       },
+       "disconnect": {
+        "help": "Submit the ops.hierarchy.disconnect Command; full input schema: td commands schema ops.hierarchy.disconnect.",
+        "params": [
+         {
+          "kind": "argument",
+          "name": "source_path",
+          "opts": [
+           "source_path"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": null
+         },
+         {
+          "kind": "argument",
+          "name": "target_path",
+          "opts": [
+           "target_path"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": null
+         },
+         {
+          "kind": "option",
+          "name": "output_index",
+          "opts": [
+           "--output-index"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "int"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "0-255; default 0"
+         },
+         {
+          "kind": "option",
+          "name": "input_index",
+          "opts": [
+           "--input-index"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "int"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "0-255; default 0"
+         },
+         {
+          "kind": "option",
+          "name": "input",
+          "opts": [
+           "--input"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Command input as one JSON object; see td commands schema NAME."
+         },
+         {
+          "kind": "option",
+          "name": "input_file",
+          "opts": [
+           "--input-file"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+         },
+         {
+          "kind": "option",
+          "name": "no_wait",
+          "opts": [
+           "--no-wait"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "bool"
+          },
+          "default": false,
+          "required": false,
+          "is_flag": true,
+          "help": "Return the queued Request snapshot instead of waiting for its outcome."
+         },
+         {
+          "kind": "option",
+          "name": "request_id",
+          "opts": [
+           "--request-id"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+         }
+        ]
+       }
+      }
+     },
+     "tox": {
+      "help": null,
+      "params": [],
+      "commands": {
+       "import": {
+        "help": "Submit the ops.tox.import Command; full input schema: td commands schema ops.tox.import.",
+        "params": [
+         {
+          "kind": "argument",
+          "name": "parent_path",
+          "opts": [
+           "parent_path"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": null
+         },
+         {
+          "kind": "argument",
+          "name": "tox_path",
+          "opts": [
+           "tox_path"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": null
+         },
+         {
+          "kind": "argument",
+          "name": "allowlist_root",
+          "opts": [
+           "allowlist_root"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": null
+         },
+         {
+          "kind": "argument",
+          "name": "target_name",
+          "opts": [
+           "target_name"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": null
+         },
+         {
+          "kind": "option",
+          "name": "trusted",
+          "opts": [
+           "--trusted"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "bool"
+          },
+          "default": false,
+          "required": false,
+          "is_flag": true,
+          "help": "Required: confirm the .tox and its scripts are trusted."
+         },
+         {
+          "kind": "option",
+          "name": "replace",
+          "opts": [
+           "--replace"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "bool"
+          },
+          "default": false,
+          "required": false,
+          "is_flag": true,
+          "help": "default false"
+         },
+         {
+          "kind": "option",
+          "name": "max_file_bytes",
+          "opts": [
+           "--max-file-bytes"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "int"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "1-67108864; default 67108864"
+         },
+         {
+          "kind": "option",
+          "name": "max_operators",
+          "opts": [
+           "--max-operators"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "int"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "1-10000; default 256"
+         },
+         {
+          "kind": "option",
+          "name": "root_child",
+          "opts": [
+           "--root-child"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Install this same-named COMP inside the TOX root, as Palette does."
+         },
+         {
+          "kind": "option",
+          "name": "inventory",
+          "opts": [
+           "--inventory"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "summary: report a digest and type counts instead of every Operator; one of full|summary; default \"full\""
+         },
+         {
+          "kind": "option",
+          "name": "input",
+          "opts": [
+           "--input"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Command input as one JSON object; see td commands schema NAME."
+         },
+         {
+          "kind": "option",
+          "name": "input_file",
+          "opts": [
+           "--input-file"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+         },
+         {
+          "kind": "option",
+          "name": "no_wait",
+          "opts": [
+           "--no-wait"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "bool"
+          },
+          "default": false,
+          "required": false,
+          "is_flag": true,
+          "help": "Return the queued Request snapshot instead of waiting for its outcome."
+         },
+         {
+          "kind": "option",
+          "name": "request_id",
+          "opts": [
+           "--request-id"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+         }
+        ]
+       }
+      }
+     }
+    }
+   },
+   "dat": {
+    "help": null,
+    "params": [],
+    "commands": {
+     "text": {
+      "help": null,
+      "params": [],
+      "commands": {
+       "get": {
+        "help": "Submit the dat.text.get Command; full input schema: td commands schema dat.text.get.",
+        "params": [
+         {
+          "kind": "argument",
+          "name": "operator_path",
+          "opts": [
+           "operator_path"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": null
+         },
+         {
+          "kind": "option",
+          "name": "max_bytes",
+          "opts": [
+           "--max-bytes"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "int"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "1-32768; default 32768"
+         },
+         {
+          "kind": "option",
+          "name": "offset",
+          "opts": [
+           "--offset"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "int"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "UTF-8 byte offset; read one chunk of at most max_bytes and its next_offset; at least 0"
+         },
+         {
+          "kind": "option",
+          "name": "input",
+          "opts": [
+           "--input"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Command input as one JSON object; see td commands schema NAME."
+         },
+         {
+          "kind": "option",
+          "name": "input_file",
+          "opts": [
+           "--input-file"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+         },
+         {
+          "kind": "option",
+          "name": "no_wait",
+          "opts": [
+           "--no-wait"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "bool"
+          },
+          "default": false,
+          "required": false,
+          "is_flag": true,
+          "help": "Return the queued Request snapshot instead of waiting for its outcome."
+         },
+         {
+          "kind": "option",
+          "name": "request_id",
+          "opts": [
+           "--request-id"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+         }
+        ]
+       },
+       "set": {
+        "help": "Submit the dat.text.set Command; full input schema: td commands schema dat.text.set.",
+        "params": [
+         {
+          "kind": "argument",
+          "name": "operator_path",
+          "opts": [
+           "operator_path"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": null
+         },
+         {
+          "kind": "argument",
+          "name": "text",
+          "opts": [
+           "text"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": null
+         },
+         {
+          "kind": "option",
+          "name": "input",
+          "opts": [
+           "--input"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Command input as one JSON object; see td commands schema NAME."
+         },
+         {
+          "kind": "option",
+          "name": "input_file",
+          "opts": [
+           "--input-file"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+         },
+         {
+          "kind": "option",
+          "name": "no_wait",
+          "opts": [
+           "--no-wait"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "bool"
+          },
+          "default": false,
+          "required": false,
+          "is_flag": true,
+          "help": "Return the queued Request snapshot instead of waiting for its outcome."
+         },
+         {
+          "kind": "option",
+          "name": "request_id",
+          "opts": [
+           "--request-id"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+         }
+        ]
+       }
+      }
+     },
+     "table": {
+      "help": null,
+      "params": [],
+      "commands": {
+       "get": {
+        "help": "Submit the dat.table.get Command; full input schema: td commands schema dat.table.get.",
+        "params": [
+         {
+          "kind": "argument",
+          "name": "operator_path",
+          "opts": [
+           "operator_path"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": null
+         },
+         {
+          "kind": "option",
+          "name": "row_offset",
+          "opts": [
+           "--row-offset"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "int"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "0-255; default 0"
+         },
+         {
+          "kind": "option",
+          "name": "column_offset",
+          "opts": [
+           "--column-offset"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "int"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "0-255; default 0"
+         },
+         {
+          "kind": "option",
+          "name": "row_count",
+          "opts": [
+           "--row-count"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "int"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "1-256; default 64"
+         },
+         {
+          "kind": "option",
+          "name": "column_count",
+          "opts": [
+           "--column-count"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "int"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "1-256; default 64"
+         },
+         {
+          "kind": "option",
+          "name": "max_bytes",
+          "opts": [
+           "--max-bytes"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "int"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "1-32768; default 32768"
+         },
+         {
+          "kind": "option",
+          "name": "input",
+          "opts": [
+           "--input"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Command input as one JSON object; see td commands schema NAME."
+         },
+         {
+          "kind": "option",
+          "name": "input_file",
+          "opts": [
+           "--input-file"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+         },
+         {
+          "kind": "option",
+          "name": "no_wait",
+          "opts": [
+           "--no-wait"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "bool"
+          },
+          "default": false,
+          "required": false,
+          "is_flag": true,
+          "help": "Return the queued Request snapshot instead of waiting for its outcome."
+         },
+         {
+          "kind": "option",
+          "name": "request_id",
+          "opts": [
+           "--request-id"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+         }
+        ]
+       },
+       "replace": {
+        "help": "Submit the dat.table.replace Command; full input schema: td commands schema dat.table.replace.",
+        "params": [
+         {
+          "kind": "argument",
+          "name": "operator_path",
+          "opts": [
+           "operator_path"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": null
+         },
+         {
+          "kind": "argument",
+          "name": "rows",
+          "opts": [
+           "rows"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": null
+         },
+         {
+          "kind": "option",
+          "name": "input",
+          "opts": [
+           "--input"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Command input as one JSON object; see td commands schema NAME."
+         },
+         {
+          "kind": "option",
+          "name": "input_file",
+          "opts": [
+           "--input-file"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+         },
+         {
+          "kind": "option",
+          "name": "no_wait",
+          "opts": [
+           "--no-wait"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "bool"
+          },
+          "default": false,
+          "required": false,
+          "is_flag": true,
+          "help": "Return the queued Request snapshot instead of waiting for its outcome."
+         },
+         {
+          "kind": "option",
+          "name": "request_id",
+          "opts": [
+           "--request-id"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+         }
+        ]
+       },
+       "patch": {
+        "help": "Submit the dat.table.patch Command; full input schema: td commands schema dat.table.patch.",
+        "params": [
+         {
+          "kind": "argument",
+          "name": "operator_path",
+          "opts": [
+           "operator_path"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": null
+         },
+         {
+          "kind": "argument",
+          "name": "rows",
+          "opts": [
+           "rows"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": null
+         },
+         {
+          "kind": "option",
+          "name": "row_offset",
+          "opts": [
+           "--row-offset"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "int"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "0-255; default 0"
+         },
+         {
+          "kind": "option",
+          "name": "column_offset",
+          "opts": [
+           "--column-offset"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "int"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "0-255; default 0"
+         },
+         {
+          "kind": "option",
+          "name": "input",
+          "opts": [
+           "--input"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Command input as one JSON object; see td commands schema NAME."
+         },
+         {
+          "kind": "option",
+          "name": "input_file",
+          "opts": [
+           "--input-file"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+         },
+         {
+          "kind": "option",
+          "name": "no_wait",
+          "opts": [
+           "--no-wait"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "bool"
+          },
+          "default": false,
+          "required": false,
+          "is_flag": true,
+          "help": "Return the queued Request snapshot instead of waiting for its outcome."
+         },
+         {
+          "kind": "option",
+          "name": "request_id",
+          "opts": [
+           "--request-id"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+         }
+        ]
+       }
+      }
+     }
+    }
+   },
+   "chop": {
+    "help": null,
+    "params": [],
+    "commands": {
+     "values": {
+      "help": null,
+      "params": [],
+      "commands": {
+       "get": {
+        "help": "Submit the chop.values.get Command; full input schema: td commands schema chop.values.get.",
+        "params": [
+         {
+          "kind": "argument",
+          "name": "operator_path",
+          "opts": [
+           "operator_path"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": null
+         },
+         {
+          "kind": "option",
+          "name": "channels",
+          "opts": [
+           "--channels"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Comma-separated channel names to read."
+         },
+         {
+          "kind": "option",
+          "name": "sample_offset",
+          "opts": [
+           "--sample-offset"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "int"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "First sample index; with sample_count reads a range instead of current values; at least 0"
+         },
+         {
+          "kind": "option",
+          "name": "sample_count",
+          "opts": [
+           "--sample-count"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "int"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "1-4096"
+         },
+         {
+          "kind": "option",
+          "name": "input",
+          "opts": [
+           "--input"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Command input as one JSON object; see td commands schema NAME."
+         },
+         {
+          "kind": "option",
+          "name": "input_file",
+          "opts": [
+           "--input-file"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+         },
+         {
+          "kind": "option",
+          "name": "no_wait",
+          "opts": [
+           "--no-wait"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "bool"
+          },
+          "default": false,
+          "required": false,
+          "is_flag": true,
+          "help": "Return the queued Request snapshot instead of waiting for its outcome."
+         },
+         {
+          "kind": "option",
+          "name": "request_id",
+          "opts": [
+           "--request-id"
+          ],
+          "secondary_opts": [],
+          "type": {
+           "name": "string"
+          },
+          "default": null,
+          "required": false,
+          "is_flag": false,
+          "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+         }
+        ]
+       }
+      }
+     }
+    }
+   },
+   "parameters": {
+    "help": null,
+    "params": [],
+    "commands": {
+     "get": {
+      "help": "Submit the parameters.get Command; full input schema: td commands schema parameters.get.",
+      "params": [
+       {
+        "kind": "argument",
+        "name": "operator_path",
+        "opts": [
+         "operator_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "argument",
+        "name": "parameter",
+        "opts": [
+         "parameter"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "input",
+        "opts": [
+         "--input"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Command input as one JSON object; see td commands schema NAME."
+       },
+       {
+        "kind": "option",
+        "name": "input_file",
+        "opts": [
+         "--input-file"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+       },
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Return the queued Request snapshot instead of waiting for its outcome."
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+       }
+      ]
+     },
+     "list": {
+      "help": "Submit the parameters.list Command; full input schema: td commands schema parameters.list.",
+      "params": [
+       {
+        "kind": "argument",
+        "name": "operator_path",
+        "opts": [
+         "operator_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "names",
+        "opts": [
+         "--names"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Comma-separated parameter names to list."
+       },
+       {
+        "kind": "option",
+        "name": "include_values",
+        "opts": [
+         "--include-values"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Attach each parameter's current value in the parameters.get shape; default false"
+       },
+       {
+        "kind": "option",
+        "name": "non_default_only",
+        "opts": [
+         "--non-default-only"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "List only parameters that differ from their defaults; implies values; default false"
+       },
+       {
+        "kind": "option",
+        "name": "no_menu_options",
+        "opts": [
+         "--no-menu-options"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Report menu_names and menu_labels as null."
+       },
+       {
+        "kind": "option",
+        "name": "input",
+        "opts": [
+         "--input"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Command input as one JSON object; see td commands schema NAME."
+       },
+       {
+        "kind": "option",
+        "name": "input_file",
+        "opts": [
+         "--input-file"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+       },
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Return the queued Request snapshot instead of waiting for its outcome."
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+       }
+      ]
+     },
+     "pulse": {
+      "help": "Submit the parameters.pulse Command; full input schema: td commands schema parameters.pulse.",
+      "params": [
+       {
+        "kind": "argument",
+        "name": "operator_path",
+        "opts": [
+         "operator_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "argument",
+        "name": "parameter",
+        "opts": [
+         "parameter"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "input",
+        "opts": [
+         "--input"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Command input as one JSON object; see td commands schema NAME."
+       },
+       {
+        "kind": "option",
+        "name": "input_file",
+        "opts": [
+         "--input-file"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+       },
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Return the queued Request snapshot instead of waiting for its outcome."
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+       }
+      ]
+     },
+     "set": {
+      "help": "Submit the parameters.set Command; full input schema: td commands schema parameters.set.",
+      "params": [
+       {
+        "kind": "argument",
+        "name": "operator_path",
+        "opts": [
+         "operator_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "argument",
+        "name": "parameter",
+        "opts": [
+         "parameter"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "bool_value",
+        "opts": [
+         "--bool"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Constant toggle value: true or false."
+       },
+       {
+        "kind": "option",
+        "name": "integer",
+        "opts": [
+         "--integer"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "int"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Constant integer value."
+       },
+       {
+        "kind": "option",
+        "name": "number",
+        "opts": [
+         "--number"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "float"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Constant float value."
+       },
+       {
+        "kind": "option",
+        "name": "string",
+        "opts": [
+         "--string"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Constant string or menu value."
+       },
+       {
+        "kind": "option",
+        "name": "operator_value",
+        "opts": [
+         "--operator"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Constant Operator path for an OP parameter."
+       },
+       {
+        "kind": "option",
+        "name": "operators_json",
+        "opts": [
+         "--operators-json"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "JSON array of Operator paths for a multi-OP parameter."
+       },
+       {
+        "kind": "option",
+        "name": "expression",
+        "opts": [
+         "--expression"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Set expression mode with this Python text."
+       },
+       {
+        "kind": "option",
+        "name": "export_source_operator",
+        "opts": [
+         "--export-source-operator"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Export mode: source CHOP path (with --export-channel)."
+       },
+       {
+        "kind": "option",
+        "name": "export_channel",
+        "opts": [
+         "--export-channel"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Export mode: channel name of the source CHOP."
+       },
+       {
+        "kind": "option",
+        "name": "bind_source_operator",
+        "opts": [
+         "--bind-source-operator"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Bind mode: source Operator path (with --bind-parameter)."
+       },
+       {
+        "kind": "option",
+        "name": "bind_parameter",
+        "opts": [
+         "--bind-parameter"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Bind mode: parameter name on the source Operator."
+       },
+       {
+        "kind": "option",
+        "name": "input",
+        "opts": [
+         "--input"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Command input as one JSON object; see td commands schema NAME."
+       },
+       {
+        "kind": "option",
+        "name": "input_file",
+        "opts": [
+         "--input-file"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+       },
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Return the queued Request snapshot instead of waiting for its outcome."
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+       }
+      ]
+     },
+     "page-create": {
+      "help": "Create a new COMP custom page from bounded float, toggle and menu definitions.",
+      "params": [
+       {
+        "kind": "option",
+        "name": "input",
+        "opts": [
+         "--input"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Command input as one JSON object; see td commands schema NAME."
+       },
+       {
+        "kind": "option",
+        "name": "input_file",
+        "opts": [
+         "--input-file"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+       },
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Return the queued Request snapshot instead of waiting for its outcome."
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+       }
+      ]
+     },
+     "menu-set": {
+      "help": "Replace the names and labels of an existing custom Menu, keeping its selection.",
+      "params": [
+       {
+        "kind": "argument",
+        "name": "operator_path",
+        "opts": [
+         "operator_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "argument",
+        "name": "parameter",
+        "opts": [
+         "parameter"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "names_json",
+        "opts": [
+         "--names-json"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "JSON array of menu item names."
+       },
+       {
+        "kind": "option",
+        "name": "labels_json",
+        "opts": [
+         "--labels-json"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "JSON array of labels, same length as names."
+       },
+       {
+        "kind": "option",
+        "name": "preserve",
+        "opts": [
+         "--preserve"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "index or name"
+       },
+       {
+        "kind": "option",
+        "name": "input",
+        "opts": [
+         "--input"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Command input as one JSON object; see td commands schema NAME."
+       },
+       {
+        "kind": "option",
+        "name": "input_file",
+        "opts": [
+         "--input-file"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+       },
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Return the queued Request snapshot instead of waiting for its outcome."
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+       }
+      ]
+     },
+     "sequence-get": {
+      "help": "Submit the parameters.sequence.get Command; full input schema: td commands schema parameters.sequence.get.",
+      "params": [
+       {
+        "kind": "argument",
+        "name": "operator_path",
+        "opts": [
+         "operator_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "argument",
+        "name": "sequence",
+        "opts": [
+         "sequence"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "1-256 chars"
+       },
+       {
+        "kind": "option",
+        "name": "max_blocks",
+        "opts": [
+         "--max-blocks"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "int",
+         "min": 1,
+         "max": 128
+        },
+        "default": 128,
+        "required": false,
+        "is_flag": false,
+        "help": "1-128"
+       },
+       {
+        "kind": "option",
+        "name": "max_parameters",
+        "opts": [
+         "--max-parameters"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "int",
+         "min": 1,
+         "max": 256
+        },
+        "default": 256,
+        "required": false,
+        "is_flag": false,
+        "help": "1-256"
+       },
+       {
+        "kind": "option",
+        "name": "input",
+        "opts": [
+         "--input"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Command input as one JSON object; see td commands schema NAME."
+       },
+       {
+        "kind": "option",
+        "name": "input_file",
+        "opts": [
+         "--input-file"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+       },
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Return the queued Request snapshot instead of waiting for its outcome."
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+       }
+      ]
+     },
+     "sequence-replace": {
+      "help": "Submit the parameters.sequence.replace Command; full input schema: td commands schema parameters.sequence.replace.",
+      "params": [
+       {
+        "kind": "argument",
+        "name": "operator_path",
+        "opts": [
+         "operator_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "argument",
+        "name": "sequence",
+        "opts": [
+         "sequence"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "1-256 chars"
+       },
+       {
+        "kind": "option",
+        "name": "blocks_json",
+        "opts": [
+         "--blocks-json"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "JSON array of sequence block objects."
+       },
+       {
+        "kind": "option",
+        "name": "input",
+        "opts": [
+         "--input"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Command input as one JSON object; see td commands schema NAME."
+       },
+       {
+        "kind": "option",
+        "name": "input_file",
+        "opts": [
+         "--input-file"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+       },
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Return the queued Request snapshot instead of waiting for its outcome."
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+       }
+      ]
+     }
+    }
+   },
+   "project": {
+    "help": null,
+    "params": [],
+    "commands": {
+     "metadata": {
+      "help": "Submit the project.metadata Command; full input schema: td commands schema project.metadata.",
+      "params": [
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [
+         "--no-no-wait"
+        ],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       }
+      ]
+     },
+     "snapshot": {
+      "help": "Submit the project.snapshot Command; full input schema: td commands schema project.snapshot.",
+      "params": [
+       {
+        "kind": "argument",
+        "name": "operator_path",
+        "opts": [
+         "operator_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "max_depth",
+        "opts": [
+         "--max-depth"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "int"
+        },
+        "default": 4,
+        "required": false,
+        "is_flag": false,
+        "help": "0-8"
+       },
+       {
+        "kind": "option",
+        "name": "max_operators",
+        "opts": [
+         "--max-operators"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "int"
+        },
+        "default": 256,
+        "required": false,
+        "is_flag": false,
+        "help": "1-1000"
+       },
+       {
+        "kind": "option",
+        "name": "paginate",
+        "opts": [
+         "--paginate"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Return one page of max_operators with next_cursor instead of failing; default false"
+       },
+       {
+        "kind": "option",
+        "name": "cursor",
+        "opts": [
+         "--cursor"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "next_cursor of the previous page; same root and max_depth; 1-4096 chars"
+       },
+       {
+        "kind": "option",
+        "name": "include_connections",
+        "opts": [
+         "--include-connections"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Attach each Operator's output connections; default false"
+       },
+       {
+        "kind": "option",
+        "name": "input",
+        "opts": [
+         "--input"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Command input as one JSON object; see td commands schema NAME."
+       },
+       {
+        "kind": "option",
+        "name": "input_file",
+        "opts": [
+         "--input-file"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+       },
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [
+         "--no-no-wait"
+        ],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       }
+      ]
+     },
+     "save": {
+      "help": "Submit the project.save Command; full input schema: td commands schema project.save.",
+      "params": [
+       {
+        "kind": "argument",
+        "name": "expected_path",
+        "opts": [
+         "expected_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "expected_sha256",
+        "opts": [
+         "--expected-sha256"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "SHA-256 hex of the current .toe on disk"
+       },
+       {
+        "kind": "option",
+        "name": "input",
+        "opts": [
+         "--input"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Command input as one JSON object; see td commands schema NAME."
+       },
+       {
+        "kind": "option",
+        "name": "input_file",
+        "opts": [
+         "--input-file"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+       },
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [
+         "--no-no-wait"
+        ],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       }
+      ]
+     },
+     "open": {
+      "help": "Open a saved project independently; PID returned does not mean Agent online.",
+      "params": [
+       {
+        "kind": "argument",
+        "name": "path",
+        "opts": [
+         "path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "path",
+         "exists": true,
+         "file_okay": true,
+         "dir_okay": false
+        },
+        "default": null,
+        "required": true,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "executable",
+        "opts": [
+         "--executable"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "path",
+         "exists": true,
+         "file_okay": true,
+         "dir_okay": false
+        },
+        "default": null,
+        "required": true,
+        "is_flag": false,
+        "help": null
+       }
+      ]
+     }
+    }
+   },
+   "binary": {
+    "help": null,
+    "params": [],
+    "commands": {
+     "export": {
+      "help": "Submit the binary.export Command; full input schema: td commands schema binary.export.",
+      "params": [
+       {
+        "kind": "argument",
+        "name": "operator_path",
+        "opts": [
+         "operator_path"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "format",
+        "opts": [
+         "--format"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "one of tox|png"
+       },
+       {
+        "kind": "option",
+        "name": "max_bytes",
+        "opts": [
+         "--max-bytes"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "int"
+        },
+        "default": 194560,
+        "required": false,
+        "is_flag": false,
+        "help": "1-194560"
+       },
+       {
+        "kind": "option",
+        "name": "input",
+        "opts": [
+         "--input"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Command input as one JSON object; see td commands schema NAME."
+       },
+       {
+        "kind": "option",
+        "name": "input_file",
+        "opts": [
+         "--input-file"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+       },
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [
+         "--no-no-wait"
+        ],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       }
+      ]
+     }
+    }
+   },
+   "batch": {
+    "help": null,
+    "params": [],
+    "commands": {
+     "execute": {
+      "help": "Run 1-16 read-only Commands in one Request. For ordered mutations use commands execute (1-256 Requests); td commands schema batch.execute.",
+      "params": [
+       {
+        "kind": "option",
+        "name": "input",
+        "opts": [
+         "--input"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Command input as one JSON object; see td commands schema NAME."
+       },
+       {
+        "kind": "option",
+        "name": "input_file",
+        "opts": [
+         "--input-file"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Read the JSON input object from a UTF-8 file, or - for stdin."
+       },
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Return the queued Request snapshot instead of waiting for its outcome."
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+       }
+      ]
+     }
+    }
+   },
+   "events": {
+    "help": null,
+    "params": [],
+    "commands": {
+     "read": {
+      "help": "Submit the events.read Command; full input schema: td commands schema events.read.",
+      "params": [
+       {
+        "kind": "option",
+        "name": "after",
+        "opts": [
+         "--after"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "int"
+        },
+        "default": 0,
+        "required": false,
+        "is_flag": false,
+        "help": "at least 0"
+       },
+       {
+        "kind": "option",
+        "name": "limit",
+        "opts": [
+         "--limit"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "int"
+        },
+        "default": 100,
+        "required": false,
+        "is_flag": false,
+        "help": "1-200"
+       },
+       {
+        "kind": "option",
+        "name": "include_errors",
+        "opts": [
+         "--include-errors"
+        ],
+        "secondary_opts": [
+         "--no-include-errors"
+        ],
+        "type": {
+         "name": "bool"
+        },
+        "default": true,
+        "required": false,
+        "is_flag": true,
+        "help": null
+       },
+       {
+        "kind": "option",
+        "name": "no_wait",
+        "opts": [
+         "--no-wait"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Return the queued Request snapshot instead of waiting for its outcome."
+       },
+       {
+        "kind": "option",
+        "name": "request_id",
+        "opts": [
+         "--request-id"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": "Client-chosen Request ID (UUID); default is a new UUIDv7."
+       }
+      ]
+     }
+    }
+   },
+   "commands": {
+    "help": null,
+    "params": [],
+    "commands": {
+     "execute": {
+      "help": "Run 1\u2013256 typed Commands in order; JSONL progress, stop on first failure.",
+      "params": [
+       {
+        "kind": "option",
+        "name": "input_file",
+        "opts": [
+         "--input-file"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "path",
+         "exists": false,
+         "file_okay": true,
+         "dir_okay": true
+        },
+        "default": null,
+        "required": true,
+        "is_flag": false,
+        "help": "JSON plan {\"commands\":[{\"name\",\"input\"}]}, at most 1 MiB."
+       }
+      ]
+     },
+     "schema": {
+      "help": "List Command names, or print one Command's input JSON Schema without a Daemon.",
+      "params": [
+       {
+        "kind": "argument",
+        "name": "name",
+        "opts": [
+         "name"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "string"
+        },
+        "default": null,
+        "required": false,
+        "is_flag": false,
+        "help": null
+       }
+      ]
+     }
+    }
+   }
+  }
+ },
+ "commands": {
+  "ops.get": {
+   "effect": "read_only",
+   "batchable": true,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     }
+    },
+    "required": [
+     "operator_path"
+    ],
+    "title": "OperatorInput",
+    "type": "object"
+   }
+  },
+  "ops.inspect": {
+   "effect": "read_only",
+   "batchable": true,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     },
+     "max_items": {
+      "default": 100,
+      "maximum": 1000,
+      "minimum": 1,
+      "title": "Max Items",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "operator_path"
+    ],
+    "title": "InspectOperatorInput",
+    "type": "object"
+   }
+  },
+  "ops.children": {
+   "effect": "read_only",
+   "batchable": true,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     },
+     "op_type": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Op Type"
+     }
+    },
+    "required": [
+     "operator_path"
+    ],
+    "title": "ChildrenInput",
+    "type": "object"
+   }
+  },
+  "ops.connections": {
+   "effect": "read_only",
+   "batchable": true,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     },
+     "max_connections": {
+      "default": 256,
+      "maximum": 1000,
+      "minimum": 1,
+      "title": "Max Connections",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "operator_path"
+    ],
+    "title": "ConnectionsInput",
+    "type": "object"
+   }
+  },
+  "ops.hierarchy.connections": {
+   "effect": "read_only",
+   "batchable": true,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     },
+     "max_connections": {
+      "default": 256,
+      "maximum": 1000,
+      "minimum": 1,
+      "title": "Max Connections",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "operator_path"
+    ],
+    "title": "ConnectionsInput",
+    "type": "object"
+   }
+  },
+  "ops.state.get": {
+   "effect": "read_only",
+   "batchable": true,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     }
+    },
+    "required": [
+     "operator_path"
+    ],
+    "title": "OperatorInput",
+    "type": "object"
+   }
+  },
+  "ops.state.set": {
+   "effect": "mutation",
+   "batchable": false,
+   "input_schema": {
+    "$defs": {
+     "OperatorColorInput": {
+      "additionalProperties": false,
+      "properties": {
+       "red": {
+        "maximum": 1,
+        "minimum": 0,
+        "title": "Red",
+        "type": "number"
+       },
+       "green": {
+        "maximum": 1,
+        "minimum": 0,
+        "title": "Green",
+        "type": "number"
+       },
+       "blue": {
+        "maximum": 1,
+        "minimum": 0,
+        "title": "Blue",
+        "type": "number"
+       }
+      },
+      "required": [
+       "red",
+       "green",
+       "blue"
+      ],
+      "title": "OperatorColorInput",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "properties": {
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     },
+     "node_x": {
+      "anyOf": [
+       {
+        "maximum": 32767,
+        "minimum": -32768,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Node X"
+     },
+     "node_y": {
+      "anyOf": [
+       {
+        "maximum": 32767,
+        "minimum": -32768,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Node Y"
+     },
+     "node_width": {
+      "anyOf": [
+       {
+        "maximum": 32767,
+        "minimum": 1,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Node Width"
+     },
+     "node_height": {
+      "anyOf": [
+       {
+        "maximum": 32767,
+        "minimum": 1,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Node Height"
+     },
+     "color": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/OperatorColorInput"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "comment": {
+      "anyOf": [
+       {
+        "maxLength": 4096,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Comment"
+     },
+     "bypass": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Bypass"
+     },
+     "viewer": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Viewer"
+     },
+     "expose": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Expose"
+     },
+     "lock": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Lock"
+     },
+     "display": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Display"
+     },
+     "render": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Render"
+     }
+    },
+    "required": [
+     "operator_path"
+    ],
+    "title": "SetOperatorStateInput",
+    "type": "object"
+   }
+  },
+  "dat.text.get": {
+   "effect": "read_only",
+   "batchable": true,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     },
+     "max_bytes": {
+      "default": 32768,
+      "maximum": 32768,
+      "minimum": 1,
+      "title": "Max Bytes",
+      "type": "integer"
+     },
+     "offset": {
+      "anyOf": [
+       {
+        "minimum": 0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "UTF-8 byte offset; read one chunk of at most max_bytes and its next_offset.",
+      "title": "Offset"
+     }
+    },
+    "required": [
+     "operator_path"
+    ],
+    "title": "TextDatReadInput",
+    "type": "object"
+   }
+  },
+  "chop.values.get": {
+   "effect": "read_only",
+   "batchable": true,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     },
+     "channels": {
+      "anyOf": [
+       {
+        "items": {
+         "maxLength": 256,
+         "minLength": 1,
+         "type": "string"
+        },
+        "maxItems": 4096,
+        "minItems": 1,
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Read only these channel names.",
+      "title": "Channels"
+     },
+     "sample_offset": {
+      "anyOf": [
+       {
+        "minimum": 0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "First sample index; with sample_count reads a range instead of current values.",
+      "title": "Sample Offset"
+     },
+     "sample_count": {
+      "anyOf": [
+       {
+        "maximum": 4096,
+        "minimum": 1,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Sample Count"
+     }
+    },
+    "required": [
+     "operator_path"
+    ],
+    "title": "ChopValuesInput",
+    "type": "object"
+   }
+  },
+  "dat.text.set": {
+   "effect": "mutation",
+   "batchable": false,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     },
+     "text": {
+      "title": "Text",
+      "type": "string"
+     }
+    },
+    "required": [
+     "operator_path",
+     "text"
+    ],
+    "title": "TextDatSetInput",
+    "type": "object"
+   }
+  },
+  "dat.table.get": {
+   "effect": "read_only",
+   "batchable": true,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     },
+     "row_offset": {
+      "default": 0,
+      "maximum": 255,
+      "minimum": 0,
+      "title": "Row Offset",
+      "type": "integer"
+     },
+     "column_offset": {
+      "default": 0,
+      "maximum": 255,
+      "minimum": 0,
+      "title": "Column Offset",
+      "type": "integer"
+     },
+     "row_count": {
+      "default": 64,
+      "maximum": 256,
+      "minimum": 1,
+      "title": "Row Count",
+      "type": "integer"
+     },
+     "column_count": {
+      "default": 64,
+      "maximum": 256,
+      "minimum": 1,
+      "title": "Column Count",
+      "type": "integer"
+     },
+     "max_bytes": {
+      "default": 32768,
+      "maximum": 32768,
+      "minimum": 1,
+      "title": "Max Bytes",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "operator_path"
+    ],
+    "title": "TableDatReadInput",
+    "type": "object"
+   }
+  },
+  "dat.table.replace": {
+   "effect": "mutation",
+   "batchable": false,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     },
+     "rows": {
+      "items": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "title": "Rows",
+      "type": "array"
+     }
+    },
+    "required": [
+     "operator_path",
+     "rows"
+    ],
+    "title": "TableDatReplaceInput",
+    "type": "object"
+   }
+  },
+  "dat.table.patch": {
+   "effect": "mutation",
+   "batchable": false,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     },
+     "row_offset": {
+      "default": 0,
+      "maximum": 255,
+      "minimum": 0,
+      "title": "Row Offset",
+      "type": "integer"
+     },
+     "column_offset": {
+      "default": 0,
+      "maximum": 255,
+      "minimum": 0,
+      "title": "Column Offset",
+      "type": "integer"
+     },
+     "rows": {
+      "items": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "title": "Rows",
+      "type": "array"
+     }
+    },
+    "required": [
+     "operator_path",
+     "rows"
+    ],
+    "title": "TableDatPatchInput",
+    "type": "object"
+   }
+  },
+  "parameters.get": {
+   "effect": "read_only",
+   "batchable": true,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     },
+     "parameter": {
+      "title": "Parameter",
+      "type": "string"
+     }
+    },
+    "required": [
+     "operator_path",
+     "parameter"
+    ],
+    "title": "ParameterInput",
+    "type": "object"
+   }
+  },
+  "parameters.page.create": {
+   "effect": "mutation",
+   "batchable": false,
+   "input_schema": {
+    "$defs": {
+     "CustomFloatDefinition": {
+      "additionalProperties": false,
+      "properties": {
+       "name": {
+        "pattern": "^[A-Z][a-z0-9]{0,31}$",
+        "title": "Name",
+        "type": "string"
+       },
+       "label": {
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Label",
+        "type": "string"
+       },
+       "kind": {
+        "const": "float",
+        "title": "Kind",
+        "type": "string"
+       },
+       "default": {
+        "type": "number",
+        "title": "Default"
+       },
+       "minimum": {
+        "title": "Minimum",
+        "type": "number"
+       },
+       "maximum": {
+        "title": "Maximum",
+        "type": "number"
+       }
+      },
+      "required": [
+       "name",
+       "label",
+       "kind",
+       "default",
+       "minimum",
+       "maximum"
+      ],
+      "title": "CustomFloatDefinition",
+      "type": "object"
+     },
+     "CustomMenuDefinition": {
+      "additionalProperties": false,
+      "properties": {
+       "name": {
+        "pattern": "^[A-Z][a-z0-9]{0,31}$",
+        "title": "Name",
+        "type": "string"
+       },
+       "label": {
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Label",
+        "type": "string"
+       },
+       "kind": {
+        "const": "menu",
+        "title": "Kind",
+        "type": "string"
+       },
+       "default": {
+        "type": "string",
+        "title": "Default"
+       },
+       "menu_names": {
+        "items": {
+         "type": "string"
+        },
+        "maxItems": 256,
+        "minItems": 1,
+        "title": "Menu Names",
+        "type": "array"
+       },
+       "menu_labels": {
+        "items": {
+         "type": "string"
+        },
+        "maxItems": 256,
+        "minItems": 1,
+        "title": "Menu Labels",
+        "type": "array"
+       }
+      },
+      "required": [
+       "name",
+       "label",
+       "kind",
+       "default",
+       "menu_names",
+       "menu_labels"
+      ],
+      "title": "CustomMenuDefinition",
+      "type": "object"
+     },
+     "CustomToggleDefinition": {
+      "additionalProperties": false,
+      "properties": {
+       "name": {
+        "pattern": "^[A-Z][a-z0-9]{0,31}$",
+        "title": "Name",
+        "type": "string"
+       },
+       "label": {
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Label",
+        "type": "string"
+       },
+       "kind": {
+        "const": "toggle",
+        "title": "Kind",
+        "type": "string"
+       },
+       "default": {
+        "type": "boolean",
+        "title": "Default"
+       }
+      },
+      "required": [
+       "name",
+       "label",
+       "kind",
+       "default"
+      ],
+      "title": "CustomToggleDefinition",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "properties": {
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     },
+     "page": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[A-Za-z][A-Za-z0-9 ]*$",
+      "title": "Page",
+      "type": "string"
+     },
+     "parameters": {
+      "items": {
+       "discriminator": {
+        "mapping": {
+         "float": "#/$defs/CustomFloatDefinition",
+         "menu": "#/$defs/CustomMenuDefinition",
+         "toggle": "#/$defs/CustomToggleDefinition"
+        },
+        "propertyName": "kind"
+       },
+       "oneOf": [
+        {
+         "$ref": "#/$defs/CustomFloatDefinition"
+        },
+        {
+         "$ref": "#/$defs/CustomToggleDefinition"
+        },
+        {
+         "$ref": "#/$defs/CustomMenuDefinition"
+        }
+       ]
+      },
+      "maxItems": 32,
+      "minItems": 1,
+      "title": "Parameters",
+      "type": "array"
+     }
+    },
+    "required": [
+     "operator_path",
+     "page",
+     "parameters"
+    ],
+    "title": "CreateParameterPageInput",
+    "type": "object"
+   }
+  },
+  "parameters.list": {
+   "effect": "read_only",
+   "batchable": true,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     },
+     "names": {
+      "anyOf": [
+       {
+        "items": {
+         "maxLength": 256,
+         "minLength": 1,
+         "type": "string"
+        },
+        "maxItems": 256,
+        "minItems": 1,
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "List only these parameters, by exact name.",
+      "title": "Names"
+     },
+     "include_values": {
+      "default": false,
+      "description": "Attach each parameter's current value in the parameters.get shape.",
+      "title": "Include Values",
+      "type": "boolean"
+     },
+     "non_default_only": {
+      "default": false,
+      "description": "List only parameters that differ from their defaults; implies values.",
+      "title": "Non Default Only",
+      "type": "boolean"
+     },
+     "include_menu_options": {
+      "default": true,
+      "description": "Include menu_names and menu_labels; false reports them as null.",
+      "title": "Include Menu Options",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "operator_path"
+    ],
+    "title": "ParameterListInput",
+    "type": "object"
+   }
+  },
+  "parameters.set": {
+   "effect": "mutation",
+   "batchable": false,
+   "input_schema": {
+    "$defs": {
+     "ParameterSourceInput": {
+      "additionalProperties": false,
+      "properties": {
+       "kind": {
+        "enum": [
+         "export_channel",
+         "bind_parameter"
+        ],
+        "title": "Kind",
+        "type": "string"
+       },
+       "operator_path": {
+        "title": "Operator Path",
+        "type": "string"
+       },
+       "channel": {
+        "anyOf": [
+         {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Channel"
+       },
+       "parameter": {
+        "anyOf": [
+         {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Parameter"
+       }
+      },
+      "required": [
+       "kind",
+       "operator_path"
+      ],
+      "title": "ParameterSourceInput",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "properties": {
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     },
+     "parameter": {
+      "title": "Parameter",
+      "type": "string"
+     },
+     "mode": {
+      "enum": [
+       "constant",
+       "expression",
+       "export",
+       "bind"
+      ],
+      "title": "Mode",
+      "type": "string"
+     },
+     "value": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "number"
+       },
+       {
+        "type": "string"
+       },
+       {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Value"
+     },
+     "source": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/ParameterSourceInput"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     }
+    },
+    "required": [
+     "operator_path",
+     "parameter",
+     "mode"
+    ],
+    "title": "SetParameterInput",
+    "type": "object"
+   }
+  },
+  "parameters.menu.set": {
+   "effect": "mutation",
+   "batchable": false,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     },
+     "parameter": {
+      "title": "Parameter",
+      "type": "string"
+     },
+     "menu_names": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "title": "Menu Names",
+      "type": "array"
+     },
+     "menu_labels": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "title": "Menu Labels",
+      "type": "array"
+     },
+     "preserve": {
+      "enum": [
+       "index",
+       "name"
+      ],
+      "title": "Preserve",
+      "type": "string"
+     }
+    },
+    "required": [
+     "operator_path",
+     "parameter",
+     "menu_names",
+     "menu_labels",
+     "preserve"
+    ],
+    "title": "SetMenuOptionsInput",
+    "type": "object"
+   }
+  },
+  "parameters.pulse": {
+   "effect": "mutation",
+   "batchable": false,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     },
+     "parameter": {
+      "title": "Parameter",
+      "type": "string"
+     }
+    },
+    "required": [
+     "operator_path",
+     "parameter"
+    ],
+    "title": "ParameterInput",
+    "type": "object"
+   }
+  },
+  "parameters.sequence.get": {
+   "effect": "read_only",
+   "batchable": true,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     },
+     "sequence": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Sequence",
+      "type": "string"
+     },
+     "max_blocks": {
+      "default": 128,
+      "maximum": 128,
+      "minimum": 1,
+      "title": "Max Blocks",
+      "type": "integer"
+     },
+     "max_parameters": {
+      "default": 256,
+      "maximum": 256,
+      "minimum": 1,
+      "title": "Max Parameters",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "operator_path",
+     "sequence"
+    ],
+    "title": "SequenceInput",
+    "type": "object"
+   }
+  },
+  "parameters.sequence.replace": {
+   "effect": "mutation",
+   "batchable": false,
+   "input_schema": {
+    "$defs": {
+     "ParameterSourceInput": {
+      "additionalProperties": false,
+      "properties": {
+       "kind": {
+        "enum": [
+         "export_channel",
+         "bind_parameter"
+        ],
+        "title": "Kind",
+        "type": "string"
+       },
+       "operator_path": {
+        "title": "Operator Path",
+        "type": "string"
+       },
+       "channel": {
+        "anyOf": [
+         {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Channel"
+       },
+       "parameter": {
+        "anyOf": [
+         {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Parameter"
+       }
+      },
+      "required": [
+       "kind",
+       "operator_path"
+      ],
+      "title": "ParameterSourceInput",
+      "type": "object"
+     },
+     "SequenceBlockWrite": {
+      "additionalProperties": false,
+      "properties": {
+       "name": {
+        "anyOf": [
+         {
+          "maxLength": 256,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Name"
+       },
+       "parameters": {
+        "items": {
+         "$ref": "#/$defs/SequenceParameterWrite"
+        },
+        "maxItems": 256,
+        "title": "Parameters",
+        "type": "array"
+       }
+      },
+      "required": [
+       "parameters"
+      ],
+      "title": "SequenceBlockWrite",
+      "type": "object"
+     },
+     "SequenceParameterWrite": {
+      "additionalProperties": false,
+      "properties": {
+       "parameter": {
+        "maxLength": 256,
+        "minLength": 1,
+        "title": "Parameter",
+        "type": "string"
+       },
+       "mode": {
+        "enum": [
+         "constant",
+         "expression",
+         "export",
+         "bind"
+        ],
+        "title": "Mode",
+        "type": "string"
+       },
+       "value": {
+        "anyOf": [
+         {
+          "type": "boolean"
+         },
+         {
+          "type": "integer"
+         },
+         {
+          "type": "number"
+         },
+         {
+          "type": "string"
+         },
+         {
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Value"
+       },
+       "source": {
+        "anyOf": [
+         {
+          "$ref": "#/$defs/ParameterSourceInput"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null
+       }
+      },
+      "required": [
+       "parameter",
+       "mode"
+      ],
+      "title": "SequenceParameterWrite",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "properties": {
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     },
+     "sequence": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Sequence",
+      "type": "string"
+     },
+     "max_blocks": {
+      "default": 128,
+      "maximum": 128,
+      "minimum": 1,
+      "title": "Max Blocks",
+      "type": "integer"
+     },
+     "max_parameters": {
+      "default": 256,
+      "maximum": 256,
+      "minimum": 1,
+      "title": "Max Parameters",
+      "type": "integer"
+     },
+     "blocks": {
+      "items": {
+       "$ref": "#/$defs/SequenceBlockWrite"
+      },
+      "maxItems": 128,
+      "title": "Blocks",
+      "type": "array"
+     }
+    },
+    "required": [
+     "operator_path",
+     "sequence",
+     "blocks"
+    ],
+    "title": "ReplaceSequenceInput",
+    "type": "object"
+   }
+  },
+  "ops.create": {
+   "effect": "mutation",
+   "batchable": false,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "parent_path": {
+      "title": "Parent Path",
+      "type": "string"
+     },
+     "op_type": {
+      "title": "Op Type",
+      "type": "string"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "node_x": {
+      "default": 0,
+      "maximum": 32767,
+      "minimum": -32768,
+      "title": "Node X",
+      "type": "integer"
+     },
+     "node_y": {
+      "default": 0,
+      "maximum": 32767,
+      "minimum": -32768,
+      "title": "Node Y",
+      "type": "integer"
+     },
+     "allow_conditional": {
+      "default": false,
+      "title": "Allow Conditional",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "parent_path",
+     "op_type",
+     "name"
+    ],
+    "title": "CreateOperatorInput",
+    "type": "object"
+   }
+  },
+  "ops.rename": {
+   "effect": "mutation",
+   "batchable": false,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     },
+     "new_name": {
+      "title": "New Name",
+      "type": "string"
+     }
+    },
+    "required": [
+     "operator_path",
+     "new_name"
+    ],
+    "title": "RenameOperatorInput",
+    "type": "object"
+   }
+  },
+  "ops.destroy": {
+   "effect": "mutation",
+   "batchable": false,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "max_operators": {
+      "default": 256,
+      "maximum": 10000,
+      "minimum": 1,
+      "title": "Max Operators",
+      "type": "integer"
+     },
+     "inventory": {
+      "default": "full",
+      "description": "summary: report a digest and type counts instead of every Operator.",
+      "enum": [
+       "full",
+       "summary"
+      ],
+      "title": "Inventory",
+      "type": "string"
+     },
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     },
+     "recursive": {
+      "default": false,
+      "description": "Also destroy a non-empty COMP and its whole subtree.",
+      "title": "Recursive",
+      "type": "boolean"
+     },
+     "allow_connected": {
+      "default": false,
+      "description": "Destroy even when wired; the result lists the removed detached_connections.",
+      "title": "Allow Connected",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "operator_path"
+    ],
+    "title": "DestroyOperatorInput",
+    "type": "object"
+   }
+  },
+  "ops.copy": {
+   "effect": "mutation",
+   "batchable": false,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "max_operators": {
+      "default": 256,
+      "maximum": 10000,
+      "minimum": 1,
+      "title": "Max Operators",
+      "type": "integer"
+     },
+     "inventory": {
+      "default": "full",
+      "description": "summary: report a digest and type counts instead of every Operator.",
+      "enum": [
+       "full",
+       "summary"
+      ],
+      "title": "Inventory",
+      "type": "string"
+     },
+     "source_path": {
+      "title": "Source Path",
+      "type": "string"
+     },
+     "target_parent_path": {
+      "title": "Target Parent Path",
+      "type": "string"
+     },
+     "new_name": {
+      "title": "New Name",
+      "type": "string"
+     },
+     "node_x": {
+      "anyOf": [
+       {
+        "maximum": 32767,
+        "minimum": -32768,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Node X"
+     },
+     "node_y": {
+      "anyOf": [
+       {
+        "maximum": 32767,
+        "minimum": -32768,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Node Y"
+     },
+     "include_docked": {
+      "default": false,
+      "title": "Include Docked",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "source_path",
+     "target_parent_path",
+     "new_name"
+    ],
+    "title": "CopyOperatorInput",
+    "type": "object"
+   }
+  },
+  "ops.move": {
+   "effect": "mutation",
+   "batchable": false,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "max_operators": {
+      "default": 256,
+      "maximum": 10000,
+      "minimum": 1,
+      "title": "Max Operators",
+      "type": "integer"
+     },
+     "inventory": {
+      "default": "full",
+      "description": "summary: report a digest and type counts instead of every Operator.",
+      "enum": [
+       "full",
+       "summary"
+      ],
+      "title": "Inventory",
+      "type": "string"
+     },
+     "source_path": {
+      "title": "Source Path",
+      "type": "string"
+     },
+     "target_parent_path": {
+      "title": "Target Parent Path",
+      "type": "string"
+     },
+     "new_name": {
+      "title": "New Name",
+      "type": "string"
+     },
+     "node_x": {
+      "anyOf": [
+       {
+        "maximum": 32767,
+        "minimum": -32768,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Node X"
+     },
+     "node_y": {
+      "anyOf": [
+       {
+        "maximum": 32767,
+        "minimum": -32768,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Node Y"
+     },
+     "allow_connected": {
+      "default": false,
+      "description": "Move even when wired across the boundary; the result lists detached_connections.",
+      "title": "Allow Connected",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "source_path",
+     "target_parent_path",
+     "new_name"
+    ],
+    "title": "MoveOperatorInput",
+    "type": "object"
+   }
+  },
+  "ops.tox.import": {
+   "effect": "mutation",
+   "batchable": false,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "max_operators": {
+      "default": 256,
+      "maximum": 10000,
+      "minimum": 1,
+      "title": "Max Operators",
+      "type": "integer"
+     },
+     "inventory": {
+      "default": "full",
+      "description": "summary: report a digest and type counts instead of every Operator.",
+      "enum": [
+       "full",
+       "summary"
+      ],
+      "title": "Inventory",
+      "type": "string"
+     },
+     "parent_path": {
+      "title": "Parent Path",
+      "type": "string"
+     },
+     "tox_path": {
+      "title": "Tox Path",
+      "type": "string"
+     },
+     "allowlist_root": {
+      "title": "Allowlist Root",
+      "type": "string"
+     },
+     "target_name": {
+      "title": "Target Name",
+      "type": "string"
+     },
+     "trusted": {
+      "const": true,
+      "title": "Trusted",
+      "type": "boolean"
+     },
+     "replace": {
+      "default": false,
+      "title": "Replace",
+      "type": "boolean"
+     },
+     "max_file_bytes": {
+      "default": 67108864,
+      "maximum": 67108864,
+      "minimum": 1,
+      "title": "Max File Bytes",
+      "type": "integer"
+     },
+     "root_child": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Root Child"
+     }
+    },
+    "required": [
+     "parent_path",
+     "tox_path",
+     "allowlist_root",
+     "target_name",
+     "trusted"
+    ],
+    "title": "ImportToxInput",
+    "type": "object"
+   }
+  },
+  "ops.connect": {
+   "effect": "mutation",
+   "batchable": false,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "source_path": {
+      "title": "Source Path",
+      "type": "string"
+     },
+     "target_path": {
+      "title": "Target Path",
+      "type": "string"
+     },
+     "output_index": {
+      "default": 0,
+      "maximum": 255,
+      "minimum": 0,
+      "title": "Output Index",
+      "type": "integer"
+     },
+     "input_index": {
+      "default": 0,
+      "maximum": 255,
+      "minimum": 0,
+      "title": "Input Index",
+      "type": "integer"
+     },
+     "replace": {
+      "default": false,
+      "title": "Replace",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "source_path",
+     "target_path"
+    ],
+    "title": "ConnectOperatorsInput",
+    "type": "object"
+   }
+  },
+  "ops.disconnect": {
+   "effect": "mutation",
+   "batchable": false,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "source_path": {
+      "title": "Source Path",
+      "type": "string"
+     },
+     "target_path": {
+      "title": "Target Path",
+      "type": "string"
+     },
+     "output_index": {
+      "default": 0,
+      "maximum": 255,
+      "minimum": 0,
+      "title": "Output Index",
+      "type": "integer"
+     },
+     "input_index": {
+      "default": 0,
+      "maximum": 255,
+      "minimum": 0,
+      "title": "Input Index",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "source_path",
+     "target_path"
+    ],
+    "title": "DisconnectOperatorsInput",
+    "type": "object"
+   }
+  },
+  "ops.hierarchy.connect": {
+   "effect": "mutation",
+   "batchable": false,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "source_path": {
+      "title": "Source Path",
+      "type": "string"
+     },
+     "target_path": {
+      "title": "Target Path",
+      "type": "string"
+     },
+     "output_index": {
+      "default": 0,
+      "maximum": 255,
+      "minimum": 0,
+      "title": "Output Index",
+      "type": "integer"
+     },
+     "input_index": {
+      "default": 0,
+      "maximum": 255,
+      "minimum": 0,
+      "title": "Input Index",
+      "type": "integer"
+     },
+     "replace": {
+      "default": false,
+      "title": "Replace",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "source_path",
+     "target_path"
+    ],
+    "title": "ConnectOperatorsInput",
+    "type": "object"
+   }
+  },
+  "ops.hierarchy.disconnect": {
+   "effect": "mutation",
+   "batchable": false,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "source_path": {
+      "title": "Source Path",
+      "type": "string"
+     },
+     "target_path": {
+      "title": "Target Path",
+      "type": "string"
+     },
+     "output_index": {
+      "default": 0,
+      "maximum": 255,
+      "minimum": 0,
+      "title": "Output Index",
+      "type": "integer"
+     },
+     "input_index": {
+      "default": 0,
+      "maximum": 255,
+      "minimum": 0,
+      "title": "Input Index",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "source_path",
+     "target_path"
+    ],
+    "title": "DisconnectOperatorsInput",
+    "type": "object"
+   }
+  },
+  "project.snapshot": {
+   "effect": "read_only",
+   "batchable": true,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     },
+     "max_depth": {
+      "default": 4,
+      "maximum": 8,
+      "minimum": 0,
+      "title": "Max Depth",
+      "type": "integer"
+     },
+     "max_operators": {
+      "default": 256,
+      "maximum": 1000,
+      "minimum": 1,
+      "title": "Max Operators",
+      "type": "integer"
+     },
+     "paginate": {
+      "default": false,
+      "description": "Return one page of max_operators with next_cursor instead of failing.",
+      "title": "Paginate",
+      "type": "boolean"
+     },
+     "cursor": {
+      "anyOf": [
+       {
+        "maxLength": 4096,
+        "minLength": 1,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "next_cursor of the previous page; same root and max_depth.",
+      "title": "Cursor"
+     },
+     "include_connections": {
+      "default": false,
+      "description": "Attach each Operator's output connections.",
+      "title": "Include Connections",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "operator_path"
+    ],
+    "title": "SnapshotInput",
+    "type": "object"
+   }
+  },
+  "project.metadata": {
+   "effect": "read_only",
+   "batchable": true,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {},
+    "title": "ProjectMetadataInput",
+    "type": "object"
+   }
+  },
+  "project.save": {
+   "effect": "mutation",
+   "batchable": false,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "expected_path": {
+      "title": "Expected Path",
+      "type": "string"
+     },
+     "expected_sha256": {
+      "description": "SHA-256 hex of the current .toe on disk.",
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "title": "Expected Sha256",
+      "type": "string"
+     }
+    },
+    "required": [
+     "expected_path",
+     "expected_sha256"
+    ],
+    "title": "ProjectSaveInput",
+    "type": "object"
+   }
+  },
+  "binary.export": {
+   "effect": "read_only",
+   "batchable": true,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "operator_path": {
+      "title": "Operator Path",
+      "type": "string"
+     },
+     "format": {
+      "enum": [
+       "tox",
+       "png"
+      ],
+      "title": "Format",
+      "type": "string"
+     },
+     "max_bytes": {
+      "default": 194560,
+      "maximum": 194560,
+      "minimum": 1,
+      "title": "Max Bytes",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "operator_path",
+     "format"
+    ],
+    "title": "BinaryExportInput",
+    "type": "object"
+   }
+  },
+  "events.read": {
+   "effect": "read_only",
+   "batchable": true,
+   "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "after": {
+      "default": 0,
+      "minimum": 0,
+      "title": "After",
+      "type": "integer"
+     },
+     "limit": {
+      "default": 100,
+      "maximum": 200,
+      "minimum": 1,
+      "title": "Limit",
+      "type": "integer"
+     },
+     "include_errors": {
+      "default": true,
+      "title": "Include Errors",
+      "type": "boolean"
+     }
+    },
+    "title": "EventsReadInput",
+    "type": "object"
+   }
+  },
+  "batch.execute": {
+   "effect": "read_only",
+   "batchable": false,
+   "input_schema": {
+    "$defs": {
+     "BatchItem": {
+      "additionalProperties": false,
+      "properties": {
+       "name": {
+        "title": "Name",
+        "type": "string"
+       },
+       "input": {
+        "additionalProperties": true,
+        "title": "Input",
+        "type": "object"
+       }
+      },
+      "required": [
+       "name",
+       "input"
+      ],
+      "title": "BatchItem",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "properties": {
+     "commands": {
+      "items": {
+       "$ref": "#/$defs/BatchItem"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Commands",
+      "type": "array"
+     }
+    },
+    "required": [
+     "commands"
+    ],
+    "title": "BatchExecuteInput",
+    "type": "object"
+   }
+  }
+ },
+ "input_defaults": {
+  "max_dat_content_bytes": 32768,
+  "max_inspection_items": 100,
+  "max_tox_file_bytes": 67108864
+ },
+ "request_statuses": [
+  "queued",
+  "dispatched",
+  "accepted",
+  "running",
+  "succeeded",
+  "failed",
+  "unknown",
+  "instance_offline",
+  "daemon_shutdown"
+ ],
+ "terminal_request_statuses": [
+  "daemon_shutdown",
+  "failed",
+  "instance_offline",
+  "succeeded",
+  "unknown"
+ ],
+ "errors": {
+  "codes": [
+   "chop_channel_not_found",
+   "command_unsupported",
+   "command_wire_invalid",
+   "connection_not_found",
+   "connector_connect_failed",
+   "connector_disconnect_failed",
+   "connector_not_found",
+   "connector_occupied",
+   "connector_replace_failed",
+   "connector_replace_rollback_failed",
+   "daemon_shutdown",
+   "daemon_unavailable",
+   "dat_content_not_writable",
+   "dat_content_too_large",
+   "dat_content_unavailable",
+   "dat_type_mismatch",
+   "execution_capacity_full",
+   "expression_invalid",
+   "family_inspection_outcome_unknown",
+   "family_inspection_unavailable",
+   "hierarchy_comp_required",
+   "hierarchy_connection_not_found",
+   "hierarchy_connector_connect_failed",
+   "hierarchy_connector_disconnect_failed",
+   "hierarchy_connector_not_found",
+   "hierarchy_connector_occupied",
+   "hierarchy_connector_outcome_unknown",
+   "hierarchy_connector_replace_failed",
+   "hierarchy_connector_replace_rollback_failed",
+   "hierarchy_connector_state_ambiguous",
+   "hierarchy_cycle",
+   "hierarchy_kind_mismatch",
+   "hierarchy_kind_unsupported",
+   "hierarchy_parent_mismatch",
+   "instance_busy",
+   "instance_draining",
+   "instance_not_found",
+   "instance_offline",
+   "instance_selector_ambiguous",
+   "instance_synchronizing",
+   "internal_error",
+   "invalid_arguments",
+   "operator_already_exists",
+   "operator_connected",
+   "operator_copy_failed",
+   "operator_copy_rollback_failed",
+   "operator_create_failed",
+   "operator_destroy_failed",
+   "operator_destroy_outcome_unknown",
+   "operator_docked",
+   "operator_family_mismatch",
+   "operator_family_unsupported",
+   "operator_move_failed",
+   "operator_move_outcome_unknown",
+   "operator_move_rollback_failed",
+   "operator_mutation_forbidden",
+   "operator_not_empty",
+   "operator_not_found",
+   "operator_parent_invalid",
+   "operator_rename_failed",
+   "operator_rename_forbidden",
+   "operator_rename_rollback_failed",
+   "operator_state_failed",
+   "operator_state_outcome_unknown",
+   "operator_state_rollback_failed",
+   "operator_state_unavailable",
+   "operator_type_conditional",
+   "operator_type_unsupported",
+   "outcome_capacity_exceeded",
+   "parameter_disabled",
+   "parameter_exists",
+   "parameter_export_source_unavailable",
+   "parameter_menu_not_writable",
+   "parameter_not_found",
+   "parameter_not_pulseable",
+   "parameter_obsolete",
+   "parameter_outcome_unknown",
+   "parameter_page_exists",
+   "parameter_page_failed",
+   "parameter_page_outcome_unknown",
+   "parameter_page_rollback_failed",
+   "parameter_page_verification_failed",
+   "parameter_read_only",
+   "parameter_rollback_failed",
+   "parameter_sequence_not_found",
+   "parameter_sequence_not_writable",
+   "parameter_sequence_outcome_unknown",
+   "parameter_sequence_rollback_failed",
+   "parameter_sequence_shape_invalid",
+   "parameter_sequence_too_large",
+   "parameter_sequence_write_failed",
+   "parameter_source_not_found",
+   "parameter_type_unsupported",
+   "parameter_value_invalid",
+   "parameter_value_too_large",
+   "parameter_write_rejected",
+   "process_launch_failed",
+   "project_file_changed",
+   "project_file_unavailable",
+   "project_path_mismatch",
+   "project_save_outcome_unknown",
+   "protocol_incompatible",
+   "request_id_conflict",
+   "request_identity_invalid",
+   "request_not_found",
+   "request_outcome_unknown",
+   "request_rejected",
+   "result_too_large",
+   "snapshot_cursor_stale",
+   "table_dat_outcome_unknown",
+   "table_dat_patch_out_of_bounds",
+   "table_dat_rollback_failed",
+   "table_dat_write_failed",
+   "text_dat_outcome_unknown",
+   "text_dat_rollback_failed",
+   "text_dat_write_failed",
+   "tox_backup_failed",
+   "tox_commit_failed",
+   "tox_destination_exists",
+   "tox_file_too_large",
+   "tox_import_outcome_unknown",
+   "tox_load_failed",
+   "tox_parent_protected",
+   "tox_path_rejected",
+   "tox_rollback_failed",
+   "tox_trust_required",
+   "tox_verification_failed",
+   "transport_error",
+   "wait_timeout"
+  ],
+  "default_exit_code": 5,
+  "exit_codes": {
+   "daemon_unavailable": 3,
+   "instance_draining": 4,
+   "instance_not_found": 4,
+   "instance_offline": 4,
+   "instance_selector_ambiguous": 4,
+   "invalid_arguments": 2,
+   "transport_error": 3,
+   "wait_timeout": 6
+  },
+  "retryable": [
+   "daemon_shutdown",
+   "execution_capacity_full",
+   "instance_busy",
+   "instance_draining",
+   "instance_offline",
+   "instance_synchronizing"
+  ]
+ }
+}

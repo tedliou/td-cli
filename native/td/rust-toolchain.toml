@@ -1,0 +1,8 @@
+# The GNU host builds a td.exe that only imports Windows system DLLs, without needing the
+# Visual Studio Build Tools on developer machines or in CI. rustup does not accept a host in a
+# toolchain file, so select it once with `rustup set default-host x86_64-pc-windows-gnu`;
+# scripts/build_release.py refuses any other host.
+[toolchain]
+channel = "1.99.1"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

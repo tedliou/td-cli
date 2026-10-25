@@ -103,9 +103,18 @@ Artifacts and Python packages. TouchDesigner remains subject to Derivative's lic
 
 ## Development
 
-Python 3.11 and [uv](https://docs.astral.sh/uv/) are required.
+Python 3.11, [uv](https://docs.astral.sh/uv/), and [rustup](https://rustup.rs/) are required. `td` is
+the native Rust client in `native/td`; `native/td/rust-toolchain.toml` pins its toolchain, and the tests run
+the release build of `td.exe`, so build it before `pytest`.
 
 ```powershell
+rustup set default-host x86_64-pc-windows-gnu
+Push-Location native/td
+cargo fmt --check
+cargo clippy --release --all-targets --locked -- -D warnings
+cargo test --release --locked
+cargo build --release --locked --bins --examples
+Pop-Location
 uv sync --locked --python 3.11
 uv run pytest -q
 uv run ruff check .
@@ -653,7 +662,7 @@ Network mutations are not allowed inside `batch.execute`, while read-only
 `td --json --instance <selector> --timeout 120 commands execute --input-file plan.json`
 accepts `{"commands":[{"name":"ops.get","input":{"operator_path":"/project1"}}]}`.
 Use existing typed Command payloads for up to 256 reads or mutations (1 MiB
-input maximum). The entire plan is validated before contacting the Daemon.
+input maximum). The Daemon validates the entire plan before any Request is submitted.
 One CLI process submits independent Requests in order, stopping at the first
 non-success. This is not atomic; completed changes remain. The timeout bounds
 the entire run. JSONL progress always includes zero-based indexes and Request
@@ -662,3 +671,5 @@ output and query the recorded Request after interruption or unknown outcome;
 do not blindly rerun the plan. Nested `batch.execute` is unsupported.
 
 The 0.11.0 upgrade accepts the exact canonical 0.10.0 Agent in addition to the existing verified sources (including 0.7.0, 0.7.1, 0.8.0, and 0.9.0), preserving its Connectionstate definition. The Agent read surface adds per-item `batch execute` results, Instance `project` identity, COMP interface summaries in `ops inspect`, Execute-family and byte-offset `dat text get`, `chop values get`, `parameters list` value and filter options, paginated `project snapshot`, and `--inventory summary` for `ops destroy`/`copy`/`move`. `td` now ships as an onedir bundle and starts in about 0.4 seconds. The new options need a 0.11.0 Agent; the CLI and Daemon reject them with `command_unsupported` for an older embedded Agent. The next patch release cuts warm Command latency: with a healthy Daemon, an online `td` Command no longer imports the Daemon server packages and reuses one HTTP connection, so `td --json instances list` drops from about 1.5 seconds to about 0.5 seconds. `td-daemon` and `td-agent` also ship as onedir bundles; their `td-daemon-runtime\` and `td-agent-runtime\` folders sit beside `td-runtime\` in the same version folder. The next minor release cuts it further. An authorized Command runs in the same TouchDesigner frame it is authorized in, `td` waits for a Request with a long poll instead of querying every 50 ms, and `td` starts without reading package metadata or importing httpx. A TouchDesigner round trip drops from about 62 ms to about 33 ms, and `td --json instances list` to about 0.3 seconds.
+
+The next release replaces `td` with a native single `td.exe` written in Rust. The version folder no longer contains `td-runtime\`, and uninstall removes a leftover one. With a running Daemon, `td --version` and `td --json instances list` take about 10 ms instead of about 0.3 seconds; a cold start that also launches the Daemon takes about as long as before. The Daemon now validates Command and plan fields and reports the same `invalid_arguments` details. `td` passes arguments as typed: `~`, `$VAR`, `%VAR%`, and wildcards are no longer expanded, and non-standard JSON such as `NaN` is rejected.

@@ -92,9 +92,18 @@ td-cli 自有代码采用 [MIT 许可](LICENSE)。
 
 ## 开发
 
-需要 Python 3.11 与 [uv](https://docs.astral.sh/uv/)：
+需要 Python 3.11、[uv](https://docs.astral.sh/uv/) 与 [rustup](https://rustup.rs/)。`td` 是
+`native/td` 里的原生 Rust client，工具链由 `native/td/rust-toolchain.toml` 固定；测试运行 release 版
+`td.exe`，所以先构建再跑 `pytest`：
 
 ```powershell
+rustup set default-host x86_64-pc-windows-gnu
+Push-Location native/td
+cargo fmt --check
+cargo clippy --release --all-targets --locked -- -D warnings
+cargo test --release --locked
+cargo build --release --locked --bins --examples
+Pop-Location
 uv sync --locked --python 3.11
 uv run pytest -q
 uv run ruff check .
@@ -519,10 +528,12 @@ read-only Command 使用。
 `td --json --instance <selector> --timeout 120 commands execute --input-file plan.json`
 接受 `{"commands":[{"name":"ops.get","input":{"operator_path":"/project1"}}]}`。
 沿用现有 typed Command payload，最多 256 项查询或 mutation、1 MiB 输入；
-整份计划验证通过后才连接。单一 CLI 进程依次提交各自独立的 Request，首个
+Daemon 先验证整份计划，通过后才提交 Request。单一 CLI 进程依次提交各自独立的 Request，首个
 非成功结果即停止；不具原子性，已完成的修改会保留。timeout 限制整轮执行。
 固定输出 JSONL：提交前先记录从零开始的 index 与 Request ID，再记录完整
 终态 snapshot。请保存输出；中断或 outcome unknown 后先查询已记录的 Request，
 不要盲目重跑整份计划。不接受嵌套 `batch.execute`。
 
 0.11.0 离线升级除现有来源（含 0.7.0、0.7.1、0.8.0、0.9.0）外，新增精确 canonical 0.10.0 Agent 白名单，保留 Connectionstate 定义。Agent 读取接口新增：`batch execute` 逐项结果、Instance 的 `project`、`ops inspect` 的 COMP 接口摘要、Execute 系列与 byte offset 的 `dat text get`、`chop values get`、`parameters list` 的值与筛选选项、可分页的 `project snapshot`，以及 `ops destroy`／`copy`／`move` 的 `--inventory summary`。`td` 改以 onedir 发布，启动约 0.4 秒。新选项需要 0.11.0 Agent；内嵌较旧 Agent 时，CLI 与 Daemon 会以 `command_unsupported` 拒绝。下一个 patch 版缩短预热后的命令延迟：Daemon 健康时，在线 `td` 命令不再导入 Daemon 服务器包，并复用同一条 HTTP 连接，`td --json instances list` 从约 1.5 秒降到约 0.5 秒。`td-daemon` 与 `td-agent` 也改以 onedir 发布，`td-daemon-runtime\`、`td-agent-runtime\` 与 `td-runtime\` 并存于同一个版本目录。下一个 minor 版再缩短：已授权的 Command 在授权的同一个 TouchDesigner frame 内执行；`td` 等待 Request 改用长轮询，不再每 50 ms 查询一次；`td` 启动不读取包 metadata、不导入 httpx。TouchDesigner 往返时间从约 62 ms 降到约 33 ms，`td --json instances list` 降到约 0.3 秒。
+
+下一版把 `td` 换成 Rust 写的单一原生 `td.exe`。版本目录不再有 `td-runtime\`，卸载会移除残留的这个文件夹。Daemon 已在运行时，`td --version` 与 `td --json instances list` 从约 0.3 秒降到约 10 ms；需要同时启动 Daemon 的冷启动时间和以前差不多。Command 与计划字段改由 Daemon 验证，`invalid_arguments` 的细节不变。`td` 照原样传送参数：不再展开 `~`、`$VAR`、`%VAR%` 与通配符，`NaN` 这类非标准 JSON 会被拒绝。

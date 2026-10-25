@@ -11,24 +11,31 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
-from pydantic import field_validator
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError, field_validator, model_validator
 
 from td_cli import __version__
 from td_cli.daemon.storage import RequestIdentityConflict, RequestStore
 from td_cli.error_catalog import ERROR_CATALOG
+from td_cli.instance_selection import SelectionError, select_instance
 from td_cli.protocol import (
+    MAX_PLAN_BYTES,
     MAX_REQUEST_WAIT_MS,
     PROTOCOL_VERSIONS,
     Command,
+    CommandPlan,
     RequestSnapshot,
     StrictModel,
+    plan_document_fits,
 )
+from td_cli.validation_details import validation_details
 
 
 class SubmitRequest(StrictModel):
     request_id: str
-    instance_id: str
+    instance_id: str | None = None
+    instance_selector: str | None = None
     command: Command
 
     @field_validator("request_id")
@@ -41,8 +48,28 @@ class SubmitRequest(StrictModel):
 
     @field_validator("instance_id")
     @classmethod
-    def instance_id_is_uuid(cls, value: str) -> str:
-        return str(uuid.UUID(value))
+    def instance_id_is_uuid(cls, value: str | None) -> str | None:
+        return None if value is None else str(uuid.UUID(value))
+
+    @model_validator(mode="after")
+    def one_instance_reference(self) -> SubmitRequest:
+        if self.instance_id is not None and self.instance_selector is not None:
+            raise ValueError("pass instance_id or instance_selector, not both")
+        return self
+
+
+def _invalid_arguments(error: ValidationError | None = None) -> JSONResponse:
+    """Answer like an HTTP error, adding the Command validation details when there are any."""
+    content: dict[str, object] = {"detail": "invalid_arguments"}
+    if error is not None:
+        content["details"] = validation_details(error)
+    return JSONResponse(status_code=422, content=content)
+
+
+def _selection_failed(error: SelectionError) -> HTTPException:
+    return HTTPException(
+        status_code=404 if error.code == "instance_not_found" else 409, detail=error.code
+    )
 
 
 def _now() -> str:
@@ -134,6 +161,31 @@ def create_app(
         result = instances()
         return await result if inspect.isawaitable(result) else result
 
+    @app.get("/v3/instances/resolve", dependencies=[Depends(authenticate)])
+    async def resolve_instance(
+        selector: str | None = None, online_only: bool = False
+    ) -> dict[str, object]:
+        try:
+            return select_instance(await list_instances(), selector, online_only=online_only)
+        except SelectionError as error:
+            raise _selection_failed(error) from error
+
+    @app.post("/v3/command-plans/validate", dependencies=[Depends(authenticate)])
+    async def validate_plan(request: Request) -> object:
+        """Check a whole ``commands execute`` plan before its first Command is sent."""
+        document = bytearray()
+        async for chunk in request.stream():
+            document += chunk
+            if len(document) > MAX_PLAN_BYTES:
+                return _invalid_arguments()
+        if not plan_document_fits(bytes(document)):
+            return _invalid_arguments()
+        try:
+            plan = CommandPlan.model_validate_json(document)
+        except ValidationError as error:
+            return _invalid_arguments(error)
+        return plan.model_dump(mode="json")
+
     @app.post("/v3/shutdown", status_code=202, dependencies=[Depends(authenticate)])
     async def request_shutdown() -> dict[str, bool]:
         if shutdown is not None:
@@ -143,11 +195,41 @@ def create_app(
         return {"draining": True}
 
     @app.post("/v3/requests", status_code=201, dependencies=[Depends(authenticate)])
-    async def submit(payload: SubmitRequest, response: Response) -> dict[str, object]:
+    async def submit(request: Request, response: Response) -> object:
+        """Validate the Command, then the submission, then resolve the Instance, then admit."""
         assert store is not None
+        try:
+            body = await request.json()
+        except ValueError:
+            return _invalid_arguments()
+        if not isinstance(body, dict):
+            return _invalid_arguments()
+        try:
+            command = Command.model_validate(body.get("command"))
+        except ValidationError as error:
+            return _invalid_arguments(error)
+        try:
+            payload = SubmitRequest.model_validate({**body, "command": command})
+        except ValidationError:
+            return _invalid_arguments()
+        instance_id = payload.instance_id
+        if instance_id is None:
+            # A resubmission keeps the Instance it was admitted for, whatever the selector
+            # would choose now; admission then deduplicates it or reports the conflict.
+            existing = await store.get(payload.request_id)
+            if existing is not None:
+                instance_id = str(existing["instance_id"])
+        if instance_id is None:
+            try:
+                selected = select_instance(
+                    await list_instances(), payload.instance_selector, online_only=True
+                )
+            except SelectionError as error:
+                raise _selection_failed(error) from error
+            instance_id = str(selected["instance_id"])
         snapshot = RequestSnapshot.pending(
             request_id=payload.request_id,
-            instance_id=payload.instance_id,
+            instance_id=instance_id,
             command=payload.command,
             submitted_at=_now(),
         ).model_dump(mode="json")
