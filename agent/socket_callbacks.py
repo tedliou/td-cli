@@ -1,4 +1,4 @@
-"""Canonical SocketIO DAT callbacks for the Protocol v3 execution handshake."""
+"""Canonical SocketIO DAT callbacks for Protocol v4: one dispatch, one outcome per Request."""
 
 import json
 
@@ -30,8 +30,10 @@ def onReceiveEvent(dat, rowIndex, message, event):
             "execution_sync",
             data={**agent.heartbeat_payload(), "records": records},
         )
+        # Recording and execution share one callback, so a record is left authorized only by a
+        # callback that failed mid-way; the Daemon dispatches one Request per Instance.
         for request_id, execution_id in agent.authorized_records():
-            scheduleExecution(dat, request_id, execution_id)
+            executeAuthorized(dat, request_id, execution_id)
     elif event == "registration_error":
         agent.set_connection_status("registration_error")
         agent.runtime_active = False
@@ -64,14 +66,13 @@ def onReceiveEvent(dat, rowIndex, message, event):
             )
             return
         message = {**message, "command": command}
-        result_event, payload = agent.reserve(message)
-        if result_event == "request_outcome":
+        result_event, payload = agent.dispatch(message)
+        if result_event == "execute":
+            executeAuthorized(dat, payload["request_id"], message["execution_id"])
+        elif result_event == "request_outcome":
             emitOutcome(dat, payload)
-        else:
+        elif result_event is not None:
             dat.emit(result_event, data=payload)
-    elif event == "request_execute":
-        if agent.authorize(message):
-            scheduleExecution(dat, message["request_id"], message["execution_id"])
     elif event == "outcome_recorded":
         agent.acknowledge_outcome(message["request_id"], message.get("execution_id"))
         if agent.draining and agent.retention_snapshot()["record_count"] == 0:
@@ -99,7 +100,11 @@ def onReceiveEvent(dat, rowIndex, message, event):
             )
 
 
-def executeScheduled(dat, request_id, execution_id):
+def executeAuthorized(dat, request_id, execution_id):
+    """Run in this callback: SocketIO DAT callbacks already run on the main thread at frame start.
+
+    Deferring with run() would only add a frame (docs/adr/0002-execute-in-socket-callback.md).
+    """
     outcome = dat.parent().ext.Agent.execute_authorized(request_id, execution_id)
     if outcome is not None:
         emitOutcome(dat, outcome)
@@ -108,17 +113,6 @@ def executeScheduled(dat, request_id, execution_id):
 def emitOutcome(dat, outcome):
     for chunk in dat.parent().ext.Agent.outcome_chunks(outcome):
         dat.emit("request_outcome_chunk", data=chunk)
-
-
-def scheduleExecution(dat, request_id, execution_id):
-    run(
-        executeScheduled,
-        dat,
-        request_id,
-        execution_id,
-        delayMilliSeconds=1,
-        delayRef=op.TDResources,
-    )
 
 
 def onClose(dat, failure):

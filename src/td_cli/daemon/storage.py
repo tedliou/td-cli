@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, TypeVar
 
 from td_cli.error_catalog import ERROR_CATALOG
+from td_cli.protocol import TERMINAL_REQUEST_STATUSES
 
 T = TypeVar("T")
 SCHEMA_VERSION = 2
@@ -38,6 +40,9 @@ class RequestStore:
         self._connection = connection
         self._executor = executor
         self._closed = False
+        # Futures resolved on every status change of a Request, for terminal waits.
+        self._waiters: dict[str, set[asyncio.Future[None]]] = {}
+        self._released = False
 
     @classmethod
     async def open(cls, path: Path) -> RequestStore:
@@ -75,13 +80,50 @@ class RequestStore:
             raise ValueError(f"unsupported Request columns: {', '.join(sorted(unknown))}")
         if not changes:
             raise ValueError("changes must not be empty")
-        return await self._run(
+        changed = await self._run(
             _compare_and_set,
             self._connection,
             request_id,
             expected_statuses,
             changes,
         )
+        if changed is not None:
+            self._wake(self._waiters.get(request_id, ()))
+        return changed
+
+    async def wait_until_terminal(
+        self, request_id: str, *, timeout: float
+    ) -> dict[str, Any] | None:
+        """Return the snapshot once its status is terminal, or the current one at ``timeout``.
+
+        The waiter is registered before each read, so a change between the read and the wait
+        still wakes it. ``release_waiters`` and ``close`` answer every waiter with its current
+        snapshot.
+        """
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+        while True:
+            wakeup: asyncio.Future[None] = loop.create_future()
+            waiters = self._waiters.setdefault(request_id, set())
+            waiters.add(wakeup)
+            try:
+                snapshot = await self.get(request_id)
+                remaining = deadline - loop.time()
+                if (
+                    snapshot is None
+                    or snapshot["status"] in TERMINAL_REQUEST_STATUSES
+                    or remaining <= 0
+                    or self._released
+                ):
+                    return snapshot
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(wakeup, remaining)
+                if self._closed:
+                    return snapshot
+            finally:
+                waiters.discard(wakeup)
+                if not waiters:
+                    self._waiters.pop(request_id, None)
 
     async def cleanup(self, *, limit: int = 1000) -> int:
         if limit < 1:
@@ -91,12 +133,24 @@ class RequestStore:
     async def schema_version(self) -> int:
         return await self._run(_schema_version, self._connection)
 
+    def release_waiters(self) -> None:
+        """Answer every current and later wait at once, so a stopping server is not held open."""
+        self._released = True
+        self._wake([waiter for waiters in self._waiters.values() for waiter in waiters])
+
     async def close(self) -> None:
         if self._closed:
             return
         self._closed = True
+        self.release_waiters()
         await self._run(_close, self._connection, allow_closed=True)
         self._executor.shutdown(wait=True, cancel_futures=True)
+
+    @staticmethod
+    def _wake(waiters: Iterable[asyncio.Future[None]]) -> None:
+        for waiter in list(waiters):
+            if not waiter.done():
+                waiter.set_result(None)
 
     async def _run(
         self,

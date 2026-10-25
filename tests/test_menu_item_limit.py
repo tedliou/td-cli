@@ -7,13 +7,11 @@ import pytest
 from pydantic import ValidationError
 from test_agent_runtime import AgentExt, FakeOwner, execute_v2, isolated_touchdesigner_runtime
 from test_custom_menu_options import FakeMenuParameter, MenuComp
-from typer.testing import CliRunner
 
-from td_cli import cli
-from td_cli.client import MAX_VALIDATION_ERRORS, ClientError
+from td_cli.client import new_request_id
 from td_cli.command_catalog import COMMAND_CATALOG, MAX_MENU_JSON_BYTES
-from td_cli.command_run import CommandPlan, read_plan
-from td_cli.protocol import Command
+from td_cli.protocol import Command, CommandPlan
+from td_cli.validation_details import MAX_VALIDATION_ERRORS, validation_details
 
 __all__ = ["isolated_touchdesigner_runtime"]
 
@@ -110,71 +108,67 @@ def write_plan(tmp_path, payload):
 
 
 def test_plan_validation_error_names_the_command_field_and_limit(tmp_path):
-    assert len(read_plan(write_plan(tmp_path, menu_set_input(**numbered_menu(38))))) == 2
-    with pytest.raises(ClientError) as raised:
-        read_plan(write_plan(tmp_path, menu_set_input(**numbered_menu(257))))
-    assert raised.value.code == "invalid_arguments"
-    errors = raised.value.details["validation_errors"]
+    from fastapi.testclient import TestClient
+
+    from td_cli.daemon.app import create_app
+
+    def validate(path):
+        with TestClient(create_app(tmp_path, token="a" * 64)) as daemon:
+            return daemon.post(
+                "/v3/command-plans/validate",
+                headers={"Authorization": "Bearer " + "a" * 64},
+                content=path.read_bytes(),
+            )
+
+    assert (
+        len(validate(write_plan(tmp_path, menu_set_input(**numbered_menu(38)))).json()["commands"])
+        == 2
+    )
+    rejected = validate(write_plan(tmp_path, menu_set_input(**numbered_menu(257)))).json()
+    assert rejected["detail"] == "invalid_arguments"
+    errors = rejected["details"]["validation_errors"]
     assert errors[0]["location"] == ["commands", 1, "input", "menu_names"]
     assert errors[0]["type"] == "too_long"
     assert "256" in errors[0]["message"]
-    assert "D001" not in json.dumps(raised.value.details)
+    assert "D001" not in json.dumps(rejected["details"])
 
 
-class RecordingDaemonClient:
-    submitted = None
+def submit_menu_set(tmp_path, payload):
+    """Submit through the Daemon, which validates the Command before it resolves the Instance."""
+    from fastapi.testclient import TestClient
 
-    def __init__(self, **kwargs):
-        del kwargs
+    from td_cli.daemon.app import create_app
 
-    def select_instance(self, selector, *, online_only=True):
-        del selector, online_only
-        return {"instance_id": "instance-1"}
-
-    def submit(self, request_id, instance_id, command):
-        self.__class__.submitted = command
-        return {"request_id": request_id, "instance_id": instance_id, "status": "queued"}
-
-    def wait(self, request_id):
-        return {"request_id": request_id, "status": "succeeded", "result": {}}
-
-
-def invoke_menu_set(monkeypatch, tmp_path, payload):
-    monkeypatch.setattr(cli, "DaemonClient", RecordingDaemonClient)
-    monkeypatch.setattr(RecordingDaemonClient, "submitted", None)
-    path = tmp_path / "menu.json"
-    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-    argv = ["--json", "parameters", "menu-set", "--input-file", str(path)]
-    return CliRunner().invoke(cli.app, argv)
+    body = {
+        "request_id": new_request_id(),
+        "command": {"name": "parameters.menu.set", "input": payload},
+        "instance_selector": "project1",
+    }
+    with TestClient(create_app(tmp_path, token="a" * 64)) as daemon:
+        return daemon.post(
+            "/v3/requests", headers={"Authorization": "Bearer " + "a" * 64}, json=body
+        ).json()
 
 
-def test_cli_submits_a_38_item_menu(monkeypatch, tmp_path):
-    payload = menu_set_input(**numbered_menu(38))
-    result = invoke_menu_set(monkeypatch, tmp_path, payload)
-    assert result.exit_code == 0, result.output
-    assert RecordingDaemonClient.submitted == {"name": "parameters.menu.set", "input": payload}
+def test_a_38_item_menu_passes_validation(tmp_path):
+    answer = submit_menu_set(tmp_path, menu_set_input(**numbered_menu(38)))
+    # Validation passed; only the missing Instance stops it in this test Daemon.
+    assert answer["detail"] == "instance_not_found"
 
 
-def test_cli_rejection_names_each_violated_field_without_echoing_input(monkeypatch, tmp_path):
-    result = invoke_menu_set(monkeypatch, tmp_path, menu_set_input(**numbered_menu(257)))
-    assert result.exit_code == 2
-    assert RecordingDaemonClient.submitted is None
-    envelope = json.loads(result.stdout)
-    assert envelope["error"]["code"] == "invalid_arguments"
-    assert "request" not in envelope
-    errors = envelope["error"]["details"]["validation_errors"]
+def test_rejection_names_each_violated_field_without_echoing_input(tmp_path):
+    answer = submit_menu_set(tmp_path, menu_set_input(**numbered_menu(257)))
+    assert answer["detail"] == "invalid_arguments"
+    errors = answer["details"]["validation_errors"]
     assert [item["location"] for item in errors] == [
         ["input", "menu_names"],
         ["input", "menu_labels"],
     ]
     assert all(item["type"] == "too_long" and "256" in item["message"] for item in errors)
-    assert "D001" not in result.stdout
+    assert "D001" not in json.dumps(answer)
 
-    result = invoke_menu_set(
-        monkeypatch, tmp_path, menu_set_input(**budget_menu(MAX_MENU_JSON_BYTES + 1))
-    )
-    assert result.exit_code == 2
-    [item] = json.loads(result.stdout)["error"]["details"]["validation_errors"]
+    answer = submit_menu_set(tmp_path, menu_set_input(**budget_menu(MAX_MENU_JSON_BYTES + 1)))
+    [item] = answer["details"]["validation_errors"]
     assert item["location"] == ["input"]
     assert item["type"] == "value_error"
     assert "65536-byte JSON budget" in item["message"]
@@ -191,7 +185,7 @@ def test_validation_details_are_bounded():
     with pytest.raises(ValidationError) as raised:
         Command.model_validate({"name": "parameters.page.create", "input": payload})
     assert len(raised.value.errors()) > MAX_VALIDATION_ERRORS
-    details = ClientError.invalid_arguments(raised.value).details
+    details = validation_details(raised.value)
     assert len(details["validation_errors"]) == MAX_VALIDATION_ERRORS
     assert details["validation_errors_truncated"] is True
     assert all(len(item["message"]) <= 256 for item in details["validation_errors"])
@@ -203,7 +197,7 @@ def test_validation_details_are_bounded():
 def details_for(command):
     with pytest.raises(ValidationError) as raised:
         Command.model_validate(command)
-    return ClientError.invalid_arguments(raised.value).details
+    return validation_details(raised.value)
 
 
 @pytest.mark.parametrize(

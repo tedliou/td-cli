@@ -12,8 +12,6 @@ from td_cli.licensing import license_files
 
 RELEASE_VERSION = version("touchdesigner-cli")
 LOCKED_TOUCHDESIGNER_VERSION = "2025.32050"
-# PyInstaller contents_directory of the td onedir bundle (packaging/td.spec).
-TD_RUNTIME_DIRECTORY = "td-runtime"
 PRE_1_RELEASE_VERSION = re.compile(
     r"^0\.(?:[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9]\d*))?$"
 )
@@ -61,16 +59,28 @@ def _write_zip(path: Path, files: dict[str, Path], source_epoch: int) -> None:
             archive.writestr(info, files[name].read_bytes(), compresslevel=9)
 
 
-def _td_onedir_files(bundle: Path) -> dict[str, Path]:
-    """Map every file of the td onedir bundle (td.exe beside its runtime) to archive names."""
+def _native_files(bundle: Path) -> dict[str, Path]:
+    """The native td is one exe; a leftover PyInstaller runtime beside it is not shipped."""
+    executable = bundle / f"{bundle.name}.exe"
+    if not executable.is_file():
+        raise ValueError(f"Release input is missing: {executable}")
+    return {executable.name: executable}
+
+
+def _onedir_files(bundle: Path) -> dict[str, Path]:
+    """Map every file of one onedir bundle to archive names.
+
+    The exe sits beside its PyInstaller contents_directory, named "<bundle>-runtime" in packaging.
+    """
     files = {
         path.relative_to(bundle).as_posix(): path
         for path in sorted(bundle.rglob("*"))
         if path.is_file()
     }
-    if not any(name.startswith(f"{TD_RUNTIME_DIRECTORY}/") for name in files):
-        raise ValueError(f"Release input is missing: {bundle / TD_RUNTIME_DIRECTORY}")
-    files.setdefault("td.exe", bundle / "td.exe")
+    runtime = f"{bundle.name}-runtime"
+    if not any(name.startswith(f"{runtime}/") for name in files):
+        raise ValueError(f"Release input is missing: {bundle / runtime}")
+    files.setdefault(f"{bundle.name}.exe", bundle / f"{bundle.name}.exe")
     return files
 
 
@@ -86,13 +96,13 @@ def package_release(
     notices = license_files(Path("."))
     output.mkdir(parents=True, exist_ok=True)
     layouts = {
-        f"td-v{RELEASE_VERSION}-windows-x86_64.zip": _td_onedir_files(executables / "td"),
-        f"td-daemon-v{RELEASE_VERSION}-windows-x86_64.zip": {
-            "td-daemon.exe": executables / "td-daemon.exe"
-        },
-        f"td-agent-cli-v{RELEASE_VERSION}-windows-x86_64.zip": {
-            "td-agent.exe": executables / "td-agent.exe"
-        },
+        f"td-v{RELEASE_VERSION}-windows-x86_64.zip": _native_files(executables / "td"),
+        f"td-daemon-v{RELEASE_VERSION}-windows-x86_64.zip": _onedir_files(
+            executables / "td-daemon"
+        ),
+        f"td-agent-cli-v{RELEASE_VERSION}-windows-x86_64.zip": _onedir_files(
+            executables / "td-agent"
+        ),
         f"td-agent-component-v{RELEASE_VERSION}-td{LOCKED_TOUCHDESIGNER_VERSION}.zip": {
             name: agent_stage / name
             for name in ("td-agent.tox", "manifest.json", "verification.json")

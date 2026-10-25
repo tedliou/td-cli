@@ -2919,10 +2919,15 @@ class AgentExt:
     OUTCOME_CHUNK_BYTES = 24 * 1024
     MAX_TOTAL_OUTCOME_BYTES = 16 * 1024 * 1024
     MAX_ERROR_TEXT_BYTES = 16 * 1024
+    # A Frame Batch stops between Commands after half a 60 fps frame (ADR 0005).
+    FRAME_BATCH_BUDGET_SECONDS = 0.008
+    # Room kept in an outcome for the envelope around a Frame Batch report.
+    FRAME_BATCH_ENVELOPE_BYTES = 4 * 1024
 
     CAPABILITIES = tuple(OperatorControl.HANDLERS) + (
         "batch.execute",
         "batch.execute:item_results",
+        "plan.execute",
         "dat.text.get:offset",
         "parameters.list:options",
         "binary.export",
@@ -2955,6 +2960,9 @@ class AgentExt:
             self.protocol_versions = [int(version) for version in manifest["protocol_versions"]]
             self.read_only_commands = frozenset(
                 str(name) for name in manifest["read_only_commands"]
+            )
+            self.frame_batch_commands = frozenset(
+                str(name) for name in manifest["frame_batch_commands"]
             )
             operator_catalog = OperatorCatalog(json.loads(catalog_dat.text))
         except (KeyError, TypeError, ValueError) as error:
@@ -3024,6 +3032,7 @@ class AgentExt:
         self.last_heartbeat_at = 0.0
         self._heartbeat_generation = None
         self.runtime_active = False
+        self.clock = time.perf_counter
 
     def onInitTD(self):
         if getattr(builtins, "_td_cli_building_artifact", False):
@@ -3151,12 +3160,20 @@ class AgentExt:
         self.last_heartbeat_at = time.monotonic()
         self._state["heartbeat_emissions"] += 1
 
-    def reserve(self, request):
+    def dispatch(self, request):
+        """Record a dispatched Request so the same callback can execute it (Protocol v4).
+
+        Returns ``("execute", envelope)`` for a new record, ``("request_outcome", outcome)``
+        to replay a retained outcome, ``("request_rejected", payload)`` before any execution,
+        or ``(None, None)`` for a repeated delivery of a Request already being executed.
+        """
         request_id = str(request.get("request_id", ""))
         envelope = self._request_envelope(request_id)
+        execution_id = str(request.get("execution_id") or "")
         if (
             request.get("instance_id") != self.instance_id
             or request.get("connection_id") != self.connection_id
+            or not execution_id
         ):
             return "request_rejected", {**envelope, "code": "request_identity_invalid"}
         command = request.get("command")
@@ -3167,47 +3184,30 @@ class AgentExt:
                 existing["canonical_command"] != canonical
                 or existing["instance_id"] != self.instance_id
                 or existing["connection_id"] != self.connection_id
+                or existing["execution_id"] != execution_id
             ):
                 return "request_rejected", {**envelope, "code": "request_id_conflict"}
             if existing["phase"] == "outcome":
                 return "request_outcome", dict(existing["outcome"])
-            return "request_accepted", envelope
+            return None, None
         if self.draining:
             return "request_rejected", {**envelope, "code": "instance_draining"}
         if len(self.execution_records) >= self.MAX_EXECUTION_RECORDS:
             return "request_rejected", {**envelope, "code": "execution_capacity_full"}
+        if any(other["execution_id"] == execution_id for other in self.execution_records.values()):
+            return "request_rejected", {**envelope, "code": "request_identity_invalid"}
         self.execution_records[request_id] = {
             "request_id": request_id,
             "instance_id": self.instance_id,
             "connection_id": self.connection_id,
             "canonical_command": canonical,
             "command": command,
-            "phase": "reserved",
-            "execution_id": None,
+            "phase": "authorized",
+            "execution_id": execution_id,
             "outcome": None,
             "outcome_bytes": 0,
         }
-        return "request_accepted", envelope
-
-    def authorize(self, message):
-        request_id = str(message.get("request_id", ""))
-        record = self.execution_records.get(request_id)
-        execution_id = str(message.get("execution_id", ""))
-        if (
-            record is None
-            or record["phase"] != "reserved"
-            or message.get("instance_id") != self.instance_id
-            or message.get("connection_id") != self.connection_id
-            or not execution_id
-            or any(
-                other_id != request_id and other["execution_id"] == execution_id
-                for other_id, other in self.execution_records.items()
-            )
-        ):
-            return False
-        record["phase"] = "authorized"
-        record["execution_id"] = execution_id
-        return True
+        return "execute", envelope
 
     def execute_authorized(self, request_id, execution_id):
         record = self.execution_records.get(request_id)
@@ -3241,19 +3241,19 @@ class AgentExt:
             "result": result,
             "error": error_payload,
         }
-        size = len(json.dumps(outcome, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+        size = self._outcome_size(outcome)
         if size > self.MAX_OUTCOME_BYTES:
             status = "failed" if command["name"] in self.read_only_commands else "unknown"
             code = "result_too_large" if status == "failed" else "request_outcome_unknown"
             outcome.update(status=status, result=None, error=self._outcome_error(code))
-            size = len(json.dumps(outcome, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+            size = self._outcome_size(outcome)
         if self._state["outcome_bytes"] + size > self.MAX_TOTAL_OUTCOME_BYTES:
             outcome.update(
                 status="unknown",
                 result=None,
                 error=self._outcome_error("outcome_capacity_exceeded"),
             )
-            size = len(json.dumps(outcome, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+            size = self._outcome_size(outcome)
         record.update(phase="outcome", outcome=outcome, outcome_bytes=size)
         self._state["outcome_bytes"] += size
         self._record_event(
@@ -3376,6 +3376,8 @@ class AgentExt:
                 "results": results,
                 "failed_count": sum(not item["ok"] for item in results),
             }
+        if name == "plan.execute":
+            return self._frame_batch(payload["commands"])
         if name in OperatorControl.HANDLERS:
             return self.operator_control.execute(command)
         operator = self.operator_lookup(payload["operator_path"])
@@ -3388,13 +3390,50 @@ class AgentExt:
         raise AgentCommandError("command_unsupported")
 
     def _batch_item(self, command):
-        """Run one read of a batch; a failed read is reported in place, not raised."""
+        """Run one Command of a batch; its failure is reported in place, not raised."""
         try:
             return {"ok": True, "result": self.execute_command(command)}
         except AgentCommandError as error:
             return {"ok": False, "error": self._outcome_error(error.code, error.details)}
-        except Exception:  # noqa: BLE001 - a read has no side effect to classify as unknown
-            return {"ok": False, "error": self._outcome_error("internal_error")}
+        except Exception:  # noqa: BLE001 - a failed mutation may have changed the project
+            code = (
+                "internal_error"
+                if command["name"] in self.read_only_commands
+                else "request_outcome_unknown"
+            )
+            return {"ok": False, "error": self._outcome_error(code)}
+
+    def _frame_batch(self, commands):
+        """Run Commands in order until one fails or the frame budget is spent; never roll back."""
+        if any(item["name"] not in self.frame_batch_commands for item in commands):
+            raise AgentCommandError("command_unsupported")
+        started = self.clock()
+        results = []
+        stopped_reason = "completed"
+        for command in commands:
+            if results and self.clock() - started > self.FRAME_BATCH_BUDGET_SECONDS:
+                stopped_reason = "frame_budget"
+                break
+            results.append(self._batch_item(command))
+            if not results[-1]["ok"]:
+                stopped_reason = "failed"
+                break
+        report = {
+            "results": results,
+            "executed_count": len(results),
+            "stopped_reason": stopped_reason,
+        }
+        if self._outcome_size(report) > self.MAX_OUTCOME_BYTES - self.FRAME_BATCH_ENVELOPE_BYTES:
+            # The Commands already ran, so only their results are dropped, never their status.
+            report["results"] = [
+                {key: value for key, value in item.items() if key != "result"} for item in results
+            ]
+            report["results_omitted"] = True
+        return report
+
+    @staticmethod
+    def _outcome_size(value):
+        return len(json.dumps(value, separators=(",", ":"), sort_keys=True).encode("utf-8"))
 
     def _snapshot(self, root, payload):
         maximum = payload["max_operators"]

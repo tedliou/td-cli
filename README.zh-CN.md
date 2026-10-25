@@ -92,9 +92,18 @@ td-cli 自有代码采用 [MIT 许可](LICENSE)。
 
 ## 开发
 
-需要 Python 3.11 与 [uv](https://docs.astral.sh/uv/)：
+需要 Python 3.11、[uv](https://docs.astral.sh/uv/) 与 [rustup](https://rustup.rs/)。`td` 是
+`native/td` 里的原生 Rust client，工具链由 `native/td/rust-toolchain.toml` 固定；测试运行 release 版
+`td.exe`，所以先构建再跑 `pytest`：
 
 ```powershell
+rustup set default-host x86_64-pc-windows-gnu
+Push-Location native/td
+cargo fmt --check
+cargo clippy --release --all-targets --locked -- -D warnings
+cargo test --release --locked
+cargo build --release --locked --bins --examples
+Pop-Location
 uv sync --locked --python 3.11
 uv run pytest -q
 uv run ruff check .
@@ -126,11 +135,14 @@ uv run td-daemon serve
 `run\daemon.json`。只有在 Daemon 停止时删除 `state\auth.token` 才是手动 token recovery；之後
 所有 Agent Component 都必须重新连接。
 
-Protocol v3 是唯一 runtime protocol，不提供 v1 alias 或 fallback。Request 依次经过
-`queued`、`dispatched`、`accepted`、`running` 后才进入终态。Daemon 必须先持久化再派发，
-每个 Instance 依 FIFO 仅允许一个已授权 Request，且每次重连都以新的 Connection ID 隔离。
-授权后断线会成为 `unknown`；td-cli 绝不自动重试，但同一 execution 保留的结果之后可将它细化为
-`succeeded` 或 `failed`。
+Protocol v4 是唯一 runtime protocol，不提供 v3 alias 或 fallback。Request 从 `queued`
+进入 `dispatched` 后才进入终态；`dispatched` 表示 Agent 已收到，可能正在执行。Daemon
+必须先持久化再派发，每个 Instance 依 FIFO 仅允许一个 dispatched Request，且每次重连都以新的
+Connection ID 隔离。断线后，dispatched 的 Request 等 Instance 重新注册：有保留的 outcome
+就完成；有未完成的执行记录就保持执行中；没有记录就放回队列最前面，因为 Agent 在执行
+dispatch 的同一个 callback 内登记它。Instance 30 秒内没回来或 Daemon 重启时，Request 会成为
+`unknown`；td-cli 绝不自动重试，但同一 execution 保留的结果之后可将它细化为 `succeeded` 或
+`failed`。
 
 `--json` 命令失败时会输出一个错误 envelope，包含 `code`、`message`、`details` 与
 `retryable`；若已有 Request，另附其 Request ID 与状态。错误码来自单一封闭词汇表
@@ -178,12 +190,13 @@ Artifact inspection 需要 locked TouchDesigner build 产生的相邻
 TouchDesigner `2025.32050` 与必要 DAT／Operator topology。实际 `.tox` 建置及 Online Instance
 验证必须在固定版本 TouchDesigner 环境完成。
 
-Agent 在发出 `request_accepted` 前会先保留有界 outcome 容量，只执行符合 immutable execution
-authorization 的工作，并保留所有 post-accept `succeeded`、`failed`、`unknown` outcome，直到
-Daemon 完成记录。上限为 64 条、每条 canonical outcome 256 KiB、合计 16 MiB。Command、
+Agent 在 `request_dispatch` callback 内检查有界 outcome 容量、登记 dispatch 并执行
+Command，只处理带着自己当前 Connection ID 的 dispatch。所有已登记的 `succeeded`、`failed`、
+`unknown` outcome 会保留到 Daemon 完成记录。上限为 64 条、每条 canonical outcome 256 KiB、合计 16 MiB。Command、
 超过锁定版 SocketIO DAT 单一事件实测范围的 outcome，会拆成依序且经过 identity 验证的 24 KiB
-区块，重组完成后才提交公开结果。Command、heartbeat 与 drain timer 使用 TouchDesigner
-独立的 `TDResources` 时间参考，所有 TouchDesigner object 访问仍只在主线程。Extension
+区块，重组完成后才提交公开结果。heartbeat 与 drain timer 使用 TouchDesigner
+独立的 `TDResources` 时间参考；dispatch 的 Command 直接在 SocketIO DAT callback 内执行，
+也就是主线程的 frame 开头，所有 TouchDesigner object 访问仍只在主线程。Extension
 初始化使用官方 SocketIO Reset 参数，连接后清除暂存 auth DAT。Power Off 模式不受支持。
 
 <!-- doc-section: offline-upgrade -->
@@ -494,7 +507,7 @@ td --json --instance <selector> project save $projectPath --expected-sha256 $dig
 不另存新文件名，也不保存外部 TOX。保存后无法确认结果时报告
 `project_save_outcome_unknown`；先查 retained Request 与磁盘，不自动重做。
 
-Protocol v3 在 SocketIO 边界以 JSON 文本保留 Command 的布尔、整数及 null 类型。
+Protocol v4 在 SocketIO 边界以 JSON 文本保留 Command 的布尔、整数及 null 类型。
 CLI、Daemon 与项目内嵌 Agent 必须一起升级；v2/v3 双向拒绝注册。
 可编辑的 `StrMenu`（例如 Select CHOP 的 `channames`）接受任意字符串，
 普通 `Menu` 仍只接受列出的选项名称。
@@ -518,10 +531,23 @@ read-only Command 使用。
 `td --json --instance <selector> --timeout 120 commands execute --input-file plan.json`
 接受 `{"commands":[{"name":"ops.get","input":{"operator_path":"/project1"}}]}`。
 沿用现有 typed Command payload，最多 256 项查询或 mutation、1 MiB 输入；
-整份计划验证通过后才连接。单一 CLI 进程依次提交各自独立的 Request，首个
+Daemon 先验证整份计划，通过后才提交 Request。单一 CLI 进程依次提交各自独立的 Request，首个
 非成功结果即停止；不具原子性，已完成的修改会保留。timeout 限制整轮执行。
 固定输出 JSONL：提交前先记录从零开始的 index 与 Request ID，再记录完整
 终态 snapshot。请保存输出；中断或 outcome unknown 后先查询已记录的 Request，
 不要盲目重跑整份计划。不接受嵌套 `batch.execute`。
 
+加上 `--frame-batch` 时，可共用一个 TouchDesigner frame 的连续 Command（快速读取与有界
+mutation；扫描、导出、可信导入、`batch.execute` 与 `plan.execute` 不会放进去）合成一个 `plan.execute` Request，称为 Frame
+Batch：最多 256 个 Command，Command 的紧凑 JSON（非 ASCII 转义）合计最多 65,536 bytes。
+Agent 在同一个 dispatch callback 内依序执行，遇到第一个失败就停，超过 8 ms 就在两个
+Command 之间停下；下一段从第一个没执行的 Command 开始。其他 Command 照旧一个 Request
+一个。JSONL：每个 Request 一行 `submitting`（`index` 是第一个 Command，Frame Batch 另有
+`count`）；每个已执行的 Command 一行 `completed`，含 `index`、所属 Frame Batch 的
+`request_id` 与 `result`；最后是 `stopped` 或 `finished`。整段 Frame Batch 为 `unknown`
+时，`stopped` 指向该段第一个 Command，段内任何 Command 都可能已执行。需要提供 `plan.execute`
+能力的 Agent，Agent 较旧时 Daemon 以 `command_unsupported` 拒绝。不加此选项时输出不变。
+
 0.11.0 离线升级除现有来源（含 0.7.0、0.7.1、0.8.0、0.9.0）外，新增精确 canonical 0.10.0 Agent 白名单，保留 Connectionstate 定义。Agent 读取接口新增：`batch execute` 逐项结果、Instance 的 `project`、`ops inspect` 的 COMP 接口摘要、Execute 系列与 byte offset 的 `dat text get`、`chop values get`、`parameters list` 的值与筛选选项、可分页的 `project snapshot`，以及 `ops destroy`／`copy`／`move` 的 `--inventory summary`。`td` 改以 onedir 发布，启动约 0.4 秒。新选项需要 0.11.0 Agent；内嵌较旧 Agent 时，CLI 与 Daemon 会以 `command_unsupported` 拒绝。
+
+1.0.0 是破坏性版本，全面缩短 Command 延迟。`td` 换成 Rust 写的单一原生 `td.exe`：Daemon 已在运行时，`td --version` 与 `td --json instances list` 从约 1.5 秒降到约 10 ms。版本目录不再有 `td-runtime\`，卸载会移除残留的这个文件夹；`td-daemon` 与 `td-agent` 以 onedir 发布，附 `td-daemon-runtime\` 与 `td-agent-runtime\`。`td` 等待 Request 改用长轮询。Protocol v4 让 Agent 在收到 Command 的 callback 内登记并执行，60 fps 下一次 TouchDesigner 往返从约 62 ms 降到约一个 frame（17 ms）。`commands execute --frame-batch` 在一个 frame 内执行连续的 Command：256 个 `ops.create` 加 256 个 `parameters.set` 从约 10.8 秒降到约 2.5 秒。Command 与计划字段改由 Daemon 验证，`invalid_arguments` 的细节不变。`td` 照原样传送参数：不再展开 `~`、`$VAR`、`%VAR%` 与通配符，`NaN` 这类非标准 JSON 会被拒绝。Request 快照不再出现 `accepted` 与 `running`。Daemon 只接受 v4 Agent，所以内嵌较旧 Agent 的项目都要运行 `td-agent upgrade-project`；升级白名单新增精确 canonical 0.11.0 Agent。

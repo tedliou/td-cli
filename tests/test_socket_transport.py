@@ -53,7 +53,7 @@ def unused_port() -> int:
 def registration_payload() -> dict[str, object]:
     return {
         "instance_id": INSTANCE_ID,
-        "protocol_versions": [3],
+        "protocol_versions": [4],
         "agent_version": "0.4.0",
         "td_build": "2025.32050",
         "capabilities": ["ops.get"],
@@ -105,7 +105,7 @@ async def get_json(port: int, path: str) -> tuple[int, object]:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "incompatible_fields", [{"td_build": "2025.99999"}, {"protocol_versions": [2]}]
+    "incompatible_fields", [{"td_build": "2025.99999"}, {"protocol_versions": [3]}]
 )
 async def test_authentication_and_registration_fail_closed(
     tmp_path: Path, incompatible_fields
@@ -167,7 +167,7 @@ async def test_registration_stays_synchronizing_until_agent_replay(tmp_path: Pat
         ),
     ],
 )
-async def test_full_v3_handshake_is_ordered_durable_and_redacted(
+async def test_v4_dispatch_and_outcome_are_ordered_durable_and_redacted(
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
     outcome_status: str,
@@ -178,13 +178,11 @@ async def test_full_v3_handshake_is_ordered_durable_and_redacted(
     server, thread, port = await start_server(create_transport_app(tmp_path, token=TOKEN))
     client = socketio.AsyncClient(reconnection=False)
     dispatched: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
-    execute: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
     recorded: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
     order = []
     client.on(
         "request_dispatch", lambda data: (order.append("dispatch"), dispatched.set_result(data))
     )
-    client.on("request_execute", lambda data: (order.append("execute"), execute.set_result(data)))
     client.on(
         "outcome_recorded", lambda data: (order.append("recorded"), recorded.set_result(data))
     )
@@ -201,17 +199,15 @@ async def test_full_v3_handshake_is_ordered_durable_and_redacted(
                 },
             )
             assert response.status == 201
-        request = await asyncio.wait_for(dispatched, 2)
-        assert request["status"] == "dispatched"
-        assert isinstance(request["command"], str)
-        assert json.loads(request["command"])["input"]["operator_path"] == "/secret-path"
-        await client.emit("request_accepted", {**connection, "request_id": REQUEST_ID})
-        authorization = await asyncio.wait_for(execute, 2)
-        assert authorization["execution_id"]
+        dispatch = await asyncio.wait_for(dispatched, 2)
+        assert dispatch["status"] == "dispatched"
+        assert isinstance(dispatch["command"], str)
+        assert json.loads(dispatch["command"])["input"]["operator_path"] == "/secret-path"
+        assert dispatch["execution_id"]
         outcome = {
             **connection,
             "request_id": REQUEST_ID,
-            "execution_id": authorization["execution_id"],
+            "execution_id": dispatch["execution_id"],
             "status": outcome_status,
             "result": outcome_result,
             "error": outcome_error,
@@ -221,15 +217,15 @@ async def test_full_v3_handshake_is_ordered_durable_and_redacted(
             {
                 **connection,
                 "request_id": REQUEST_ID,
-                "execution_id": authorization["execution_id"],
+                "execution_id": dispatch["execution_id"],
                 "chunk_index": 0,
                 "chunk_count": 1,
                 "payload": json.dumps(outcome, separators=(",", ":"), sort_keys=True),
             },
         )
         acknowledgment = await asyncio.wait_for(recorded, 2)
-        assert acknowledgment["execution_id"] == authorization["execution_id"]
-        assert order == ["dispatch", "execute", "recorded"]
+        assert acknowledgment["execution_id"] == dispatch["execution_id"]
+        assert order == ["dispatch", "recorded"]
         _, snapshot = await get_json(port, f"/v3/requests/{REQUEST_ID}")
         assert snapshot["status"] == outcome_status
         assert snapshot["result"] == outcome_result
@@ -245,18 +241,16 @@ async def test_full_v3_handshake_is_ordered_durable_and_redacted(
 
 
 @pytest.mark.asyncio
-async def test_reconnect_reconciles_matching_retained_outcome(tmp_path: Path) -> None:
+async def test_reconnect_without_a_record_dispatches_the_request_again(tmp_path: Path) -> None:
     server, thread, port = await start_server(create_transport_app(tmp_path, token=TOKEN))
     first = socketio.AsyncClient(reconnection=False)
     dispatched: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
-    execute: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
     first.on("request_dispatch", lambda data: dispatched.set_result(data))
-    first.on("request_execute", lambda data: execute.set_result(data))
     second = socketio.AsyncClient(reconnection=False)
-    recorded: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
-    second.on("outcome_recorded", lambda data: recorded.set_result(data))
+    redispatched: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
+    second.on("request_dispatch", lambda data: redispatched.set_result(data))
     try:
-        first_connection = await register(first, port)
+        await register(first, port)
         async with ClientSession() as session:
             response = await session.post(
                 f"http://127.0.0.1:{port}/v3/requests",
@@ -268,16 +262,53 @@ async def test_reconnect_reconciles_matching_retained_outcome(tmp_path: Path) ->
                 },
             )
             assert response.status == 201
-        await asyncio.wait_for(dispatched, 2)
-        await first.emit("request_accepted", {**first_connection, "request_id": REQUEST_ID})
-        authorization = await asyncio.wait_for(execute, 2)
+        dispatch = await asyncio.wait_for(dispatched, 2)
+        await first.disconnect()  # before the Agent recorded the dispatch
+
+        second_connection = await register(second, port)
+        again = await asyncio.wait_for(redispatched, 2)
+        assert again["request_id"] == REQUEST_ID
+        assert again["connection_id"] == second_connection["connection_id"]
+        assert again["execution_id"] != dispatch["execution_id"]
+    finally:
+        for client in (first, second):
+            if client.connected:
+                await client.disconnect()
+        stop_server(server, thread)
+
+
+@pytest.mark.asyncio
+async def test_reconnect_reconciles_matching_retained_outcome(tmp_path: Path) -> None:
+    server, thread, port = await start_server(create_transport_app(tmp_path, token=TOKEN))
+    first = socketio.AsyncClient(reconnection=False)
+    dispatched: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
+    first.on("request_dispatch", lambda data: dispatched.set_result(data))
+    second = socketio.AsyncClient(reconnection=False)
+    recorded: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
+    second.on("outcome_recorded", lambda data: recorded.set_result(data))
+    try:
+        await register(first, port)
+        async with ClientSession() as session:
+            response = await session.post(
+                f"http://127.0.0.1:{port}/v3/requests",
+                headers={"Authorization": f"Bearer {TOKEN}"},
+                json={
+                    "request_id": REQUEST_ID,
+                    "instance_id": INSTANCE_ID,
+                    "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
+                },
+            )
+            assert response.status == 201
+        dispatch = await asyncio.wait_for(dispatched, 2)
         await first.disconnect()
         for _ in range(50):
-            _, unknown = await get_json(port, f"/v3/requests/{REQUEST_ID}")
-            if unknown["status"] == "unknown":
+            _, instances = await get_json(port, "/v3/instances")
+            if [item["status"] for item in instances] == ["offline"]:
                 break
             await asyncio.sleep(0.01)
-        assert unknown["status"] == "unknown"
+        assert [item["status"] for item in instances] == ["offline"]
+        _, held = await get_json(port, f"/v3/requests/{REQUEST_ID}")
+        assert held["status"] == "dispatched"
 
         second_connection = await register(second, port, synchronize=False)
         await second.emit(
@@ -288,7 +319,7 @@ async def test_reconnect_reconciles_matching_retained_outcome(tmp_path: Path) ->
                     {
                         "phase": "outcome",
                         "request_id": REQUEST_ID,
-                        "execution_id": authorization["execution_id"],
+                        "execution_id": dispatch["execution_id"],
                         "status": "succeeded",
                         "result": {"path": "/project1"},
                         "error": None,
@@ -314,13 +345,11 @@ async def test_reconnect_reassembles_bounded_outcome_chunks_before_synchronizing
     first = socketio.AsyncClient(reconnection=False)
     second = socketio.AsyncClient(reconnection=False)
     dispatched: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
-    execute: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
     recorded: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
     first.on("request_dispatch", lambda data: dispatched.set_result(data))
-    first.on("request_execute", lambda data: execute.set_result(data))
     second.on("outcome_recorded", lambda data: recorded.set_result(data))
     try:
-        first_connection = await register(first, port)
+        await register(first, port)
         async with ClientSession() as session:
             response = await session.post(
                 f"http://127.0.0.1:{port}/v3/requests",
@@ -332,16 +361,14 @@ async def test_reconnect_reassembles_bounded_outcome_chunks_before_synchronizing
                 },
             )
             assert response.status == 201
-        await asyncio.wait_for(dispatched, 2)
-        await first.emit("request_accepted", {**first_connection, "request_id": REQUEST_ID})
-        authorization = await asyncio.wait_for(execute, 2)
+        dispatch = await asyncio.wait_for(dispatched, 2)
         await first.disconnect()
 
         second_connection = await register(second, port, synchronize=False)
         outcome = {
             **second_connection,
             "request_id": REQUEST_ID,
-            "execution_id": authorization["execution_id"],
+            "execution_id": dispatch["execution_id"],
             "status": "succeeded",
             "result": {"payload": "x" * 70_000},
             "error": None,
@@ -355,7 +382,7 @@ async def test_reconnect_reassembles_bounded_outcome_chunks_before_synchronizing
                 {
                     **second_connection,
                     "request_id": REQUEST_ID,
-                    "execution_id": authorization["execution_id"],
+                    "execution_id": dispatch["execution_id"],
                     "chunk_index": index,
                     "chunk_count": len(payloads),
                     "payload": payload,
@@ -553,6 +580,53 @@ async def test_instances_report_no_project_for_older_agents(tmp_path: Path) -> N
         await register(client, port, payload={**registration_payload(), "project": {"name": 7}})
         _, listed = await get_json(port, "/v3/instances")
         assert listed[0]["project"] is None
+    finally:
+        if client.connected:
+            await client.disconnect()
+        stop_server(server, thread)
+
+
+@pytest.mark.asyncio
+async def test_fatal_stop_answers_open_long_polls_before_the_server_stops(tmp_path: Path) -> None:
+    stopped = threading.Event()
+    app = create_transport_app(tmp_path, token=TOKEN, shutdown=stopped.set)
+    server, thread, port = await start_server(app)
+    client = socketio.AsyncClient(reconnection=False)
+    dispatched: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
+    client.on("request_dispatch", lambda data: dispatched.set_result(data))
+    command = {"name": "ops.get", "input": {"operator_path": "/project1"}}
+    try:
+        await register(client, port)
+        async with ClientSession(headers={"Authorization": f"Bearer {TOKEN}"}) as session:
+            submitted = await session.post(
+                f"http://127.0.0.1:{port}/v3/requests",
+                json={"request_id": REQUEST_ID, "instance_id": INSTANCE_ID, "command": command},
+            )
+            assert submitted.status == 201
+            await asyncio.wait_for(dispatched, 2)
+            poll = asyncio.create_task(
+                session.get(f"http://127.0.0.1:{port}/v3/requests/{REQUEST_ID}?wait_ms=20000")
+            )
+            store = app.other_asgi_app.state.request_store
+
+            async def unavailable(*args: object, **kwargs: object) -> object:
+                raise RuntimeError("store unavailable")
+
+            # The failing store also keeps the controlled shutdown from settling the Request.
+            store.create_or_get = unavailable
+            store.find_by_statuses = unavailable
+            await session.post(
+                f"http://127.0.0.1:{port}/v3/requests",
+                json={
+                    "request_id": "018f47ec-7f3b-7a34-8f31-2ad70b6f6e2b",
+                    "instance_id": INSTANCE_ID,
+                    "command": command,
+                },
+            )
+            answered = await asyncio.wait_for(poll, 5)
+            assert answered.status == 200
+            assert (await answered.json())["status"] == "dispatched"
+        assert stopped.is_set()
     finally:
         if client.connected:
             await client.disconnect()

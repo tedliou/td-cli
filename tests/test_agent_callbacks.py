@@ -19,7 +19,7 @@ class FakeAgentExtension:
         self.connection_id = None
         self.draining = False
         self.records = []
-        self.authorized = []
+        self.dispatched = []
         self.heartbeat_generation = 0
         self.runtime_active = True
         self.heartbeat_marks = 0
@@ -84,12 +84,9 @@ class FakeAgentExtension:
     def authorized_records(self):
         return []
 
-    def reserve(self, request):
-        return "request_accepted", {**self.heartbeat_payload(), "request_id": request["request_id"]}
-
-    def authorize(self, message):
-        self.authorized.append(message["execution_id"])
-        return True
+    def dispatch(self, request):
+        self.dispatched.append(request["execution_id"])
+        return "execute", {**self.heartbeat_payload(), "request_id": request["request_id"]}
 
     def execute_authorized(self, request_id, execution_id):
         return {
@@ -340,62 +337,36 @@ def test_registration_replays_all_execution_phases_before_dispatch() -> None:
     )
 
 
-def test_dispatch_authorizes_main_thread_execution_and_chunks_outcomes() -> None:
+def _refuse_run(*args, **options):
+    raise AssertionError(f"execution must not be deferred with run(): {args} {options}")
+
+
+def _inline_callbacks(extension):
+    """Load the callbacks with a run() that fails, proving execution is never deferred."""
+    return run_path(
+        str(Path("agent/socket_callbacks.py")),
+        init_globals={"parent": lambda: component(extension), "run": _refuse_run},
+    )
+
+
+def test_dispatch_executes_in_the_same_callback_and_chunks_outcomes() -> None:
     extension = FakeAgentExtension()
     extension.connection_id = "connection-1"
     socket = FakeSocket()
     socket.extension = extension
-    scheduled = []
-    lookup = FakeOp({})
-
-    def schedule(script, *args, **options):
-        scheduled.append((script, args, options))
-
-    callbacks = run_path(
-        str(Path("agent/socket_callbacks.py")),
-        init_globals={
-            "parent": lambda: component(extension),
-            "run": schedule,
-            "op": lookup,
-        },
-    )
-    callbacks["onReceiveEvent"](
-        socket,
-        0,
-        {
-            "request_id": "request-2",
-            "command": json.dumps({"name": "ops.get", "input": {"operator_path": "/project1"}}),
-        },
-        "request_dispatch",
-    )
-    assert socket.emitted == [
-        (
-            "request_accepted",
-            {
-                "request_id": "request-2",
-                "instance_id": "instance-1",
-                "connection_id": "connection-1",
-            },
-        )
-    ]
-
-    callbacks["onReceiveEvent"](
-        socket,
-        0,
-        {
-            "request_id": "request-2",
-            "instance_id": "instance-1",
-            "connection_id": "connection-1",
-            "execution_id": "execution-1",
-        },
-        "request_execute",
-    )
-    assert extension.authorized == ["execution-1"]
-    assert scheduled[0][0] is callbacks["executeScheduled"]
-    assert scheduled[0][2] == {"delayMilliSeconds": 1, "delayRef": lookup.TDResources}
-    callbacks["executeScheduled"](socket, "request-2", "execution-1")
-    event, chunk = socket.emitted[-1]
+    callbacks = _inline_callbacks(extension)
+    dispatch = {
+        "request_id": "request-2",
+        "instance_id": "instance-1",
+        "connection_id": "connection-1",
+        "execution_id": "execution-1",
+        "command": json.dumps({"name": "ops.get", "input": {"operator_path": "/project1"}}),
+    }
+    callbacks["onReceiveEvent"](socket, 0, dispatch, "request_dispatch")
+    assert extension.dispatched == ["execution-1"]
+    [(event, chunk)] = socket.emitted
     assert event == "request_outcome_chunk"
+    assert json.loads(chunk["payload"])["execution_id"] == "execution-1"
     assert json.loads(chunk["payload"])["error"] is None
 
     failed = {
@@ -407,10 +378,49 @@ def test_dispatch_authorizes_main_thread_execution_and_chunks_outcomes() -> None
         "error": {"code": "operator_not_found"},
     }
     extension.execute_authorized = lambda *_: failed
-    callbacks["executeScheduled"](socket, "request-3", "execution-2")
+    callbacks["onReceiveEvent"](
+        socket,
+        0,
+        {**dispatch, "request_id": "request-3", "execution_id": "execution-2"},
+        "request_dispatch",
+    )
     event, chunk = socket.emitted[-1]
     assert event == "request_outcome_chunk"
     assert json.loads(chunk["payload"]) == failed
+
+
+def test_dispatch_the_agent_already_recorded_emits_nothing() -> None:
+    # The Agent answers a redelivered execution with no event (tests/test_agent_runtime.py).
+    extension = FakeAgentExtension()
+    extension.connection_id = "connection-1"
+    extension.dispatch = lambda request: (None, None)
+    executed = []
+    original = extension.execute_authorized
+    extension.execute_authorized = lambda *arguments: (
+        executed.append(arguments) or original(*arguments)
+    )
+    socket = FakeSocket()
+    socket.extension = extension
+    callbacks = _inline_callbacks(extension)
+    message = {
+        "request_id": "request-2",
+        "execution_id": "execution-1",
+        "command": json.dumps({"name": "ops.get", "input": {"operator_path": "/project1"}}),
+    }
+    callbacks["onReceiveEvent"](socket, 0, message, "request_dispatch")
+    assert executed == []
+    assert socket.emitted == []
+
+
+def test_registration_executes_retained_authorizations_after_synchronizing() -> None:
+    extension = FakeAgentExtension()
+    extension.authorized_records = lambda: [("request-4", "execution-4")]
+    socket = FakeSocket()
+    socket.extension = extension
+    callbacks = _inline_callbacks(extension)
+    callbacks["onReceiveEvent"](socket, 0, {"connection_id": "connection-1"}, "registered")
+    assert [event for event, _ in socket.emitted] == ["execution_sync", "request_outcome_chunk"]
+    assert json.loads(socket.emitted[-1][1]["payload"])["execution_id"] == "execution-4"
 
 
 def test_duplicate_dispatch_chunks_a_retained_failure_with_null_result() -> None:
@@ -424,7 +434,7 @@ def test_duplicate_dispatch_chunks_a_retained_failure_with_null_result() -> None
         "result": None,
         "error": {"code": "operator_not_found"},
     }
-    extension.reserve = lambda _: ("request_outcome", outcome)
+    extension.dispatch = lambda _: ("request_outcome", outcome)
     socket = FakeSocket()
     socket.extension = extension
     callbacks = run_path(
@@ -447,13 +457,13 @@ def test_duplicate_dispatch_chunks_a_retained_failure_with_null_result() -> None
 
 
 @pytest.mark.parametrize("wire", [None, {}, "[]", "{", '{"name":"ops.get"}'])
-def test_dispatch_rejects_malformed_wire_without_reserving(wire):
+def test_dispatch_rejects_malformed_wire_without_recording(wire):
     extension = FakeAgentExtension()
 
-    def reserve(_):
-        raise AssertionError("malformed command reached reserve")
+    def dispatch(_):
+        raise AssertionError("malformed command reached dispatch")
 
-    extension.reserve = reserve
+    extension.dispatch = dispatch
     socket = FakeSocket()
     socket.extension = extension
     callbacks = run_path(
@@ -469,11 +479,11 @@ def test_dispatch_json_preserves_nested_scalar_types():
     extension = FakeAgentExtension()
     captured = []
 
-    def reserve(request):
+    def dispatch(request):
         captured.append(request["command"])
-        return "request_accepted", {"request_id": "r"}
+        return None, None
 
-    extension.reserve = reserve
+    extension.dispatch = dispatch
     socket = FakeSocket()
     socket.extension = extension
     callbacks = run_path(

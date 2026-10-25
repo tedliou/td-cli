@@ -34,7 +34,7 @@ class ArchiveVendor:
         packed(path.with_name(path.name + ".dir"), path)
 
 
-@pytest.fixture(params=["0.3.1", "0.6.0", "0.7.0", "0.7.1", "0.8.0", "0.9.0", "0.10.0"])
+@pytest.fixture(params=["0.3.1", "0.6.0", "0.7.0", "0.7.1", "0.8.0", "0.9.0", "0.10.0", "0.11.0"])
 def migration(tmp_path, monkeypatch, request):
     def component(root, version):
         root.mkdir(parents=True)
@@ -51,9 +51,9 @@ def migration(tmp_path, monkeypatch, request):
     source = component(source_root / "project1" / "my_agent", request.param)
     (source_root / "media.parm").write_bytes(b"relative media path\x00unchanged")
     target_root = tmp_path / "target"
-    target_component = component(target_root / "td_agent", "0.11.0")
+    target_component = component(target_root / "td_agent", "1.0.0")
     target_component.with_suffix(".cparm").write_bytes(b"known connection-state definition")
-    if request.param in {"0.6.0", "0.7.0", "0.7.1", "0.8.0", "0.9.0", "0.10.0"}:
+    if request.param in {"0.6.0", "0.7.0", "0.7.1", "0.8.0", "0.9.0", "0.10.0", "0.11.0"}:
         source.with_suffix(".cparm").write_bytes(b"known connection-state definition")
         source.with_suffix(".parm").write_bytes(
             b"?\nenableexternaltox 0 off\nConnectionstate 67109184 online\n?\n"
@@ -82,6 +82,7 @@ def migration(tmp_path, monkeypatch, request):
             "0.8.0": "V080_HASHES",
             "0.9.0": "V090_HASHES",
             "0.10.0": "V0100_HASHES",
+            "0.11.0": "V0110_HASHES",
         }[request.param],
         upgrade.script_hashes(source),
     )
@@ -119,7 +120,7 @@ def test_public_upgrade_preserves_graph_path_and_backup_then_is_noop(migration):
     assert Path(report["backup"]).read_bytes() == original
     with zipfile.ZipFile(project) as archive:
         assert archive.read("media.parm") == b"relative media path\x00unchanged"
-        assert b'"0.11.0"' in archive.read("project1/my_agent/agent_manifest.text")
+        assert b'"1.0.0"' in archive.read("project1/my_agent/agent_manifest.text")
         assert archive.read("project1/my_agent.cparm") == b"known connection-state definition"
         assert archive.read("project1/my_agent.parm").count(b"Connectionstate ") == 1
     upgraded = project.read_bytes()
@@ -240,3 +241,34 @@ def test_changed_event_subscriptions_are_not_reported_as_canonical(migration):
     assert result.exit_code == 1
     assert "modified runtime structure" in result.output
     assert project.read_bytes() == original
+
+
+def test_an_approved_agent_with_the_protocol3_event_table_upgrades_to_the_v4_table(
+    migration, monkeypatch
+):
+    project, artifact, evidence, _ = migration
+    protocol3 = b"registered request_dispatch request_execute outcome_recorded"
+    protocol4 = b"registered request_dispatch outcome_recorded"
+    for path, prefix, table in (
+        (project, "project1/my_agent", protocol3),
+        (artifact, "td_agent", protocol4),
+    ):
+        with zipfile.ZipFile(path, "a") as archive:
+            archive.writestr(prefix + "/events_table.table", table)
+    evidence.write_text(
+        json.dumps(
+            {
+                "artifact_sha256": upgrade.digest(artifact),
+                "touchdesigner_version": upgrade.BUILD,
+            }
+        )
+    )
+    monkeypatch.setattr(
+        upgrade, "PROTOCOL3_EVENTS_TABLE_SHA256", hashlib.sha256(protocol3).hexdigest()
+    )
+
+    result = invoke(migration)
+
+    assert result.exit_code == 0, result.output
+    with zipfile.ZipFile(project) as archive:
+        assert archive.read("project1/my_agent/events_table.table") == protocol4

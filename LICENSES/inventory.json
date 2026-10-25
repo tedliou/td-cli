@@ -1948,6 +1948,195 @@
       "files": [
         "LICENSES/runtime__SQLite__LICENSE"
       ]
+    },
+    {
+      "name": "equivalent",
+      "version": "1.0.3",
+      "kind": "native td Rust crate",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://static.crates.io/crates/equivalent/equivalent-1.0.3.crate",
+      "files": [
+        "LICENSES/rust__equivalent-1.0.3__LICENSE-APACHE",
+        "LICENSES/rust__equivalent-1.0.3__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "foldhash",
+      "version": "0.2.0",
+      "kind": "native td Rust crate",
+      "license": "Zlib",
+      "source": "https://static.crates.io/crates/foldhash/foldhash-0.2.0.crate",
+      "files": [
+        "LICENSES/rust__foldhash-0.2.0__LICENSE"
+      ]
+    },
+    {
+      "name": "hashbrown",
+      "version": "0.17.1",
+      "kind": "native td Rust crate",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/hashbrown/hashbrown-0.17.1.crate",
+      "files": [
+        "LICENSES/rust__hashbrown-0.17.1__LICENSE-APACHE",
+        "LICENSES/rust__hashbrown-0.17.1__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "indexmap",
+      "version": "2.14.2",
+      "kind": "native td Rust crate",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://static.crates.io/crates/indexmap/indexmap-2.14.2.crate",
+      "files": [
+        "LICENSES/rust__indexmap-2.14.2__LICENSE-APACHE",
+        "LICENSES/rust__indexmap-2.14.2__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "itoa",
+      "version": "1.0.18",
+      "kind": "native td Rust crate",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/itoa/itoa-1.0.18.crate",
+      "files": [
+        "LICENSES/rust__itoa-1.0.18__LICENSE-APACHE",
+        "LICENSES/rust__itoa-1.0.18__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "memchr",
+      "version": "2.8.3",
+      "kind": "native td Rust crate",
+      "license": "Unlicense OR MIT",
+      "source": "https://static.crates.io/crates/memchr/memchr-2.8.3.crate",
+      "files": [
+        "LICENSES/rust__memchr-2.8.3__COPYING",
+        "LICENSES/rust__memchr-2.8.3__LICENSE-MIT",
+        "LICENSES/rust__memchr-2.8.3__UNLICENSE"
+      ]
+    },
+    {
+      "name": "proc-macro2",
+      "version": "1.0.107",
+      "kind": "native td Cargo.lock (not built)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/proc-macro2/proc-macro2-1.0.107.crate",
+      "files": [
+        "LICENSES/rust__proc-macro2-1.0.107__LICENSE-APACHE",
+        "LICENSES/rust__proc-macro2-1.0.107__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "quote",
+      "version": "1.0.47",
+      "kind": "native td Cargo.lock (not built)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/quote/quote-1.0.47.crate",
+      "files": [
+        "LICENSES/rust__quote-1.0.47__LICENSE-APACHE",
+        "LICENSES/rust__quote-1.0.47__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "serde",
+      "version": "1.0.229",
+      "kind": "native td Cargo.lock (not built)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/serde/serde-1.0.229.crate",
+      "files": [
+        "LICENSES/rust__serde-1.0.229__LICENSE-APACHE",
+        "LICENSES/rust__serde-1.0.229__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "serde_core",
+      "version": "1.0.229",
+      "kind": "native td Rust crate",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/serde_core/serde_core-1.0.229.crate",
+      "files": [
+        "LICENSES/rust__serde_core-1.0.229__LICENSE-APACHE",
+        "LICENSES/rust__serde_core-1.0.229__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "serde_derive",
+      "version": "1.0.229",
+      "kind": "native td Cargo.lock (not built)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/serde_derive/serde_derive-1.0.229.crate",
+      "files": [
+        "LICENSES/rust__serde_derive-1.0.229__LICENSE-APACHE",
+        "LICENSES/rust__serde_derive-1.0.229__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "serde_json",
+      "version": "1.0.154",
+      "kind": "native td Rust crate",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/serde_json/serde_json-1.0.154.crate",
+      "files": [
+        "LICENSES/rust__serde_json-1.0.154__LICENSE-APACHE",
+        "LICENSES/rust__serde_json-1.0.154__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "syn",
+      "version": "3.0.9",
+      "kind": "native td Cargo.lock (not built)",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.crates.io/crates/syn/syn-3.0.9.crate",
+      "files": [
+        "LICENSES/rust__syn-3.0.9__LICENSE-APACHE",
+        "LICENSES/rust__syn-3.0.9__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "unicode-ident",
+      "version": "1.0.27",
+      "kind": "native td Cargo.lock (not built)",
+      "license": "(MIT OR Apache-2.0) AND Unicode-3.0",
+      "source": "https://static.crates.io/crates/unicode-ident/unicode-ident-1.0.27.crate",
+      "files": [
+        "LICENSES/rust__unicode-ident-1.0.27__LICENSE-APACHE",
+        "LICENSES/rust__unicode-ident-1.0.27__LICENSE-MIT",
+        "LICENSES/rust__unicode-ident-1.0.27__LICENSE-UNICODE"
+      ]
+    },
+    {
+      "name": "zmij",
+      "version": "1.0.23",
+      "kind": "native td Rust crate",
+      "license": "MIT",
+      "source": "https://static.crates.io/crates/zmij/zmij-1.0.23.crate",
+      "files": [
+        "LICENSES/rust__zmij-1.0.23__LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "Rust standard library",
+      "version": "1.99.1",
+      "kind": "native td Rust toolchain runtime",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/rust-lang/rust/tree/1.99.1",
+      "files": [
+        "LICENSES/toolchain__rust-1.99.1__MIT.txt",
+        "LICENSES/toolchain__rust-1.99.1__Apache-2.0.txt",
+        "LICENSES/toolchain__rust-1.99.1__COPYRIGHT-library.html"
+      ]
+    },
+    {
+      "name": "GCC runtime libraries and MinGW-w64 startup objects",
+      "version": "Rust 1.99.1 x86_64-pc-windows-gnu",
+      "kind": "native td Rust toolchain runtime",
+      "license": "GPL-3.0-or-later WITH GCC-exception-3.1",
+      "source": "https://www.mingw-w64.org/",
+      "files": [
+        "LICENSES/toolchain__rust-1.99.1-windows-gnu__README.txt",
+        "LICENSES/toolchain__rust-1.99.1-windows-gnu__COPYING3",
+        "LICENSES/toolchain__rust-1.99.1-windows-gnu__COPYING.RUNTIME"
+      ]
     }
   ],
   "files": {
@@ -2219,9 +2408,44 @@
     "LICENSES/runtime__CPython-3.11.9__LICENSE.txt": "e502c6b880ff58d614901495a9009c136539cd0b1e2a2abb8fc00b934c203419",
     "LICENSES/runtime__CPython-3.11.9__Doc-license.rst": "2b734ec5975b21b29ae8b9756a00fc3dfe701abe51687cec4c98a21c51005bca",
     "LICENSES/runtime__OpenSSL-3.0.13__LICENSE.txt": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a",
-    "LICENSES/runtime__Expat-2.6.0__COPYING": "122f2c27000472a201d337b9b31f7eb2b52d091b02857061a8880371612d9534"
+    "LICENSES/runtime__Expat-2.6.0__COPYING": "122f2c27000472a201d337b9b31f7eb2b52d091b02857061a8880371612d9534",
+    "LICENSES/rust__equivalent-1.0.3__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__equivalent-1.0.3__LICENSE-MIT": "7365cc8878a1d7ce155a58c4ca09c3d7a6be413efa5334a80ea842912b669349",
+    "LICENSES/rust__hashbrown-0.17.1__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__hashbrown-0.17.1__LICENSE-MIT": "ff8f68cb076caf8cefe7a6430d4ac086ce6af2ca8ce2c4e5a2004d4552ef52a2",
+    "LICENSES/rust__indexmap-2.14.2__LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "LICENSES/rust__indexmap-2.14.2__LICENSE-MIT": "ecc269ef87fd38a1d98e30bfac9ba964a9dbd9315c3770fed98d4d7cb5882055",
+    "LICENSES/rust__itoa-1.0.18__LICENSE-APACHE": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+    "LICENSES/rust__itoa-1.0.18__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__memchr-2.8.3__COPYING": "01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f",
+    "LICENSES/rust__memchr-2.8.3__LICENSE-MIT": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f",
+    "LICENSES/rust__memchr-2.8.3__UNLICENSE": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c",
+    "LICENSES/rust__proc-macro2-1.0.107__LICENSE-APACHE": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+    "LICENSES/rust__proc-macro2-1.0.107__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__quote-1.0.47__LICENSE-APACHE": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+    "LICENSES/rust__quote-1.0.47__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__serde-1.0.229__LICENSE-APACHE": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+    "LICENSES/rust__serde-1.0.229__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__serde_core-1.0.229__LICENSE-APACHE": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+    "LICENSES/rust__serde_core-1.0.229__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__serde_derive-1.0.229__LICENSE-APACHE": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+    "LICENSES/rust__serde_derive-1.0.229__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__serde_json-1.0.154__LICENSE-APACHE": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+    "LICENSES/rust__serde_json-1.0.154__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__syn-3.0.9__LICENSE-APACHE": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+    "LICENSES/rust__syn-3.0.9__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__unicode-ident-1.0.27__LICENSE-APACHE": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+    "LICENSES/rust__unicode-ident-1.0.27__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/rust__unicode-ident-1.0.27__LICENSE-UNICODE": "f7db81051789b729fea528a63ec4c938fdcb93d9d61d97dc8cc2e9df6d47f2a1",
+    "LICENSES/rust__zmij-1.0.23__LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "LICENSES/toolchain__rust-1.99.1__MIT.txt": "b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0",
+    "LICENSES/toolchain__rust-1.99.1__Apache-2.0.txt": "074e6e32c86a4c0ef8b3ed25b721ca23aca83df277cd88106ef7177c354615ff",
+    "LICENSES/toolchain__rust-1.99.1__COPYRIGHT-library.html": "5647be074c8edf7339fd863055923a8fc80bc5610a8d4661ec3b767b9d392c27",
+    "LICENSES/toolchain__rust-1.99.1-windows-gnu__README.txt": "cdd0eaf36ec136a87f1b7fbae6d7b22c1488e2435c83fc1755f0f4f802e97c67",
+    "LICENSES/toolchain__rust-1.99.1-windows-gnu__COPYING3": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+    "LICENSES/toolchain__rust-1.99.1-windows-gnu__COPYING.RUNTIME": "28e85c5aa4af9b4f1dfe6b4817aa3eefb3eaaee7fd735045016f29ccf50276a1"
   },
-  "lock_sha256": "2a0ca6e01f76ebad1741fb478114e23f597c1935afdf3c42e1f88b91459c004e",
+  "lock_sha256": "f465f3fb3a63f39e71271de6d7e77cc66d352e757b17a23eff02668ec8fa3a44",
   "original_paths": {
     "LICENSES/pydantic-core__sbom.json": "LICENSES/pydantic-core/sbom.json",
     "LICENSES/python__aiohappyeyeballs__aiohappyeyeballs-2.7.1.dist-info__licenses__LICENSE": "LICENSES/python/aiohappyeyeballs/aiohappyeyeballs-2.7.1.dist-info/licenses/LICENSE",
@@ -2491,7 +2715,42 @@
     "LICENSES/runtime__CPython-3.11.9__LICENSE.txt": "LICENSES/runtime__CPython-3.11.9__LICENSE.txt",
     "LICENSES/runtime__CPython-3.11.9__Doc-license.rst": "LICENSES/runtime__CPython-3.11.9__Doc-license.rst",
     "LICENSES/runtime__OpenSSL-3.0.13__LICENSE.txt": "LICENSES/runtime__OpenSSL-3.0.13__LICENSE.txt",
-    "LICENSES/runtime__Expat-2.6.0__COPYING": "LICENSES/runtime__Expat-2.6.0__COPYING"
+    "LICENSES/runtime__Expat-2.6.0__COPYING": "LICENSES/runtime__Expat-2.6.0__COPYING",
+    "LICENSES/rust__equivalent-1.0.3__LICENSE-APACHE": "LICENSES/rust/equivalent-1.0.3/LICENSE-APACHE",
+    "LICENSES/rust__equivalent-1.0.3__LICENSE-MIT": "LICENSES/rust/equivalent-1.0.3/LICENSE-MIT",
+    "LICENSES/rust__hashbrown-0.17.1__LICENSE-APACHE": "LICENSES/rust/hashbrown-0.17.1/LICENSE-APACHE",
+    "LICENSES/rust__hashbrown-0.17.1__LICENSE-MIT": "LICENSES/rust/hashbrown-0.17.1/LICENSE-MIT",
+    "LICENSES/rust__indexmap-2.14.2__LICENSE-APACHE": "LICENSES/rust/indexmap-2.14.2/LICENSE-APACHE",
+    "LICENSES/rust__indexmap-2.14.2__LICENSE-MIT": "LICENSES/rust/indexmap-2.14.2/LICENSE-MIT",
+    "LICENSES/rust__itoa-1.0.18__LICENSE-APACHE": "LICENSES/rust/itoa-1.0.18/LICENSE-APACHE",
+    "LICENSES/rust__itoa-1.0.18__LICENSE-MIT": "LICENSES/rust/itoa-1.0.18/LICENSE-MIT",
+    "LICENSES/rust__memchr-2.8.3__COPYING": "LICENSES/rust/memchr-2.8.3/COPYING",
+    "LICENSES/rust__memchr-2.8.3__LICENSE-MIT": "LICENSES/rust/memchr-2.8.3/LICENSE-MIT",
+    "LICENSES/rust__memchr-2.8.3__UNLICENSE": "LICENSES/rust/memchr-2.8.3/UNLICENSE",
+    "LICENSES/rust__proc-macro2-1.0.107__LICENSE-APACHE": "LICENSES/rust/proc-macro2-1.0.107/LICENSE-APACHE",
+    "LICENSES/rust__proc-macro2-1.0.107__LICENSE-MIT": "LICENSES/rust/proc-macro2-1.0.107/LICENSE-MIT",
+    "LICENSES/rust__quote-1.0.47__LICENSE-APACHE": "LICENSES/rust/quote-1.0.47/LICENSE-APACHE",
+    "LICENSES/rust__quote-1.0.47__LICENSE-MIT": "LICENSES/rust/quote-1.0.47/LICENSE-MIT",
+    "LICENSES/rust__serde-1.0.229__LICENSE-APACHE": "LICENSES/rust/serde-1.0.229/LICENSE-APACHE",
+    "LICENSES/rust__serde-1.0.229__LICENSE-MIT": "LICENSES/rust/serde-1.0.229/LICENSE-MIT",
+    "LICENSES/rust__serde_core-1.0.229__LICENSE-APACHE": "LICENSES/rust/serde_core-1.0.229/LICENSE-APACHE",
+    "LICENSES/rust__serde_core-1.0.229__LICENSE-MIT": "LICENSES/rust/serde_core-1.0.229/LICENSE-MIT",
+    "LICENSES/rust__serde_derive-1.0.229__LICENSE-APACHE": "LICENSES/rust/serde_derive-1.0.229/LICENSE-APACHE",
+    "LICENSES/rust__serde_derive-1.0.229__LICENSE-MIT": "LICENSES/rust/serde_derive-1.0.229/LICENSE-MIT",
+    "LICENSES/rust__serde_json-1.0.154__LICENSE-APACHE": "LICENSES/rust/serde_json-1.0.154/LICENSE-APACHE",
+    "LICENSES/rust__serde_json-1.0.154__LICENSE-MIT": "LICENSES/rust/serde_json-1.0.154/LICENSE-MIT",
+    "LICENSES/rust__syn-3.0.9__LICENSE-APACHE": "LICENSES/rust/syn-3.0.9/LICENSE-APACHE",
+    "LICENSES/rust__syn-3.0.9__LICENSE-MIT": "LICENSES/rust/syn-3.0.9/LICENSE-MIT",
+    "LICENSES/rust__unicode-ident-1.0.27__LICENSE-APACHE": "LICENSES/rust/unicode-ident-1.0.27/LICENSE-APACHE",
+    "LICENSES/rust__unicode-ident-1.0.27__LICENSE-MIT": "LICENSES/rust/unicode-ident-1.0.27/LICENSE-MIT",
+    "LICENSES/rust__unicode-ident-1.0.27__LICENSE-UNICODE": "LICENSES/rust/unicode-ident-1.0.27/LICENSE-UNICODE",
+    "LICENSES/rust__zmij-1.0.23__LICENSE-MIT": "LICENSES/rust/zmij-1.0.23/LICENSE-MIT",
+    "LICENSES/toolchain__rust-1.99.1__MIT.txt": "toolchain/rust-1.99.1/share/doc/rust/licenses/MIT.txt",
+    "LICENSES/toolchain__rust-1.99.1__Apache-2.0.txt": "toolchain/rust-1.99.1/share/doc/rust/licenses/Apache-2.0.txt",
+    "LICENSES/toolchain__rust-1.99.1__COPYRIGHT-library.html": "toolchain/rust-1.99.1/share/doc/rust/COPYRIGHT-library.html",
+    "LICENSES/toolchain__rust-1.99.1-windows-gnu__README.txt": "toolchain/rust-1.99.1/share/doc/README.txt",
+    "LICENSES/toolchain__rust-1.99.1-windows-gnu__COPYING3": "toolchain/rust-1.99.1/share/doc/COPYING3",
+    "LICENSES/toolchain__rust-1.99.1-windows-gnu__COPYING.RUNTIME": "toolchain/rust-1.99.1/share/doc/COPYING.RUNTIME"
   },
   "runtime_variants": {
     "3.11.15": {
@@ -2514,5 +2773,24 @@
       },
       "license_file": "LICENSES/runtime__CPython-3.11.9__LICENSE.txt"
     }
-  }
+  },
+  "cargo_packages": {
+    "equivalent": "1.0.3",
+    "foldhash": "0.2.0",
+    "hashbrown": "0.17.1",
+    "indexmap": "2.14.2",
+    "itoa": "1.0.18",
+    "memchr": "2.8.3",
+    "proc-macro2": "1.0.107",
+    "quote": "1.0.47",
+    "serde": "1.0.229",
+    "serde_core": "1.0.229",
+    "serde_derive": "1.0.229",
+    "serde_json": "1.0.154",
+    "syn": "3.0.9",
+    "unicode-ident": "1.0.27",
+    "zmij": "1.0.23"
+  },
+  "cargo_lock_sha256": "59b1f42a0f335835e5f36e2d80bad0690f8ae07199886c7e017e4f18bca6b06f",
+  "rust_toolchain": "1.99.1"
 }

@@ -25,6 +25,7 @@ from td_cli.daemon.lifecycle import (
     RequestLifecycle,
 )
 from td_cli.daemon.storage import RequestStore
+from td_cli.protocol import PROTOCOL_VERSION
 from td_cli.release import LOCKED_TOUCHDESIGNER_VERSION
 
 LOGGER = logging.getLogger("td_cli.daemon.lifecycle")
@@ -79,11 +80,12 @@ def create_transport_app(
     outbound_capacity: int = 64,
     execution_leases: dict[str, float] | None = None,
 ) -> socketio.ASGIApp:
-    """Create thin authenticated Protocol v3 adapters around RequestLifecycle."""
+    """Create thin authenticated Protocol v4 adapters around RequestLifecycle."""
     sio = socketio.AsyncServer(
         async_mode="asgi", cors_allowed_origins=[], max_http_buffer_size=256 * 1024
     )
     lifecycle: RequestLifecycle | None = None
+    request_store: RequestStore | None = None
     effect_task: asyncio.Task[None] | None = None
     deadline_task: asyncio.Task[None] | None = None
     connections: dict[str, _ConnectionAdapter] = {}
@@ -98,8 +100,16 @@ def create_transport_app(
             raise RuntimeError("RequestLifecycle is not started")
         return lifecycle
 
+    def stop_serving() -> None:
+        # The server waits for open connections before it stops, so answer long polls first.
+        if request_store is not None:
+            request_store.release_waiters()
+        if shutdown is not None:
+            shutdown()
+
     async def startup(store: RequestStore) -> None:
-        nonlocal lifecycle, effect_task, deadline_task
+        nonlocal lifecycle, request_store, effect_task, deadline_task
+        request_store = store
         lifecycle = RequestLifecycle(
             store,
             heartbeat_timeout=heartbeat_timeout,
@@ -156,7 +166,7 @@ def create_transport_app(
                     "selector": _selector(instance_id, ids),
                     "status": item.status if item.status == "draining" else state["status"],
                     "agent_version": item.agent_version,
-                    "protocol_version": 3,
+                    "protocol_version": PROTOCOL_VERSION,
                     "capabilities": sorted(item.capabilities),
                     "last_heartbeat_at": item.last_heartbeat_at,
                     "offline_expires_at": item.offline_expires_at,
@@ -172,8 +182,7 @@ def create_transport_app(
             await asyncio.sleep(0.05)
         for adapter in list(connections.values()):
             await enqueue(adapter, _Outbound(disconnect=True), wait=True)
-        if shutdown is not None:
-            shutdown()
+        stop_serving()
 
     management = create_app(
         root,
@@ -207,8 +216,7 @@ def create_transport_app(
                     metadata.pop(effect.instance_id, None)
                 continue
             if effect.kind == "fatal":
-                if shutdown is not None:
-                    shutdown()
+                stop_serving()
                 continue
             if effect.instance_id is None or effect.connection_id is None:
                 continue
@@ -366,15 +374,6 @@ def create_transport_app(
         )
 
     @sio.event
-    async def request_accepted(sid: str, data: object) -> None:
-        adapter = _current(by_sid, sid, data)
-        if adapter is None or not isinstance(data, dict):
-            return
-        request_id = str(data.get("request_id", ""))
-        await require_lifecycle().accepted(adapter.instance_id, adapter.connection_id, request_id)
-        await require_lifecycle().authorize(adapter.instance_id, adapter.connection_id, request_id)
-
-    @sio.event
     async def request_rejected(sid: str, data: object) -> None:
         adapter = _current(by_sid, sid, data)
         if adapter is None or not isinstance(data, dict):
@@ -385,13 +384,6 @@ def create_transport_app(
             str(data.get("request_id", "")),
             str(data.get("code", "request_rejected")),
         )
-
-    @sio.event
-    async def request_outcome(sid: str, data: object) -> None:
-        adapter = _current(by_sid, sid, data)
-        if adapter is None or not isinstance(data, dict):
-            return
-        await record_outcome(adapter, data)
 
     @sio.event
     async def request_outcome_chunk(sid: str, data: object) -> None:
@@ -521,7 +513,7 @@ def _effect_outbound(effect: LifecycleEffect, drain_timeout: float) -> _Outbound
         "connection_id": effect.connection_id,
     }
     if effect.kind == "registered":
-        return _Outbound("registered", {**envelope, "protocol_version": 3})
+        return _Outbound("registered", {**envelope, "protocol_version": PROTOCOL_VERSION})
     if effect.kind == "request_dispatch":
         return _Outbound(
             "request_dispatch",
@@ -531,15 +523,6 @@ def _effect_outbound(effect: LifecycleEffect, drain_timeout: float) -> _Outbound
                 "command": json.dumps(
                     effect.payload["command"], separators=(",", ":"), sort_keys=True
                 ),
-            },
-        )
-    if effect.kind == "request_execute":
-        return _Outbound(
-            "request_execute",
-            {
-                **envelope,
-                "request_id": effect.request_id,
-                "execution_id": effect.execution_id,
             },
         )
     if effect.kind in {"outcome_recorded", "record_release"}:
@@ -569,7 +552,7 @@ def _registration(data: object) -> tuple[str, str, list[str]] | None:
     if (
         not isinstance(versions, list)
         or any(type(version) is not int for version in versions)
-        or versions != [3]
+        or versions != [PROTOCOL_VERSION]
         or data.get("td_build") != LOCKED_TOUCHDESIGNER_VERSION
     ):
         return None

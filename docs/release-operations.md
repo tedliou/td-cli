@@ -2,7 +2,10 @@
 
 The four **Release Artifacts** are built from the version in `pyproject.toml` on
 Windows 2022 / Python 3.11 with the locked `uv.lock` and explicit PyInstaller
-specs. The localhost diagnostic bridge is development-only and is not included.
+specs for `td-daemon` and `td-agent`. `td` is the native Rust client: `cargo build
+--release --locked` with the toolchain pinned in `native/td/rust-toolchain.toml`,
+and its ZIP holds only `td.exe` and the license documents. The localhost
+diagnostic bridge is development-only and is not included.
 
 ## Agent Component staging
 
@@ -20,7 +23,9 @@ specs. The localhost diagnostic bridge is development-only and is not included.
    digest, encoding, dispatch, and temporary-file cleanup without placing the
    payload in the repository.
 4. Record the run ID, artifact ID, artifact digest, head SHA, version, and expiry
-   from the job summary. Restaging always creates a new artifact ID.
+   from the job summary. The digest is recorded in the Actions API form
+   `sha256:<hex>`, which **Publish Release** expects; a bare 64-hex digest is
+   also accepted. Restaging always creates a new artifact ID.
 
 Remove the local stage directory and encoded payload after the immutable Actions
 artifact identity is recorded. TouchDesigner validation remains local

@@ -1,0 +1,16 @@
+[package]
+name = "td"
+version = "1.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+description = "Native td client for the TouchDesigner CLI Daemon"
+
+[dependencies]
+serde_json = { version = "1.0.154", features = ["preserve_order", "arbitrary_precision"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+panic = "abort"
+strip = true

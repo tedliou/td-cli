@@ -1,5 +1,5 @@
 """TouchDesigner CLI runtime."""
 
-from importlib.metadata import version
-
-__version__ = version("touchdesigner-cli")
+# A constant, not importlib.metadata: reading package metadata costs every td start ~130 ms.
+# tests/test_release_cli.py keeps it equal to the version in pyproject.toml.
+__version__ = "1.0.0"

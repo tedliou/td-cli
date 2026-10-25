@@ -45,11 +45,11 @@ def execute_v2(agent, request_id, command, execution_id="execution-1"):
         "request_id": request_id,
         "instance_id": agent.instance_id,
         "connection_id": agent.connection_id,
+        "execution_id": execution_id,
         "command": command,
     }
-    event, accepted = agent.reserve(dispatched)
-    assert event == "request_accepted"
-    assert agent.authorize({**accepted, "execution_id": execution_id}) is True
+    event, _ = agent.dispatch(dispatched)
+    assert event == "execute"
     return agent.execute_authorized(request_id, execution_id)
 
 
@@ -4577,30 +4577,78 @@ def test_large_outcome_is_split_into_bounded_ordered_socket_events() -> None:
     assert json.loads("".join(chunk["payload"] for chunk in chunks)) == outcome
 
 
-def test_protocol_v2_reserves_before_accept_and_executes_only_after_authorization() -> None:
+def dispatch_message(agent, request_id, execution_id="execution-1", **changes):
+    return {
+        "request_id": request_id,
+        "instance_id": agent.instance_id,
+        "connection_id": agent.connection_id,
+        "execution_id": execution_id,
+        "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
+        **changes,
+    }
+
+
+def test_protocol_v4_records_the_dispatch_before_executing_it_once() -> None:
     agent = AgentExt(FakeOwner())
     agent.connection_id = "connection-1"
     executions = []
     agent.execute_command = lambda command: executions.append(command) or {"path": "/project1"}
-    dispatched = {
-        "request_id": "request-v2",
-        "instance_id": agent.instance_id,
-        "connection_id": agent.connection_id,
-        "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
-    }
+    dispatched = dispatch_message(agent, "request-v4")
 
-    event, accepted = agent.reserve(dispatched)
-    assert event == "request_accepted"
-    assert accepted["request_id"] == "request-v2"
-    assert agent.execution_records["request-v2"]["phase"] == "reserved"
+    event, envelope = agent.dispatch(dispatched)
+    assert event == "execute"
+    assert envelope["request_id"] == "request-v4"
+    record = agent.execution_records["request-v4"]
+    assert (record["phase"], record["execution_id"]) == ("authorized", "execution-1")
     assert executions == []
 
-    assert agent.authorize({**accepted, "execution_id": "execution-1"}) is True
-    assert agent.execution_records["request-v2"]["phase"] == "authorized"
-    outcome = agent.execute_authorized("request-v2", "execution-1")
+    outcome = agent.execute_authorized("request-v4", "execution-1")
     assert executions == [dispatched["command"]]
     assert outcome["status"] == "succeeded"
-    assert agent.execution_records["request-v2"]["phase"] == "outcome"
+    assert agent.dispatch(dispatched) == ("request_outcome", outcome)
+    assert executions == [dispatched["command"]]
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [{"connection_id": "connection-old"}, {"instance_id": "other"}, {"execution_id": ""}],
+)
+def test_dispatch_from_another_connection_is_rejected_without_a_record(changes) -> None:
+    agent = AgentExt(FakeOwner())
+    agent.connection_id = "connection-1"
+
+    event, rejected = agent.dispatch(dispatch_message(agent, "request-stale", **changes))
+
+    assert event == "request_rejected"
+    assert rejected["code"] == "request_identity_invalid"
+    assert agent.execution_records == {}
+
+
+def test_draining_agent_rejects_a_dispatch_before_recording_it() -> None:
+    agent = AgentExt(FakeOwner())
+    agent.connection_id = "connection-1"
+    agent.begin_draining()
+
+    event, rejected = agent.dispatch(dispatch_message(agent, "request-late"))
+
+    assert (event, rejected["code"]) == ("request_rejected", "instance_draining")
+    assert agent.execution_records == {}
+
+
+def test_redelivered_dispatch_executes_nothing_and_a_changed_one_conflicts() -> None:
+    agent = AgentExt(FakeOwner())
+    agent.connection_id = "connection-1"
+    assert agent.dispatch(dispatch_message(agent, "request-1"))[0] == "execute"
+
+    assert agent.dispatch(dispatch_message(agent, "request-1")) == (None, None)
+    event, rejected = agent.dispatch(
+        dispatch_message(agent, "request-1", execution_id="execution-2")
+    )
+    assert event == "request_rejected"
+    assert rejected["code"] == "request_id_conflict"
+    event, rejected = agent.dispatch(dispatch_message(agent, "request-2"))
+    assert event == "request_rejected"
+    assert rejected["code"] == "request_identity_invalid"
 
 
 def test_generic_mutation_exception_is_retained_as_unknown() -> None:
@@ -4624,8 +4672,7 @@ def test_generic_mutation_exception_is_retained_as_unknown() -> None:
         },
     }
 
-    _, accepted = agent.reserve(dispatched)
-    agent.authorize({**accepted, "execution_id": "execution-1"})
+    assert agent.dispatch({**dispatched, "execution_id": "execution-1"})[0] == "execute"
     outcome = agent.execute_authorized("mutation-v2", "execution-1")
 
     assert outcome["status"] == "unknown"
@@ -4633,28 +4680,16 @@ def test_generic_mutation_exception_is_retained_as_unknown() -> None:
     assert agent.replay_records() == [outcome]
 
 
-def test_reservation_capacity_is_bounded_before_acceptance() -> None:
+def test_record_capacity_is_bounded_before_execution() -> None:
     agent = AgentExt(FakeOwner())
     agent.connection_id = "connection-1"
     for index in range(agent.MAX_EXECUTION_RECORDS):
-        event, _ = agent.reserve(
-            {
-                "request_id": f"request-{index}",
-                "instance_id": agent.instance_id,
-                "connection_id": agent.connection_id,
-                "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
-            }
+        event, _ = agent.dispatch(
+            dispatch_message(agent, f"request-{index}", execution_id=f"execution-{index}")
         )
-        assert event == "request_accepted"
+        assert event == "execute"
 
-    event, rejected = agent.reserve(
-        {
-            "request_id": "overflow",
-            "instance_id": agent.instance_id,
-            "connection_id": agent.connection_id,
-            "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
-        }
-    )
+    event, rejected = agent.dispatch(dispatch_message(agent, "overflow", execution_id="x"))
     assert event == "request_rejected"
     assert rejected["code"] == "execution_capacity_full"
     assert "overflow" not in agent.execution_records
@@ -4883,3 +4918,192 @@ def test_chop_values_reads_a_bounded_sample_range_of_selected_channels() -> None
         make_control({not_chop.path: not_chop}.get).execute(
             {"name": "chop.values.get", "input": {"operator_path": not_chop.path}}
         )
+
+
+def frame_batch(*commands):
+    return {"name": "plan.execute", "input": {"commands": list(commands)}}
+
+
+def set_display(value):
+    return {
+        "name": "parameters.set",
+        "input": {
+            "operator_path": "/project1",
+            "parameter": "display",
+            "mode": "constant",
+            "value": value,
+        },
+    }
+
+
+def test_frame_batch_runs_in_the_dispatch_callback_and_stops_at_the_first_failure() -> None:
+    root = FakeOperator("/project1")
+    root.par.display = FakeParameter(True)
+    agent = AgentExt(
+        FakeOwner(), operator_lookup=lambda path: root if path == "/project1" else None
+    )
+    agent.connection_id = "connection-1"
+
+    outcome = execute_v2(
+        agent,
+        "request-1",
+        frame_batch(
+            set_display(False),
+            {"name": "ops.get", "input": {"operator_path": "/project1/missing"}},
+            set_display(True),
+        ),
+    )
+
+    assert outcome["status"] == "succeeded"
+    result = outcome["result"]
+    assert result["executed_count"] == 2
+    assert result["stopped_reason"] == "failed"
+    assert [item["ok"] for item in result["results"]] == [True, False]
+    assert result["results"][1]["error"]["code"] == "operator_not_found"
+    assert root.par.display.val is False  # the earlier change stays; the third never ran
+
+
+def slow_agent(root, seconds_per_command):
+    """An Agent whose clock advances by `seconds_per_command` each time a Command looks up its Operator."""
+    now = [0.0]
+
+    def lookup(_path):
+        now[0] += seconds_per_command
+        return root
+
+    agent = AgentExt(FakeOwner(), operator_lookup=lookup)
+    agent.connection_id = "connection-1"
+    agent.clock = lambda: now[0]
+    return agent
+
+
+def test_frame_batch_stops_between_commands_once_the_frame_budget_is_spent() -> None:
+    root = FakeOperator("/project1")
+    root.par.display = FakeParameter(True)
+    agent = slow_agent(root, 0.005)
+
+    outcome = execute_v2(
+        agent,
+        "request-1",
+        frame_batch(set_display(False), set_display(True), set_display(False)),
+    )
+
+    result = outcome["result"]
+    assert (result["executed_count"], result["stopped_reason"]) == (2, "frame_budget")
+    assert root.par.display.val is True  # the third Command never ran
+
+
+def test_frame_batch_reports_completion_when_only_the_last_command_runs_over_budget() -> None:
+    root = FakeOperator("/project1")
+    root.par.display = FakeParameter(True)
+    agent = slow_agent(root, 0.005)
+
+    result = agent.execute_command(frame_batch(set_display(False), set_display(True)))
+
+    assert (result["executed_count"], result["stopped_reason"]) == (2, "completed")
+
+
+def test_frame_batch_always_runs_its_first_command_and_reports_completion() -> None:
+    root = FakeOperator("/project1")
+    agent = slow_agent(root, 5.0)
+
+    result = agent.execute_command(
+        frame_batch({"name": "ops.get", "input": {"operator_path": "/project1"}})
+    )
+
+    assert (result["executed_count"], result["stopped_reason"]) == (1, "completed")
+    assert result["results"][0]["result"]["path"] == "/project1"
+
+
+def test_frame_batch_replays_its_outcome_without_running_again() -> None:
+    root = FakeOperator("/project1")
+    root.par.display = FakeParameter(True)
+    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: root)
+    agent.connection_id = "connection-1"
+    command = frame_batch(set_display(False))
+
+    outcome = execute_v2(agent, "request-1", command)
+    root.par.display.val = True
+    dispatched = {
+        "request_id": "request-1",
+        "instance_id": agent.instance_id,
+        "connection_id": agent.connection_id,
+        "execution_id": "execution-1",
+        "command": command,
+    }
+
+    assert agent.dispatch(dispatched) == ("request_outcome", outcome)
+    assert root.par.display.val is True  # the resent dispatch did not set it again
+
+
+def test_frame_batch_drops_results_that_would_overflow_the_outcome() -> None:
+    root = FakeOperator("/project1")
+    root.par.notes = FakeParameter("x" * (AgentExt.MAX_OUTCOME_BYTES // 2))
+    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: root)
+    agent.connection_id = "connection-1"
+    read = {"name": "parameters.get", "input": {"operator_path": "/project1", "parameter": "notes"}}
+
+    outcome = execute_v2(agent, "request-1", frame_batch(read, read, read))
+
+    assert outcome["status"] == "succeeded"
+    result = outcome["result"]
+    assert result["results_omitted"] is True
+    assert result["executed_count"] == 3
+    assert result["results"] == [{"ok": True}] * 3
+
+
+def test_frame_batch_keeps_a_report_just_under_the_limit_inside_the_outcome() -> None:
+    root = FakeOperator("/project1")
+    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: root)
+    agent.connection_id = "connection-1"
+    read = {"name": "parameters.get", "input": {"operator_path": "/project1", "parameter": "notes"}}
+    root.par.notes = FakeParameter("")
+    empty = len(json.dumps(agent.execute_command(frame_batch(read)), separators=(",", ":")))
+    root.par.notes = FakeParameter("x" * (AgentExt.MAX_OUTCOME_BYTES - empty - 16))
+
+    outcome = execute_v2(agent, "request-1", frame_batch(read))
+
+    assert outcome["status"] == "succeeded"
+    assert outcome["result"]["results_omitted"] is True
+
+
+def test_frame_batch_reports_a_mutation_that_raised_as_unknown_and_stops() -> None:
+    root = FakeOperator("/project1")
+    root.par.display = FakeParameter(True)
+    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: root)
+    calls = []
+    original = agent.execute_command
+
+    def execute(command):
+        if command["name"] == "parameters.set":
+            calls.append(command)
+            raise RuntimeError("td error")
+        return original(command)
+
+    agent.execute_command = execute
+    result = original(frame_batch(set_display(False), set_display(True)))
+
+    assert len(calls) == 1
+    assert result["stopped_reason"] == "failed"
+    assert result["results"][0]["error"]["code"] == "request_outcome_unknown"
+
+
+def test_frame_batch_rejects_a_command_outside_the_frame_batch_classes() -> None:
+    root = FakeOperator("/project1")
+    root.par.display = FakeParameter(True)
+    agent = AgentExt(FakeOwner(), operator_lookup=lambda _: root)
+
+    with pytest.raises(module.AgentCommandError, match="command_unsupported"):
+        agent.execute_command(
+            frame_batch(
+                set_display(False),
+                {"name": "project.save", "input": {}},
+            )
+        )
+    assert root.par.display.val is True
+
+
+def test_agent_frame_batch_contract_matches_canonical_command_catalog() -> None:
+    manifest = json.loads(Path("agent/manifest.json").read_text(encoding="utf-8"))
+    assert manifest["frame_batch_commands"] == list(COMMAND_CATALOG.frame_batch_names)
+    assert "plan.execute" in AgentExt.CAPABILITIES

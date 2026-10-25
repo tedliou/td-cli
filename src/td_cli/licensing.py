@@ -10,7 +10,36 @@ import sys
 import tomllib
 import zlib
 from pathlib import Path
+from typing import Any
 from xml.parsers import expat
+
+_NATIVE_CRATE_KINDS = {"native td Rust crate", "native td Cargo.lock (not built)"}
+
+
+def _check_native_td(root: Path, inventory: dict[str, Any]) -> None:
+    """The native td's crates and Rust toolchain must match the reviewed snapshot."""
+    lock_text = (root / "native/td/Cargo.lock").read_text(encoding="utf-8")
+    crates = {
+        package["name"]: package["version"]
+        for package in tomllib.loads(lock_text)["package"]
+        if "source" in package
+    }
+    toolchain_text = (root / "native/td/rust-toolchain.toml").read_text(encoding="utf-8")
+    toolchain = tomllib.loads(toolchain_text)["toolchain"]["channel"]
+    recorded = {
+        (component["name"], component["version"])
+        for component in inventory["components"]
+        if component["kind"] in _NATIVE_CRATE_KINDS
+    }
+    if (
+        crates != inventory["cargo_packages"]
+        or hashlib.sha256(lock_text.encode()).hexdigest() != inventory["cargo_lock_sha256"]
+        or toolchain != inventory["rust_toolchain"]
+        or set(crates.items()) != recorded
+    ):
+        raise ValueError(
+            "Third-party license inventory is stale: review native td Cargo.lock or toolchain"
+        )
 
 
 def license_files(root: Path, *, check_runtime: bool = False) -> dict[str, Path]:
@@ -28,6 +57,7 @@ def license_files(root: Path, *, check_runtime: bool = False) -> dict[str, Path]
         or hashlib.sha256(lock_text.encode()).hexdigest() != inventory["lock_sha256"]
     ):
         raise ValueError("Third-party license inventory is stale: review uv.lock changes")
+    _check_native_td(root, inventory)
     files = {name: root / name for name in ("LICENSE", "THIRD_PARTY_NOTICES.md")}
     files["LICENSES/inventory.json"] = inventory_path
     for name, digest in inventory["files"].items():

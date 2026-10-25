@@ -7,7 +7,7 @@ description: Review and implement td-cli runtime reliability changes involving P
 
 Use this workflow before changing a runtime seam and again before declaring it complete.
 
-1. Read `CONTEXT.md` and the relevant implementation. For reliability claims, read
+1. Read `GLOSSARY.md` and the relevant implementation. For reliability claims, read
    `docs/research/runtime-reliability-primary-sources.md` and verify any drift-prone library or
    TouchDesigner fact against its primary documentation.
 2. State which Request and TouchDesigner Instance invariants the change affects. Preserve

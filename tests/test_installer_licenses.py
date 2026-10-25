@@ -102,6 +102,9 @@ def test_installer_upgrade_replaces_current_junction_and_keeps_old_version(
     old_version = install / "versions" / "0.0.1"
     old_version.mkdir(parents=True)
     (old_version / "sentinel.txt").write_text("old", encoding="utf-8")
+    # A PyInstaller td from before 0.13.0 kept its runtime beside td.exe.
+    (old_version / "td-runtime").mkdir()
+    (old_version / "td-runtime" / "python311.dll").write_bytes(b"old runtime")
     subprocess.run(
         ["cmd", "/c", "mklink", "/J", str(install / "current"), str(old_version)],
         capture_output=True,
@@ -143,6 +146,41 @@ def test_installer_upgrade_replaces_current_junction_and_keeps_old_version(
     assert result.returncode == 0, result.stderr
     assert "Installed td-cli" in result.stdout
     assert (install / "current" / "td.exe").is_file()
+    assert not (install / "current" / "td-runtime").exists()
     assert not (install / "current.previous").exists()
     assert not (install / "current.next").exists()
     assert (old_version / "sentinel.txt").read_text(encoding="utf-8") == "old"
+
+
+@pytest.mark.skipif(shutil.which("pwsh") is None, reason="PowerShell is required")
+def test_uninstall_removes_a_legacy_td_runtime(tmp_path: Path) -> None:
+    install = tmp_path / "installed"
+    legacy = install / "versions" / "0.12.0" / "td-runtime"
+    legacy.mkdir(parents=True)
+    (legacy / "python311.dll").write_bytes(b"old runtime")
+    subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(install / "current"), str(legacy.parent)],
+        capture_output=True,
+        check=True,
+        timeout=30,
+    )
+    result = subprocess.run(
+        [
+            "pwsh",
+            "-NoProfile",
+            "-File",
+            "packaging/uninstall.ps1",
+            "-InstallRoot",
+            str(install),
+            "-NonInteractive",
+            "-NoPathUpdate",
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert not install.exists()

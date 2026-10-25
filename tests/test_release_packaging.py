@@ -19,24 +19,30 @@ def test_release_build_refuses_unreviewed_native_runtime(monkeypatch: pytest.Mon
         license_files(Path("."), check_runtime=True)
 
 
-TD_RUNTIME_FILES = ("td-runtime/base_library.zip", "td-runtime/python311.dll")
+# td is one native exe; the Python executables are PyInstaller onedir bundles, so no
+# invocation pays a onefile extraction.
+RUNTIME_FILES_BY_BUNDLE = {
+    "td": (),
+    **{
+        name: (f"{name}-runtime/base_library.zip", f"{name}-runtime/python311.dll")
+        for name in ("td-daemon", "td-agent")
+    },
+}
 
 
 def _write_executables(root: Path) -> None:
-    for name in ("td-daemon.exe", "td-agent.exe"):
-        (root / name).write_bytes(name.encode())
-    # td is a PyInstaller onedir bundle so each invocation skips the onefile extraction.
-    for name in ("td.exe", *TD_RUNTIME_FILES):
-        path = root / "td" / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(name.encode())
+    for bundle, runtime in RUNTIME_FILES_BY_BUNDLE.items():
+        for name in (f"{bundle}.exe", *runtime):
+            path = root / bundle / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(name.encode())
 
 
 def _write_agent_stage(root: Path, *, source_commit: str = "a" * 40) -> None:
     tox = root / "td-agent.tox"
     tox.write_bytes(b"tox")
     manifest = {
-        "agent_version": "0.11.0",
+        "agent_version": "1.0.0",
         "locked_touchdesigner_version": "2025.32050",
         "source_commit": source_commit,
         "artifact_sha256": hashlib.sha256(b"tox").hexdigest(),
@@ -73,16 +79,16 @@ def test_release_packaging_creates_the_four_root_layouts_and_sorted_checksums(
     } == first_digests
 
     assert [path.name for path in artifacts] == [
-        "td-agent-cli-v0.11.0-windows-x86_64.zip",
-        "td-agent-component-v0.11.0-td2025.32050.zip",
-        "td-daemon-v0.11.0-windows-x86_64.zip",
-        "td-v0.11.0-windows-x86_64.zip",
+        "td-agent-cli-v1.0.0-windows-x86_64.zip",
+        "td-agent-component-v1.0.0-td2025.32050.zip",
+        "td-daemon-v1.0.0-windows-x86_64.zip",
+        "td-v1.0.0-windows-x86_64.zip",
     ]
     expected_entries = {
-        artifacts[0].name: ["td-agent.exe"],
+        artifacts[0].name: ["td-agent.exe", *RUNTIME_FILES_BY_BUNDLE["td-agent"]],
         artifacts[1].name: ["manifest.json", "td-agent.tox", "verification.json"],
-        artifacts[2].name: ["td-daemon.exe"],
-        artifacts[3].name: ["td.exe", *TD_RUNTIME_FILES],
+        artifacts[2].name: ["td-daemon.exe", *RUNTIME_FILES_BY_BUNDLE["td-daemon"]],
+        artifacts[3].name: ["td.exe", *RUNTIME_FILES_BY_BUNDLE["td"]],
     }
     for archive in artifacts:
         with zipfile.ZipFile(archive) as opened:
@@ -97,15 +103,24 @@ def test_release_packaging_creates_the_four_root_layouts_and_sorted_checksums(
     assert [line.split("  ")[1] for line in checksum_lines] == sorted(expected_entries)
     assert all(len(line.split("  ")[0]) == 64 for line in checksum_lines)
     assert "__VERSION__" not in (output / "install.ps1").read_text(encoding="utf-8")
-    assert "0.11.0" in (output / "install.ps1").read_text(encoding="utf-8")
+    assert "1.0.0" in (output / "install.ps1").read_text(encoding="utf-8")
     assert (output / "uninstall.ps1").is_file()
 
 
-@pytest.mark.parametrize("damage", ["missing", "changed", "stale-lock"])
+@pytest.mark.parametrize(
+    "damage", ["missing", "changed", "stale-lock", "stale-cargo-lock", "stale-toolchain"]
+)
 def test_release_refuses_incomplete_or_stale_licenses(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, damage: str
 ) -> None:
-    for name in ("LICENSE", "THIRD_PARTY_NOTICES.md", "uv.lock"):
+    (tmp_path / "native/td").mkdir(parents=True)
+    for name in (
+        "LICENSE",
+        "THIRD_PARTY_NOTICES.md",
+        "uv.lock",
+        "native/td/Cargo.lock",
+        "native/td/rust-toolchain.toml",
+    ):
         shutil.copyfile(name, tmp_path / name)
     shutil.copytree("LICENSES", tmp_path / "LICENSES")
     _write_executables(tmp_path)
@@ -115,11 +130,22 @@ def test_release_refuses_incomplete_or_stale_licenses(
         damaged.unlink()
     elif damage == "changed":
         damaged.write_text("removed upstream notice", encoding="utf-8")
-    else:
+    elif damage == "stale-lock":
         lock = tmp_path / "uv.lock"
         lock.write_text(
             lock.read_text(encoding="utf-8").replace('name = "bidict"', 'name = "new-dependency"'),
             encoding="utf-8",
+        )
+    elif damage == "stale-cargo-lock":
+        lock = tmp_path / "native/td/Cargo.lock"
+        lock.write_text(
+            lock.read_text(encoding="utf-8").replace('name = "itoa"', 'name = "new-crate"'),
+            encoding="utf-8",
+        )
+    else:
+        toolchain = tmp_path / "native/td/rust-toolchain.toml"
+        toolchain.write_text(
+            toolchain.read_text(encoding="utf-8").replace("1.99.1", "1.100.0"), encoding="utf-8"
         )
     monkeypatch.chdir(tmp_path)
     with pytest.raises(ValueError, match="license"):
@@ -151,10 +177,39 @@ def test_agent_stage_rejects_verification_for_another_artifact(tmp_path: Path) -
         validate_agent_stage(tmp_path, expected_commit="a" * 40)
 
 
-def test_release_refuses_td_without_its_onedir_runtime(tmp_path: Path) -> None:
+@pytest.mark.parametrize("bundle", ["td-daemon", "td-agent"])
+def test_release_refuses_an_executable_without_its_onedir_runtime(
+    tmp_path: Path, bundle: str
+) -> None:
     _write_executables(tmp_path)
     _write_agent_stage(tmp_path)
-    shutil.rmtree(tmp_path / "td" / "td-runtime")
+    shutil.rmtree(tmp_path / bundle / f"{bundle}-runtime")
 
-    with pytest.raises(ValueError, match="td-runtime"):
+    with pytest.raises(ValueError, match=f"{bundle}-runtime"):
+        package_release(tmp_path, tmp_path, tmp_path / "output", source_epoch=1_700_000_000)
+
+
+def test_release_ships_only_the_native_td_exe(tmp_path: Path) -> None:
+    _write_executables(tmp_path)
+    _write_agent_stage(tmp_path)
+    leftover = tmp_path / "td/td-runtime/python311.dll"
+    leftover.parent.mkdir()
+    leftover.write_bytes(b"stale PyInstaller runtime")
+
+    artifacts = package_release(tmp_path, tmp_path, tmp_path / "output", source_epoch=1_700_000_000)
+
+    td = next(path for path in artifacts if path.name.startswith("td-v"))
+    with zipfile.ZipFile(td) as opened:
+        assert [name for name in opened.namelist() if not name.startswith("LICENSE")] == [
+            "THIRD_PARTY_NOTICES.md",
+            "td.exe",
+        ]
+
+
+def test_release_refuses_a_missing_native_td(tmp_path: Path) -> None:
+    _write_executables(tmp_path)
+    _write_agent_stage(tmp_path)
+    (tmp_path / "td/td.exe").unlink()
+
+    with pytest.raises(ValueError, match="td.exe"):
         package_release(tmp_path, tmp_path, tmp_path / "output", source_epoch=1_700_000_000)
