@@ -4998,6 +4998,21 @@
         "required": true,
         "is_flag": false,
         "help": "JSON plan {\"commands\":[{\"name\",\"input\"}]}, at most 1 MiB."
+       },
+       {
+        "kind": "option",
+        "name": "frame_batch",
+        "opts": [
+         "--frame-batch"
+        ],
+        "secondary_opts": [],
+        "type": {
+         "name": "bool"
+        },
+        "default": false,
+        "required": false,
+        "is_flag": true,
+        "help": "Send consecutive fast reads and bounded mutations as Frame Batches, each run within one TouchDesigner frame."
        }
       ]
      },
