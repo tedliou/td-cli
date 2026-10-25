@@ -85,11 +85,15 @@ A Request query that asks the Daemon to answer only once the Request reaches a t
 _Avoid_: push, subscription
 
 **Protocol Version**:
-The version of the wire messages and JSON schemas shared by the daemon and Agent Component. Protocol v3 carries the typed Command as canonical JSON text across SocketIO DAT so booleans and numbers retain their types. It does not imply that the pre-1.0 CLI surface has a SemVer stability guarantee. Offline Agent upgrades are independent of this runtime Protocol.
+The version of the wire messages and JSON schemas shared by the daemon and Agent Component. Protocol v3 carries the typed Command as canonical JSON text across SocketIO DAT so booleans and numbers retain their types. Protocol v4 keeps that encoding and transport, but the Agent records and executes a Command in the same `request_dispatch` callback, so a normal Request needs only a dispatch and an outcome message. It does not imply that the pre-1.0 CLI surface has a SemVer stability guarantee. Offline Agent upgrades are independent of this runtime Protocol.
 _Avoid_: CLI version, Release version
 
+**Dispatched Request**:
+A Request the daemon has sent to its TouchDesigner Instance. Under Protocol v4 it may already be executing; the daemon cannot observe when execution starts.
+_Avoid_: running request, accepted request
+
 **Unknown Request**:
-A dispatched Request whose completion cannot be determined after its TouchDesigner Instance disconnects. It remains queryable and must not be dispatched automatically again.
+A dispatched Request whose completion cannot be determined: its TouchDesigner Instance did not return within the offline retention, or the daemon restarted while it was dispatched. It remains queryable, a later retained outcome can still resolve it, and it must not be dispatched automatically again.
 _Avoid_: failed request, lost command
 
 **Release**:
