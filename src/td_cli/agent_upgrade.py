@@ -89,6 +89,8 @@ V0110_HASHES = {
     "heartbeat_execute": "bf063df9c555f044ecbe7cf23d91e4df16dda5d5b5f48832e0a1490bfa680303",
     "operator_catalog": "565725f8064aeac1320379325c3ab24e2e184068ea14b0e1f136f38736720fef",
 }
+# The SocketIO DAT events of every approved pre-v4 Agent; Protocol v4 removed request_execute.
+PROTOCOL3_EVENTS_TABLE_SHA256 = "3808f124e6bc22c59814941a4df218c186966cc2dd2526794b0383f39d4ee351"
 CONNECTION_STATE_VERSIONS = frozenset(
     {"0.6.0", "0.7.0", "0.7.1", "0.8.0", "0.9.0", "0.10.0", "0.11.0"}
 )
@@ -207,10 +209,18 @@ def identify(root: Path, target: Path) -> tuple[Path, bool]:
     if {p.name for p in component.iterdir()} != {p.name for p in target.iterdir()}:
         raise UpgradeError("embedded Agent has unknown or missing children")
     for candidate in component.iterdir():
+        if candidate.suffix != ".n" and candidate.name != "events_table.table":
+            continue
+        actual = candidate.read_bytes()
+        if actual == (target / candidate.name).read_bytes():
+            continue
         if (
-            candidate.suffix == ".n" or candidate.name == "events_table.table"
-        ) and candidate.read_bytes() != (target / candidate.name).read_bytes():
-            raise UpgradeError("embedded Agent has modified runtime structure")
+            candidate.name == "events_table.table"
+            and not same
+            and hashlib.sha256(actual).hexdigest() == PROTOCOL3_EVENTS_TABLE_SHA256
+        ):
+            continue
+        raise UpgradeError("embedded Agent has modified runtime structure")
     # Parameters define extension initialization and relative callback references.
     for candidate in component.glob("*.parm"):
         actual = candidate.read_bytes()

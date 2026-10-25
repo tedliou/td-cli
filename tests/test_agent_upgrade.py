@@ -241,3 +241,34 @@ def test_changed_event_subscriptions_are_not_reported_as_canonical(migration):
     assert result.exit_code == 1
     assert "modified runtime structure" in result.output
     assert project.read_bytes() == original
+
+
+def test_an_approved_agent_with_the_protocol3_event_table_upgrades_to_the_v4_table(
+    migration, monkeypatch
+):
+    project, artifact, evidence, _ = migration
+    protocol3 = b"registered request_dispatch request_execute outcome_recorded"
+    protocol4 = b"registered request_dispatch outcome_recorded"
+    for path, prefix, table in (
+        (project, "project1/my_agent", protocol3),
+        (artifact, "td_agent", protocol4),
+    ):
+        with zipfile.ZipFile(path, "a") as archive:
+            archive.writestr(prefix + "/events_table.table", table)
+    evidence.write_text(
+        json.dumps(
+            {
+                "artifact_sha256": upgrade.digest(artifact),
+                "touchdesigner_version": upgrade.BUILD,
+            }
+        )
+    )
+    monkeypatch.setattr(
+        upgrade, "PROTOCOL3_EVENTS_TABLE_SHA256", hashlib.sha256(protocol3).hexdigest()
+    )
+
+    result = invoke(migration)
+
+    assert result.exit_code == 0, result.output
+    with zipfile.ZipFile(project) as archive:
+        assert archive.read("project1/my_agent/events_table.table") == protocol4
