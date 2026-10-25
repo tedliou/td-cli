@@ -3,8 +3,14 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from td_cli.command_catalog import COMMAND_CATALOG
-from td_cli.protocol import Command, OperatorInput, RequestSnapshot, RequestStatus
+from td_cli.command_catalog import COMMAND_CATALOG, FRAME_BATCH_MAX_BYTES, frame_batch_bytes
+from td_cli.protocol import (
+    Command,
+    CommandPlan,
+    OperatorInput,
+    RequestSnapshot,
+    RequestStatus,
+)
 
 
 def test_command_catalog_is_the_single_command_contract() -> None:
@@ -1192,3 +1198,95 @@ def test_a_git_bash_converted_operator_path_names_the_workaround() -> None:
     command = {"name": "ops.children", "input": {"operator_path": "C:/Program Files/Git/project1/"}}
     with pytest.raises(ValidationError, match="MSYS_NO_PATHCONV=1"):
         Command.model_validate(command)
+
+
+def plan_execute(*commands: dict[str, object]) -> dict[str, object]:
+    return {"name": "plan.execute", "input": {"commands": list(commands)}}
+
+
+OPS_GET = {"name": "ops.get", "input": {"operator_path": "/project1"}}
+
+
+def test_frame_batch_accepts_fast_reads_and_bounded_mutations_only() -> None:
+    assert "ops.create" in COMMAND_CATALOG.frame_batch_names
+    assert "ops.get" in COMMAND_CATALOG.frame_batch_names
+    for excluded in ("ops.tox.import", "project.save", "ops.inspect", "binary.export"):
+        assert excluded not in COMMAND_CATALOG.frame_batch_names
+    assert not {"batch.execute", "plan.execute"} & set(COMMAND_CATALOG.frame_batch_names)
+    command = Command.model_validate(plan_execute(OPS_GET, OPS_GET))
+    assert COMMAND_CATALOG.execution_class("plan.execute") == "bounded_mutation"
+    assert COMMAND_CATALOG.required_capabilities(command.model_dump(mode="json")) == {
+        "plan.execute",
+        "ops.get",
+    }
+
+
+@pytest.mark.parametrize(
+    "commands",
+    [
+        [],
+        [OPS_GET] * 257,
+        [{"name": "project.save", "input": {}}],
+        [{"name": "batch.execute", "input": {"commands": [OPS_GET]}}],
+        [plan_execute(OPS_GET)],
+    ],
+)
+def test_frame_batch_rejects_invalid_contents_before_dispatch(
+    commands: list[dict[str, object]],
+) -> None:
+    with pytest.raises(ValidationError):
+        Command.model_validate(plan_execute(*commands))
+
+
+def test_frame_batch_size_is_the_ascii_escaped_dispatch_text() -> None:
+    def text_set(text: str) -> dict[str, object]:
+        return {"name": "dat.text.set", "input": {"operator_path": "/project1/t", "text": text}}
+
+    # dat.text.set holds at most 32 KiB, so three Commands share the 64 KiB budget.
+    filler = [text_set("a" * 21_000)] * 2
+    room = FRAME_BATCH_MAX_BYTES - frame_batch_bytes([*filler, text_set("")])
+    assert frame_batch_bytes([*filler, text_set("a" * room)]) == FRAME_BATCH_MAX_BYTES
+    Command.model_validate(plan_execute(*filler, text_set("a" * room)))
+    with pytest.raises(ValidationError):
+        Command.model_validate(plan_execute(*filler, text_set("a" * (room + 1))))
+    # A non-ASCII character travels as a six-byte escape.
+    with pytest.raises(ValidationError):
+        Command.model_validate(plan_execute(*filler, text_set("é" * (room // 6 + 1))))
+
+
+def test_command_plan_rejects_a_nested_frame_batch() -> None:
+    with pytest.raises(ValidationError):
+        CommandPlan.model_validate({"commands": [plan_execute(OPS_GET)]})
+
+
+def test_plan_execute_results_are_normalized_per_command_and_keep_the_stop_facts() -> None:
+    connect = {"name": "ops.connect", "input": {}}
+    result = COMMAND_CATALOG.normalize_result(
+        plan_execute(connect, connect),
+        {
+            "results": [{"ok": True, "result": {"connected": True}}, {"ok": False, "error": {}}],
+            "executed_count": 2,
+            "stopped_reason": "failed",
+        },
+    )
+
+    assert result == {
+        "results": [
+            {"ok": True, "result": {"connected": True, "previous_connection": None}},
+            {"ok": False, "error": {}},
+        ],
+        "executed_count": 2,
+        "stopped_reason": "failed",
+    }
+
+
+def test_plan_execute_needs_its_own_capability_and_every_nested_one() -> None:
+    set_display = {
+        "name": "parameters.set",
+        "input": {"operator_path": "/project1", "parameter": "display", "value": True},
+    }
+    assert COMMAND_CATALOG.required_capabilities(plan_execute(OPS_GET, set_display)) == {
+        "plan.execute",
+        "ops.get",
+        "parameters.set",
+    }

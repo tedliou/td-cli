@@ -12,6 +12,7 @@ from pydantic_core import InitErrorDetails
 
 from td_cli.command_catalog import (
     COMMAND_CATALOG,
+    NESTING_COMMANDS,
     CommandInput,
     OperatorInput,
     StrictModel,
@@ -132,6 +133,6 @@ class CommandPlan(StrictModel):
 
     @model_validator(mode="after")
     def no_nested_batch(self) -> CommandPlan:
-        if any(command.name == "batch.execute" for command in self.commands):
+        if any(command.name in NESTING_COMMANDS for command in self.commands):
             raise ValueError("nested batch is unsupported")
         return self

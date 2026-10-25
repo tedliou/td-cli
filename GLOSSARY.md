@@ -80,6 +80,14 @@ _Avoid_: untyped value, serialized object
 A submission of one Command carrying a Request ID whose result remains queryable after a client timeout.
 _Avoid_: command invocation
 
+**Command Plan**:
+An ordered list of Commands that `commands execute` runs against one Instance, stopping at the first failure. It is not atomic: earlier changes stay after a later failure.
+_Avoid_: script, transaction
+
+**Frame Batch**:
+A consecutive part of a Command Plan sent as one `plan.execute` Request. The Agent runs its Commands in order inside one dispatch callback, stops at the first failure or once 8 ms have passed, and reports one outcome listing each executed Command's result.
+_Avoid_: batch (that is the read-only `batch.execute`), transaction
+
 **Long Poll**:
 A Request query that asks the Daemon to answer only once the Request reaches a terminal status or the requested wait, at most 25 seconds, runs out. It replaces repeated short queries; the answer is always the current snapshot.
 _Avoid_: push, subscription

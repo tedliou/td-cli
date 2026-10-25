@@ -537,6 +537,17 @@ Daemon 先驗證整份計畫，通過後才提交 Request。單一 CLI 程序依
 終態 snapshot。請保存輸出；中斷或 outcome unknown 後先查詢已記錄的 Request，
 不要盲目重跑整份計畫。不接受巢狀 `batch.execute`。
 
+加上 `--frame-batch` 時，可共用一個 TouchDesigner frame 的連續 Command（快速讀取與有界
+mutation；掃描、匯出、可信匯入、`batch.execute` 與 `plan.execute` 不會放進去）合成一個 `plan.execute` Request，稱為 Frame
+Batch：最多 256 個 Command，Command 的精簡 JSON（非 ASCII 跳脫）合計最多 65,536 bytes。
+Agent 在同一個 dispatch callback 內依序執行，遇到第一個失敗就停，超過 8 ms 就在兩個
+Command 之間停下；下一段從第一個沒執行的 Command 開始。其他 Command 照舊一個 Request
+一個。JSONL：每個 Request 一行 `submitting`（`index` 是第一個 Command，Frame Batch 另有
+`count`）；每個已執行的 Command 一行 `completed`，含 `index`、所屬 Frame Batch 的
+`request_id` 與 `result`；最後是 `stopped` 或 `finished`。整段 Frame Batch 為 `unknown`
+時，`stopped` 指向該段第一個 Command，段內任何 Command 都可能已執行。需要提供 `plan.execute`
+能力的 Agent，Agent 較舊時 Daemon 以 `command_unsupported` 拒絕。不加此選項時輸出不變。
+
 0.11.0 離線升級除既有來源（含 0.7.0、0.7.1、0.8.0、0.9.0）外，新增精確 canonical 0.10.0 Agent 白名單，保留 Connectionstate 定義。Agent 讀取介面新增：`batch execute` 逐項結果、Instance 的 `project`、`ops inspect` 的 COMP 介面摘要、Execute 系列與 byte offset 的 `dat text get`、`chop values get`、`parameters list` 的值與篩選選項、可分頁的 `project snapshot`，以及 `ops destroy`／`copy`／`move` 的 `--inventory summary`。`td` 改以 onedir 發佈，啟動約 0.4 秒。新選項需要 0.11.0 Agent；內嵌較舊 Agent 時，CLI 與 Daemon 會以 `command_unsupported` 拒絕。下一個 patch 版縮短暖機後的命令延遲：Daemon 健康時，線上 `td` 命令不再匯入 Daemon 伺服器套件，並重用同一條 HTTP 連線，`td --json instances list` 從約 1.5 秒降到約 0.5 秒。`td-daemon` 與 `td-agent` 也改以 onedir 發佈，`td-daemon-runtime\`、`td-agent-runtime\` 與 `td-runtime\` 並存於同一個版本目錄。下一個 minor 版再縮短：已授權的 Command 在授權的同一個 TouchDesigner frame 內執行；`td` 等待 Request 改用長輪詢，不再每 50 ms 查一次；`td` 啟動不讀套件 metadata、不匯入 httpx。TouchDesigner 來回時間從約 62 ms 降到約 33 ms，`td --json instances list` 降到約 0.3 秒。
 
-下一版把 `td` 換成 Rust 寫的單一原生 `td.exe`。版本目錄不再有 `td-runtime\`，解除安裝會移除殘留的這個資料夾。Daemon 已在執行時，`td --version` 與 `td --json instances list` 從約 0.3 秒降到約 10 ms；需要同時啟動 Daemon 的冷啟動時間和以前差不多。Command 與計畫欄位改由 Daemon 驗證，`invalid_arguments` 的細節不變。`td` 照原樣傳送參數：不再展開 `~`、`$VAR`、`%VAR%` 與萬用字元，`NaN` 這類非標準 JSON 會被拒絕。再下一版是 1.0.0，改用 Protocol v4，屬於破壞性變更：Agent 在收到 Command 的 callback 內登記並執行，60 fps 下一次 TouchDesigner 往返從約 33 ms 降到約一個 frame（17 ms）。Request 快照不再出現 `accepted` 與 `running`，Daemon 只接受 v4 Agent。
+下一版把 `td` 換成 Rust 寫的單一原生 `td.exe`。版本目錄不再有 `td-runtime\`，解除安裝會移除殘留的這個資料夾。Daemon 已在執行時，`td --version` 與 `td --json instances list` 從約 0.3 秒降到約 10 ms；需要同時啟動 Daemon 的冷啟動時間和以前差不多。Command 與計畫欄位改由 Daemon 驗證，`invalid_arguments` 的細節不變。`td` 照原樣傳送參數：不再展開 `~`、`$VAR`、`%VAR%` 與萬用字元，`NaN` 這類非標準 JSON 會被拒絕。再下一版是 1.0.0，改用 Protocol v4，屬於破壞性變更：Agent 在收到 Command 的 callback 內登記並執行，60 fps 下一次 TouchDesigner 往返從約 33 ms 降到約一個 frame（17 ms）。Request 快照不再出現 `accepted` 與 `running`，Daemon 只接受 v4 Agent。再下一版是 1.1.0，新增 `commands execute --frame-batch`：256 個 `ops.create` 加 256 個 `parameters.set` 從約 10.8 秒降到約 2.5 秒。

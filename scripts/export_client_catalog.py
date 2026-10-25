@@ -40,6 +40,7 @@ def build_catalog() -> dict[str, Any]:
             name: {
                 "effect": COMMAND_CATALOG.effect(name).value,
                 "batchable": name in COMMAND_CATALOG.batch_names,
+                "frame_batchable": name in COMMAND_CATALOG.frame_batch_names,
                 "input_schema": COMMAND_CATALOG.input_model(name).model_json_schema(),
             }
             for name in COMMAND_CATALOG.names
