@@ -36,14 +36,14 @@ HEALTH = {
     "ready": True,
     "logging_healthy": True,
     "release_version": "0.11.0",
-    "protocol_versions": [3],
+    "protocol_versions": [4],
     "schema_version": 2,
 }
 INSTANCE = {
     "instance_id": "7b0c3f5e-3c1d-4d55-9a8e-0c8b2f1d7a10",
     "selector": "專案 one",
     "status": "online",
-    "protocol_version": 3,
+    "protocol_version": 4,
     "fps": 59.94,
     "build": "2025.32050",
 }
@@ -338,7 +338,7 @@ INSTANCES = {("GET", "/v3/instances"): [(200, [INSTANCE, {**INSTANCE, "status": 
         (["version"], daemon()),
         (
             ["--json", "version"],
-            {("GET", "/v3/health"): [(200, {**HEALTH, "protocol_versions": [4]})]},
+            {("GET", "/v3/health"): [(200, {**HEALTH, "protocol_versions": [3]})]},
         ),
         (["--json", "version"], {("GET", "/v3/health"): [(200, b"not json")]}),
         (["--json", "--instance", "x", "version"], daemon()),
@@ -459,7 +459,7 @@ REQUEST = f"/v3/requests/{REQUEST_ID}"
         (["--json", "requests", "get", REQUEST_ID], [(404, {"detail": "request_not_found"})]),
         (
             ["--json", "requests", "wait", REQUEST_ID],
-            [(200, snapshot(status="running")), (200, snapshot(result={"ok": True}))],
+            [(200, snapshot(status="dispatched")), (200, snapshot(result={"ok": True}))],
         ),
         (
             ["--json", "requests", "wait", REQUEST_ID],
@@ -481,12 +481,12 @@ def test_request_wait_times_out_with_the_last_snapshot(home):
     argv = ["--json", "--timeout", "0.4", "requests", "wait", REQUEST_ID]
     native = same(
         argv,
-        {**daemon(), ("GET", REQUEST): [(200, snapshot(status="running"))]},
+        {**daemon(), ("GET", REQUEST): [(200, snapshot(status="dispatched"))]},
         home,
         compare_requests=False,
     )
     assert native.exit_code == 6
-    assert json.loads(native.stdout)["error"]["details"]["request"]["status"] == "running"
+    assert json.loads(native.stdout)["error"]["details"]["request"]["status"] == "dispatched"
 
 
 ADMITTED = (201, snapshot(status="queued"))
@@ -654,7 +654,7 @@ def test_long_polls_ask_for_the_rest_of_the_command_deadline(home):
     argv = ["--json", "--timeout", "10", "requests", "wait", REQUEST_ID]
     routes = {
         **daemon(),
-        ("GET", REQUEST): [(200, snapshot(status="running")), (200, snapshot(result={}))],
+        ("GET", REQUEST): [(200, snapshot(status="dispatched")), (200, snapshot(result={}))],
     }
     expected = recorded(lambda: run(argv, routes, home))
     for kind, result in (("recorded", expected), ("native", run(argv, routes, home))):
@@ -711,7 +711,7 @@ def test_failed_start_reports_its_reason(native_beside_fake_daemon, tmp_path):
     )
     assert (result.exit_code, result.stderr) == (3, "daemon_unavailable\r\n")
     assert json.loads(result.stdout) == {
-        "protocol_version": 3,
+        "protocol_version": 4,
         "error": {
             "code": "daemon_unavailable",
             "message": "daemon_unavailable",
@@ -1185,7 +1185,7 @@ def test_commands_execute_stops_at_the_deadline(home):
     plan = home / "plan.json"
     plan.write_text(json.dumps({"commands": PLAN}), encoding="utf-8")
     argv = ["--json", "--timeout", "0.4", "commands", "execute", "--input-file", str(plan)]
-    routes = plan_routes(waits=[(200, snapshot(status="running"))])
+    routes = plan_routes(waits=[(200, snapshot(status="dispatched"))])
     native = same(argv, routes, home, compare_requests=False)
     events = [json.loads(line) for line in native.stdout.splitlines()]
     assert [event["event"] for event in events[:2]] == ["submitting", "stopped"]

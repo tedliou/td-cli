@@ -149,11 +149,16 @@ The fixed layout contains `state\daemon.db`, `state\auth.token`,
 Deleting `state\auth.token` while the Daemon is stopped performs manual token
 recovery; every Agent Component must reconnect afterward.
 
-Protocol v3 is the only runtime protocol; there is no v2 alias or fallback. A
-Request moves through `queued`, `dispatched`, `accepted`, and `running` before a
-terminal outcome. The Daemon persists before dispatch, permits one authorized
-Request per Instance in FIFO order, and isolates every reconnect with a new
-Connection ID. A disconnect after authorization becomes `unknown`; td-cli never
+Protocol v4 is the only runtime protocol; there is no v3 alias or fallback. A
+Request moves from `queued` to `dispatched` before a terminal outcome;
+`dispatched` means the Agent has it and may be running it. The Daemon persists
+before dispatch, permits one dispatched Request per Instance in FIFO order, and
+isolates every reconnect with a new Connection ID. After a disconnect, a
+dispatched Request waits for the Instance to register again: a retained outcome
+completes it, an unfinished execution record keeps it in flight, and no record
+puts it back at the head of the queue, because the Agent records a dispatch in
+the same callback that runs it. If the Instance does not return within 30
+seconds, or the Daemon restarts, the Request becomes `unknown`; td-cli never
 automatically retries it, though the same retained execution outcome may later
 refine it to `succeeded` or `failed`.
 
@@ -215,14 +220,14 @@ the artifact to the canonical source revision, TouchDesigner `2025.32050`, and
 the required DAT/operator topology. Actual `.tox` creation and Online Instance
 validation are performed locally in the locked TouchDesigner environment.
 
-The Agent reserves bounded outcome capacity before `request_accepted`, executes
-only after a matching immutable execution authorization, and retains every
-post-accept `succeeded`, `failed`, or `unknown` outcome until the Daemon records
-it. Retention is limited to 64 records, 256 KiB per canonical outcome, and 16
+The Agent checks bounded outcome capacity, records the dispatch, and runs the
+Command in the `request_dispatch` callback, only for a dispatch carrying its
+current Connection ID. It retains every recorded `succeeded`, `failed`, or
+`unknown` outcome until the Daemon records it. Retention is limited to 64 records, 256 KiB per canonical outcome, and 16
 MiB total. Outcomes above the locked SocketIO DAT's proven single-event envelope
 are sent as ordered, identity-checked 24 KiB chunks and are reassembled before
 the public result is committed. Heartbeat and drain timers use TouchDesigner's independent
-`TDResources` time reference. An authorized Command runs directly in its SocketIO DAT
+`TDResources` time reference. A dispatched Command runs directly in its SocketIO DAT
 callback, on the main thread at frame start, so all TouchDesigner object access remains on
 the main thread. Extension initialization uses the official SocketIO Reset
 parameter, and clears the transient auth DAT after connection. Power Off mode is
@@ -265,7 +270,7 @@ Future releases retain the command and explicitly extend the tested migration ma
 ## Basic network control
 
 List the Instances, select an Online Instance, and use an explicit Selector
-whenever more than one is available. Protocol v3 can create cataloged built-in
+whenever more than one is available. Protocol v4 can create cataloged built-in
 Operators, inspect and configure their Parameters, and edit same-family wiring:
 
 ```powershell
@@ -362,7 +367,7 @@ td --json --instance <selector> parameters sequence-replace /project1/target Ite
 
 Bind sources are generated solely from a typed Operator/Parameter identity.
 Export mode accepts a typed CHOP Operator/channel identity only when that exact
-export already exists in TouchDesigner; Protocol v3 does not synthesize CHOP
+export already exists in TouchDesigner; Protocol v4 does not synthesize CHOP
 export tables or emulate an export with an expression. Sequence replacement is
 bounded to 128 blocks and 256 Parameters per block, reads back the complete
 ordered state, and restores the prior block count, order, names, modes, values,
@@ -620,7 +625,7 @@ save external TOX files or choose a new project name. A post-save verification
 failure is `project_save_outcome_unknown`; inspect the retained Request and disk
 before deciding what to do. Never automatically repeat an uncertain save.
 
-Protocol v3 preserves boolean, integer and null Command values as JSON text at
+Protocol v4 preserves boolean, integer and null Command values as JSON text at
 the SocketIO boundary. Upgrade the CLI, Daemon and embedded Agent together;
 v2/v3 registrations are rejected in both directions. Editable `StrMenu`
 parameters such as Select CHOP `channames` accept arbitrary strings; ordinary
@@ -672,4 +677,4 @@ do not blindly rerun the plan. Nested `batch.execute` is unsupported.
 
 The 0.11.0 upgrade accepts the exact canonical 0.10.0 Agent in addition to the existing verified sources (including 0.7.0, 0.7.1, 0.8.0, and 0.9.0), preserving its Connectionstate definition. The Agent read surface adds per-item `batch execute` results, Instance `project` identity, COMP interface summaries in `ops inspect`, Execute-family and byte-offset `dat text get`, `chop values get`, `parameters list` value and filter options, paginated `project snapshot`, and `--inventory summary` for `ops destroy`/`copy`/`move`. `td` now ships as an onedir bundle and starts in about 0.4 seconds. The new options need a 0.11.0 Agent; the CLI and Daemon reject them with `command_unsupported` for an older embedded Agent. The next patch release cuts warm Command latency: with a healthy Daemon, an online `td` Command no longer imports the Daemon server packages and reuses one HTTP connection, so `td --json instances list` drops from about 1.5 seconds to about 0.5 seconds. `td-daemon` and `td-agent` also ship as onedir bundles; their `td-daemon-runtime\` and `td-agent-runtime\` folders sit beside `td-runtime\` in the same version folder. The next minor release cuts it further. An authorized Command runs in the same TouchDesigner frame it is authorized in, `td` waits for a Request with a long poll instead of querying every 50 ms, and `td` starts without reading package metadata or importing httpx. A TouchDesigner round trip drops from about 62 ms to about 33 ms, and `td --json instances list` to about 0.3 seconds.
 
-The next release replaces `td` with a native single `td.exe` written in Rust. The version folder no longer contains `td-runtime\`, and uninstall removes a leftover one. With a running Daemon, `td --version` and `td --json instances list` take about 10 ms instead of about 0.3 seconds; a cold start that also launches the Daemon takes about as long as before. The Daemon now validates Command and plan fields and reports the same `invalid_arguments` details. `td` passes arguments as typed: `~`, `$VAR`, `%VAR%`, and wildcards are no longer expanded, and non-standard JSON such as `NaN` is rejected.
+The next release replaces `td` with a native single `td.exe` written in Rust. The version folder no longer contains `td-runtime\`, and uninstall removes a leftover one. With a running Daemon, `td --version` and `td --json instances list` take about 10 ms instead of about 0.3 seconds; a cold start that also launches the Daemon takes about as long as before. The Daemon now validates Command and plan fields and reports the same `invalid_arguments` details. `td` passes arguments as typed: `~`, `$VAR`, `%VAR%`, and wildcards are no longer expanded, and non-standard JSON such as `NaN` is rejected. The release after that is 1.0.0 with Protocol v4, a breaking change: the Agent records and runs a Command in the callback that receives it, so a TouchDesigner round trip at 60 fps drops from about 33 ms to about one frame (17 ms). Request snapshots no longer show `accepted` or `running`, and the Daemon accepts only a v4 Agent.

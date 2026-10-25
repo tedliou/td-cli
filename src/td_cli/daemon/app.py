@@ -16,8 +16,8 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError, field_validator, model_validator
 
 from td_cli import __version__
+from td_cli.daemon.lifecycle import end_interrupted_requests
 from td_cli.daemon.storage import RequestIdentityConflict, RequestStore
-from td_cli.error_catalog import ERROR_CATALOG
 from td_cli.instance_selection import SelectionError, select_instance
 from td_cli.protocol import (
     MAX_PLAN_BYTES,
@@ -116,7 +116,7 @@ def create_app(
         store = await RequestStore.open(state / "daemon.db")
         try:
             if startup is None:
-                await _recover_requests(store)
+                await end_interrupted_requests(store, _now())
             else:
                 await startup(store)
             app.state.request_store = store
@@ -269,21 +269,3 @@ async def _hourly_cleanup(store: RequestStore) -> None:
         while await store.cleanup() == 1000:
             await asyncio.sleep(0)
         await asyncio.sleep(3600)
-
-
-async def _recover_requests(store: RequestStore) -> None:
-    policies = (
-        ({"queued", "dispatched", "accepted"}, "daemon_shutdown", "daemon_shutdown"),
-        ({"running"}, "unknown", "request_outcome_unknown"),
-    )
-    for statuses, target, code in policies:
-        for snapshot in await store.find_by_statuses(statuses):
-            await store.compare_and_set(
-                str(snapshot["request_id"]),
-                expected_statuses={str(snapshot["status"])},
-                changes={
-                    "status": target,
-                    "error": ERROR_CATALOG.error(code),
-                    "completed_at": _now(),
-                },
-            )

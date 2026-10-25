@@ -1,4 +1,4 @@
-"""Command definitions and input validation for Protocol v3."""
+"""Command definitions and input validation for Protocol v4."""
 
 from __future__ import annotations
 

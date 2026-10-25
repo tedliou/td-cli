@@ -64,7 +64,6 @@ def build(source_dir, output_path, source_revision):
         "registered",
         "registration_error",
         "request_dispatch",
-        "request_execute",
         "outcome_recorded",
         "record_release",
         "daemon_draining",

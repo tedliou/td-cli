@@ -45,11 +45,11 @@ def execute_v2(agent, request_id, command, execution_id="execution-1"):
         "request_id": request_id,
         "instance_id": agent.instance_id,
         "connection_id": agent.connection_id,
+        "execution_id": execution_id,
         "command": command,
     }
-    event, accepted = agent.reserve(dispatched)
-    assert event == "request_accepted"
-    assert agent.authorize({**accepted, "execution_id": execution_id}) is True
+    event, _ = agent.dispatch(dispatched)
+    assert event == "execute"
     return agent.execute_authorized(request_id, execution_id)
 
 
@@ -4577,30 +4577,78 @@ def test_large_outcome_is_split_into_bounded_ordered_socket_events() -> None:
     assert json.loads("".join(chunk["payload"] for chunk in chunks)) == outcome
 
 
-def test_protocol_v2_reserves_before_accept_and_executes_only_after_authorization() -> None:
+def dispatch_message(agent, request_id, execution_id="execution-1", **changes):
+    return {
+        "request_id": request_id,
+        "instance_id": agent.instance_id,
+        "connection_id": agent.connection_id,
+        "execution_id": execution_id,
+        "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
+        **changes,
+    }
+
+
+def test_protocol_v4_records_the_dispatch_before_executing_it_once() -> None:
     agent = AgentExt(FakeOwner())
     agent.connection_id = "connection-1"
     executions = []
     agent.execute_command = lambda command: executions.append(command) or {"path": "/project1"}
-    dispatched = {
-        "request_id": "request-v2",
-        "instance_id": agent.instance_id,
-        "connection_id": agent.connection_id,
-        "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
-    }
+    dispatched = dispatch_message(agent, "request-v4")
 
-    event, accepted = agent.reserve(dispatched)
-    assert event == "request_accepted"
-    assert accepted["request_id"] == "request-v2"
-    assert agent.execution_records["request-v2"]["phase"] == "reserved"
+    event, envelope = agent.dispatch(dispatched)
+    assert event == "execute"
+    assert envelope["request_id"] == "request-v4"
+    record = agent.execution_records["request-v4"]
+    assert (record["phase"], record["execution_id"]) == ("authorized", "execution-1")
     assert executions == []
 
-    assert agent.authorize({**accepted, "execution_id": "execution-1"}) is True
-    assert agent.execution_records["request-v2"]["phase"] == "authorized"
-    outcome = agent.execute_authorized("request-v2", "execution-1")
+    outcome = agent.execute_authorized("request-v4", "execution-1")
     assert executions == [dispatched["command"]]
     assert outcome["status"] == "succeeded"
-    assert agent.execution_records["request-v2"]["phase"] == "outcome"
+    assert agent.dispatch(dispatched) == ("request_outcome", outcome)
+    assert executions == [dispatched["command"]]
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [{"connection_id": "connection-old"}, {"instance_id": "other"}, {"execution_id": ""}],
+)
+def test_dispatch_from_another_connection_is_rejected_without_a_record(changes) -> None:
+    agent = AgentExt(FakeOwner())
+    agent.connection_id = "connection-1"
+
+    event, rejected = agent.dispatch(dispatch_message(agent, "request-stale", **changes))
+
+    assert event == "request_rejected"
+    assert rejected["code"] == "request_identity_invalid"
+    assert agent.execution_records == {}
+
+
+def test_draining_agent_rejects_a_dispatch_before_recording_it() -> None:
+    agent = AgentExt(FakeOwner())
+    agent.connection_id = "connection-1"
+    agent.begin_draining()
+
+    event, rejected = agent.dispatch(dispatch_message(agent, "request-late"))
+
+    assert (event, rejected["code"]) == ("request_rejected", "instance_draining")
+    assert agent.execution_records == {}
+
+
+def test_redelivered_dispatch_executes_nothing_and_a_changed_one_conflicts() -> None:
+    agent = AgentExt(FakeOwner())
+    agent.connection_id = "connection-1"
+    assert agent.dispatch(dispatch_message(agent, "request-1"))[0] == "execute"
+
+    assert agent.dispatch(dispatch_message(agent, "request-1")) == (None, None)
+    event, rejected = agent.dispatch(
+        dispatch_message(agent, "request-1", execution_id="execution-2")
+    )
+    assert event == "request_rejected"
+    assert rejected["code"] == "request_id_conflict"
+    event, rejected = agent.dispatch(dispatch_message(agent, "request-2"))
+    assert event == "request_rejected"
+    assert rejected["code"] == "request_identity_invalid"
 
 
 def test_generic_mutation_exception_is_retained_as_unknown() -> None:
@@ -4624,8 +4672,7 @@ def test_generic_mutation_exception_is_retained_as_unknown() -> None:
         },
     }
 
-    _, accepted = agent.reserve(dispatched)
-    agent.authorize({**accepted, "execution_id": "execution-1"})
+    assert agent.dispatch({**dispatched, "execution_id": "execution-1"})[0] == "execute"
     outcome = agent.execute_authorized("mutation-v2", "execution-1")
 
     assert outcome["status"] == "unknown"
@@ -4633,28 +4680,16 @@ def test_generic_mutation_exception_is_retained_as_unknown() -> None:
     assert agent.replay_records() == [outcome]
 
 
-def test_reservation_capacity_is_bounded_before_acceptance() -> None:
+def test_record_capacity_is_bounded_before_execution() -> None:
     agent = AgentExt(FakeOwner())
     agent.connection_id = "connection-1"
     for index in range(agent.MAX_EXECUTION_RECORDS):
-        event, _ = agent.reserve(
-            {
-                "request_id": f"request-{index}",
-                "instance_id": agent.instance_id,
-                "connection_id": agent.connection_id,
-                "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
-            }
+        event, _ = agent.dispatch(
+            dispatch_message(agent, f"request-{index}", execution_id=f"execution-{index}")
         )
-        assert event == "request_accepted"
+        assert event == "execute"
 
-    event, rejected = agent.reserve(
-        {
-            "request_id": "overflow",
-            "instance_id": agent.instance_id,
-            "connection_id": agent.connection_id,
-            "command": {"name": "ops.get", "input": {"operator_path": "/project1"}},
-        }
-    )
+    event, rejected = agent.dispatch(dispatch_message(agent, "overflow", execution_id="x"))
     assert event == "request_rejected"
     assert rejected["code"] == "execution_capacity_full"
     assert "overflow" not in agent.execution_records

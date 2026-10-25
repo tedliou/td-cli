@@ -12,6 +12,14 @@ from td_cli.command_catalog import COMMAND_CATALOG
 from td_cli.daemon.storage import RequestIdentityConflict
 from td_cli.error_catalog import ERROR_CATALOG
 
+# How a Daemon start or shutdown ends each nonterminal Request. A queued Request never reached
+# the Agent and is safe to submit again; a dispatched one may have executed (Protocol v4).
+# `accepted` and `running` are v3 statuses that a store written by an older Daemon can hold.
+INTERRUPTED_REQUESTS = (
+    ({"queued", "accepted"}, "daemon_shutdown", "daemon_shutdown"),
+    ({"dispatched", "running"}, "unknown", "request_outcome_unknown"),
+)
+
 
 class LifecycleStore(Protocol):
     async def create_or_get(self, snapshot: dict[str, Any]) -> tuple[dict[str, Any], bool]: ...
@@ -27,6 +35,20 @@ class LifecycleStore(Protocol):
         expected_statuses: set[str],
         changes: dict[str, Any],
     ) -> dict[str, Any] | None: ...
+
+
+async def end_interrupted_requests(store: LifecycleStore, completed_at: str) -> None:
+    for statuses, target, code in INTERRUPTED_REQUESTS:
+        for item in await store.find_by_statuses(statuses):
+            await store.compare_and_set(
+                str(item["request_id"]),
+                expected_statuses={str(item["status"])},
+                changes={
+                    "status": target,
+                    "error": ERROR_CATALOG.error(code),
+                    "completed_at": completed_at,
+                },
+            )
 
 
 @dataclass(frozen=True)
@@ -108,6 +130,9 @@ class RequestLifecycle:
         self._offline: dict[str, _Offline] = {}
         self._lanes: dict[str, deque[dict[str, Any]]] = defaultdict(deque)
         self._in_flight: dict[str, dict[str, Any]] = {}
+        # A dispatched Request whose connection closed; the Instance's next execution_sync
+        # decides whether it executed (docs/adr/0004-protocol-v4-single-dispatch.md).
+        self._awaiting_sync: dict[str, dict[str, Any]] = {}
         self._task: asyncio.Task[None] | None = None
         self.ready = True
         self.accepting = True
@@ -155,16 +180,10 @@ class RequestLifecycle:
     async def submit(self, snapshot: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         return await self._call("submit", snapshot)
 
-    async def accepted(self, instance_id: str, connection_id: str, request_id: str) -> None:
-        await self._call("accepted", instance_id, connection_id, request_id)
-
     async def rejected(
         self, instance_id: str, connection_id: str, request_id: str, code: str
     ) -> None:
         await self._call("rejected", instance_id, connection_id, request_id, code)
-
-    async def authorize(self, instance_id: str, connection_id: str, request_id: str) -> None:
-        await self._call("authorize", instance_id, connection_id, request_id)
 
     async def outcome(
         self,
@@ -255,12 +274,8 @@ class RequestLifecycle:
             return await self._synchronized(*arguments)
         if operation == "submit":
             return await self._submit(*arguments)
-        if operation == "accepted":
-            return await self._accepted(*arguments)
         if operation == "rejected":
             return await self._rejected(*arguments)
-        if operation == "authorize":
-            return await self._authorize(*arguments)
         if operation == "outcome":
             return await self._outcome(*arguments)
         if operation == "disconnect":
@@ -302,21 +317,7 @@ class RequestLifecycle:
         self._registration_deadlines[connection_id] = self._monotonic() + self._registration_timeout
 
     async def _recover(self) -> None:
-        policies = (
-            ({"queued", "dispatched", "accepted"}, "daemon_shutdown", "daemon_shutdown"),
-            ({"running"}, "unknown", "request_outcome_unknown"),
-        )
-        for statuses, target, code in policies:
-            for item in await self._store.find_by_statuses(statuses):
-                await self._store.compare_and_set(
-                    str(item["request_id"]),
-                    expected_statuses={str(item["status"])},
-                    changes={
-                        "status": target,
-                        "error": ERROR_CATALOG.error(code),
-                        "completed_at": self._now(),
-                    },
-                )
+        await end_interrupted_requests(self._store, self._now())
 
     async def _synchronized(
         self, instance_id: str, connection_id: str, records: list[dict[str, Any]]
@@ -330,6 +331,11 @@ class RequestLifecycle:
             if stored is None or stored["instance_id"] != instance_id:
                 self._emit("record_release", instance_id, connection_id, request_id=request_id)
                 continue
+            held_dispatch = self._awaiting_sync.get(instance_id)
+            held = held_dispatch is not None and held_dispatch["request_id"] == request_id
+            if held:
+                # The Agent has a record of the held dispatch, so it is never requeued.
+                self._awaiting_sync.pop(instance_id)
             phase = record.get("phase")
             if phase == "outcome":
                 await self._outcome(
@@ -341,31 +347,17 @@ class RequestLifecycle:
                     record.get("result"),
                     record.get("error"),
                 )
-            elif phase == "reserved" and stored["status"] in {"dispatched", "accepted"}:
-                queued = await self._store.compare_and_set(
-                    request_id,
-                    expected_statuses={str(stored["status"])},
-                    changes={
-                        "status": "queued",
-                        "execution_id": None,
-                        "dispatched_at": None,
-                        "accepted_at": None,
-                        "execute_authorized_at": None,
-                    },
-                )
-                if queued is not None:
-                    self._lanes[instance_id].appendleft(queued)
-                self._emit("record_release", instance_id, connection_id, request_id=request_id)
             elif (
                 phase in {"authorized", "executing"}
-                and stored["status"]
-                in {
-                    "running",
-                    "unknown",
-                }
+                and stored["status"] in {"dispatched", "unknown"}
                 and stored["execution_id"] == record.get("execution_id")
             ):
                 self._in_flight[instance_id] = stored
+                self._start_lease(connection, stored)
+                continue
+            if held:
+                await self._mark_unknown(stored)
+        await self._requeue_unrecorded(instance_id)
         connection.synchronized = True
         await self._dispatch_next(instance_id)
 
@@ -428,36 +420,61 @@ class RequestLifecycle:
             )
             await self._dispatch_next(instance_id)
             return
+        # Protocol v4: the Agent records and executes the Command in the callback that receives
+        # this dispatch, so the execution identity and its lease start here.
+        execution_id = self._execution_id()
         dispatched = await self._store.compare_and_set(
             str(queued["request_id"]),
             expected_statuses={"queued"},
-            changes={"status": "dispatched", "dispatched_at": self._now()},
+            changes={
+                "status": "dispatched",
+                "execution_id": execution_id,
+                "dispatched_at": self._now(),
+            },
         )
         if dispatched is None:
             await self._dispatch_next(instance_id)
             return
         self._in_flight[instance_id] = dispatched
+        self._start_lease(connection, dispatched)
         self._emit(
             "request_dispatch",
             instance_id,
             connection.connection_id,
             request_id=str(dispatched["request_id"]),
+            execution_id=execution_id,
             payload=dispatched,
         )
 
-    async def _accepted(self, instance_id: str, connection_id: str, request_id: str) -> None:
-        if self._current(instance_id, connection_id) is None:
+    def _start_lease(self, connection: _Connection, snapshot: dict[str, Any]) -> None:
+        command = snapshot.get("command")
+        name = command.get("name") if isinstance(command, dict) else ""
+        lease = self._execution_leases.get(str(COMMAND_CATALOG.execution_class(str(name))), 0)
+        connection.lease_deadline = self._monotonic() + lease if lease > 0 else None
+
+    async def _requeue_unrecorded(self, instance_id: str) -> None:
+        """Put a held dispatch back at the head of its lane: no record means it never executed."""
+        held_dispatch = self._awaiting_sync.pop(instance_id, None)
+        if held_dispatch is None:
             return
-        current = self._in_flight.get(instance_id)
-        if current is None or current["request_id"] != request_id:
-            return
-        accepted = await self._store.compare_and_set(
-            request_id,
+        requeued = await self._store.compare_and_set(
+            str(held_dispatch["request_id"]),
             expected_statuses={"dispatched"},
-            changes={"status": "accepted", "accepted_at": self._now()},
+            changes={"status": "queued", "execution_id": None, "dispatched_at": None},
         )
-        if accepted is not None:
-            self._in_flight[instance_id] = accepted
+        if requeued is not None:
+            self._lanes[instance_id].appendleft(requeued)
+
+    async def _mark_unknown(self, snapshot: dict[str, Any]) -> None:
+        await self._store.compare_and_set(
+            str(snapshot["request_id"]),
+            expected_statuses={"dispatched"},
+            changes={
+                "status": "unknown",
+                "error": ERROR_CATALOG.error("request_outcome_unknown"),
+                "completed_at": self._now(),
+            },
+        )
 
     async def _rejected(
         self, instance_id: str, connection_id: str, request_id: str, code: str
@@ -479,38 +496,6 @@ class RequestLifecycle:
         if failed is not None:
             self._in_flight.pop(instance_id, None)
             await self._dispatch_next(instance_id)
-
-    async def _authorize(self, instance_id: str, connection_id: str, request_id: str) -> None:
-        connection = self._current(instance_id, connection_id)
-        current = self._in_flight.get(instance_id)
-        if connection is None or current is None or current["request_id"] != request_id:
-            return
-        execution_id = self._execution_id()
-        running = await self._store.compare_and_set(
-            request_id,
-            expected_statuses={"accepted"},
-            changes={
-                "status": "running",
-                "execution_id": execution_id,
-                "execute_authorized_at": self._now(),
-            },
-        )
-        if running is None:
-            return
-        self._in_flight[instance_id] = running
-        command = running.get("command")
-        name = command.get("name") if isinstance(command, dict) else ""
-        execution_class = COMMAND_CATALOG.execution_class(str(name))
-        lease = self._execution_leases.get(str(execution_class), 0)
-        connection.lease_deadline = self._monotonic() + lease if lease > 0 else None
-        self._emit(
-            "request_execute",
-            instance_id,
-            connection_id,
-            request_id=request_id,
-            execution_id=execution_id,
-            payload=running,
-        )
 
     async def _outcome(
         self,
@@ -536,7 +521,7 @@ class RequestLifecycle:
             return
         completed = await self._store.compare_and_set(
             request_id,
-            expected_statuses={"running", "unknown"},
+            expected_statuses={"dispatched", "unknown"},
             changes={
                 "status": status,
                 "result": COMMAND_CATALOG.normalize_result(stored["command"], result),
@@ -569,33 +554,8 @@ class RequestLifecycle:
             connection_id, self._monotonic() + self._offline_retention
         )
         current = self._in_flight.pop(instance_id, None)
-        if current is None:
-            return
-        status = str(current["status"])
-        if status in {"dispatched", "accepted"}:
-            queued = await self._store.compare_and_set(
-                str(current["request_id"]),
-                expected_statuses={status},
-                changes={
-                    "status": "queued",
-                    "execution_id": None,
-                    "dispatched_at": None,
-                    "accepted_at": None,
-                    "execute_authorized_at": None,
-                },
-            )
-            if queued is not None:
-                self._lanes[instance_id].appendleft(queued)
-        elif status == "running":
-            await self._store.compare_and_set(
-                str(current["request_id"]),
-                expected_statuses={"running"},
-                changes={
-                    "status": "unknown",
-                    "error": ERROR_CATALOG.error("request_outcome_unknown"),
-                    "completed_at": self._now(),
-                },
-            )
+        if current is not None and current["status"] == "dispatched":
+            self._awaiting_sync[instance_id] = current
 
     def _heartbeat(self, instance_id: str, connection_id: str) -> None:
         connection = self._current(instance_id, connection_id)
@@ -624,6 +584,9 @@ class RequestLifecycle:
             if current_time < offline.deadline:
                 continue
             self._offline.pop(instance_id, None)
+            held_dispatch = self._awaiting_sync.pop(instance_id, None)
+            if held_dispatch is not None:
+                await self._mark_unknown(held_dispatch)
             while self._lanes[instance_id]:
                 queued = self._lanes[instance_id].popleft()
                 await self._store.compare_and_set(
@@ -642,23 +605,10 @@ class RequestLifecycle:
         if controlled:
             for instance_id, connection in self._connections.items():
                 self._emit("daemon_draining", instance_id, connection.connection_id)
-        policies = (
-            ({"queued", "dispatched", "accepted"}, "daemon_shutdown", "daemon_shutdown"),
-            ({"running"}, "unknown", "request_outcome_unknown"),
-        )
-        for statuses, target, code in policies:
-            for item in await self._store.find_by_statuses(statuses):
-                await self._store.compare_and_set(
-                    str(item["request_id"]),
-                    expected_statuses={str(item["status"])},
-                    changes={
-                        "status": target,
-                        "error": ERROR_CATALOG.error(code),
-                        "completed_at": self._now(),
-                    },
-                )
+        await end_interrupted_requests(self._store, self._now())
         self._lanes.clear()
         self._in_flight.clear()
+        self._awaiting_sync.clear()
 
     def _snapshot(self) -> dict[str, Any]:
         instances = {
@@ -749,9 +699,7 @@ LifecycleOperation: TypeAlias = Literal[
     "register",
     "synchronized",
     "submit",
-    "accepted",
     "rejected",
-    "authorize",
     "outcome",
     "disconnect",
     "heartbeat",

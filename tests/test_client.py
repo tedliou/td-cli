@@ -114,12 +114,12 @@ def test_command_transport_failure_preserves_known_request_id(tmp_path: Path, mo
     assert caught.value.details == {"request_id": "request-7"}
 
 
-def test_accepted_request_remains_queryable_while_execution_is_authorized(
+def test_dispatched_request_remains_queryable_while_it_may_be_executing(
     tmp_path: Path, monkeypatch
 ) -> None:
     snapshot = {
         "request_id": "request-1",
-        "status": "accepted",
+        "status": "dispatched",
         "command": {"name": "ops.children", "input": {"operator_path": "/project1"}},
         "result": None,
         "error": None,
@@ -317,7 +317,7 @@ def test_client_start_reaches_the_daemon_start_routine(monkeypatch) -> None:
     assert observed == [{"timeout": 3.5}]
 
 
-HEALTHY = {"ready": True, "protocol_versions": [3], "release_version": "test"}
+HEALTHY = {"ready": True, "protocol_versions": [4], "release_version": "test"}
 
 
 def test_healthy_daemon_serves_a_command_on_one_connection_without_starting(
@@ -343,9 +343,9 @@ def test_healthy_daemon_serves_a_command_on_one_connection_without_starting(
 @pytest.mark.parametrize(
     "health",
     [
-        {"ready": False, "protocol_versions": [3]},
-        {"ready": True, "protocol_versions": [2]},
-        {"ready": True, "protocol_versions": "3"},
+        {"ready": False, "protocol_versions": [4]},
+        {"ready": True, "protocol_versions": [3]},
+        {"ready": True, "protocol_versions": "4"},
         [],
     ],
 )
@@ -487,7 +487,7 @@ def test_retried_long_poll_waits_only_for_the_budget_left(tmp_path: Path, monkey
 def test_wait_keeps_spacing_when_a_daemon_answers_unsettled_at_once(
     tmp_path: Path, monkeypatch
 ) -> None:
-    answers = iter(["running", "running", "succeeded"])
+    answers = iter(["dispatched", "dispatched", "succeeded"])
     sleeps = []
     monkeypatch.setattr("td_cli.client.time.sleep", sleeps.append)
     patch_http(

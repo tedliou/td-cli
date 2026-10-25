@@ -19,7 +19,7 @@ class FakeAgentExtension:
         self.connection_id = None
         self.draining = False
         self.records = []
-        self.authorized = []
+        self.dispatched = []
         self.heartbeat_generation = 0
         self.runtime_active = True
         self.heartbeat_marks = 0
@@ -84,12 +84,9 @@ class FakeAgentExtension:
     def authorized_records(self):
         return []
 
-    def reserve(self, request):
-        return "request_accepted", {**self.heartbeat_payload(), "request_id": request["request_id"]}
-
-    def authorize(self, message):
-        self.authorized.append(message["execution_id"])
-        return True
+    def dispatch(self, request):
+        self.dispatched.append(request["execution_id"])
+        return "execute", {**self.heartbeat_payload(), "request_id": request["request_id"]}
 
     def execute_authorized(self, request_id, execution_id):
         return {
@@ -352,42 +349,24 @@ def _inline_callbacks(extension):
     )
 
 
-def test_execute_authorization_runs_in_the_callback_and_chunks_outcomes() -> None:
+def test_dispatch_executes_in_the_same_callback_and_chunks_outcomes() -> None:
     extension = FakeAgentExtension()
     extension.connection_id = "connection-1"
     socket = FakeSocket()
     socket.extension = extension
     callbacks = _inline_callbacks(extension)
-    callbacks["onReceiveEvent"](
-        socket,
-        0,
-        {
-            "request_id": "request-2",
-            "command": json.dumps({"name": "ops.get", "input": {"operator_path": "/project1"}}),
-        },
-        "request_dispatch",
-    )
-    assert socket.emitted == [
-        (
-            "request_accepted",
-            {
-                "request_id": "request-2",
-                "instance_id": "instance-1",
-                "connection_id": "connection-1",
-            },
-        )
-    ]
-
-    execute_message = {
+    dispatch = {
         "request_id": "request-2",
         "instance_id": "instance-1",
         "connection_id": "connection-1",
         "execution_id": "execution-1",
+        "command": json.dumps({"name": "ops.get", "input": {"operator_path": "/project1"}}),
     }
-    callbacks["onReceiveEvent"](socket, 0, execute_message, "request_execute")
-    assert extension.authorized == ["execution-1"]
-    event, chunk = socket.emitted[-1]
+    callbacks["onReceiveEvent"](socket, 0, dispatch, "request_dispatch")
+    assert extension.dispatched == ["execution-1"]
+    [(event, chunk)] = socket.emitted
     assert event == "request_outcome_chunk"
+    assert json.loads(chunk["payload"])["execution_id"] == "execution-1"
     assert json.loads(chunk["payload"])["error"] is None
 
     failed = {
@@ -402,39 +381,35 @@ def test_execute_authorization_runs_in_the_callback_and_chunks_outcomes() -> Non
     callbacks["onReceiveEvent"](
         socket,
         0,
-        {**execute_message, "request_id": "request-3", "execution_id": "execution-2"},
-        "request_execute",
+        {**dispatch, "request_id": "request-3", "execution_id": "execution-2"},
+        "request_dispatch",
     )
     event, chunk = socket.emitted[-1]
     assert event == "request_outcome_chunk"
     assert json.loads(chunk["payload"]) == failed
 
 
-def test_repeated_execute_authorization_runs_the_command_once() -> None:
+def test_dispatch_the_agent_already_recorded_emits_nothing() -> None:
+    # The Agent answers a redelivered execution with no event (tests/test_agent_runtime.py).
     extension = FakeAgentExtension()
     extension.connection_id = "connection-1"
-    granted = set()
-
-    def authorize(message):  # the Agent grants each reserved execution exactly once
-        if message["execution_id"] in granted:
-            return False
-        granted.add(message["execution_id"])
-        return True
-
+    extension.dispatch = lambda request: (None, None)
     executed = []
     original = extension.execute_authorized
-    extension.authorize = authorize
     extension.execute_authorized = lambda *arguments: (
         executed.append(arguments) or original(*arguments)
     )
     socket = FakeSocket()
     socket.extension = extension
     callbacks = _inline_callbacks(extension)
-    message = {"request_id": "request-2", "execution_id": "execution-1"}
-    callbacks["onReceiveEvent"](socket, 0, message, "request_execute")
-    callbacks["onReceiveEvent"](socket, 0, message, "request_execute")
-    assert executed == [("request-2", "execution-1")]
-    assert [event for event, _ in socket.emitted] == ["request_outcome_chunk"]
+    message = {
+        "request_id": "request-2",
+        "execution_id": "execution-1",
+        "command": json.dumps({"name": "ops.get", "input": {"operator_path": "/project1"}}),
+    }
+    callbacks["onReceiveEvent"](socket, 0, message, "request_dispatch")
+    assert executed == []
+    assert socket.emitted == []
 
 
 def test_registration_executes_retained_authorizations_after_synchronizing() -> None:
@@ -459,7 +434,7 @@ def test_duplicate_dispatch_chunks_a_retained_failure_with_null_result() -> None
         "result": None,
         "error": {"code": "operator_not_found"},
     }
-    extension.reserve = lambda _: ("request_outcome", outcome)
+    extension.dispatch = lambda _: ("request_outcome", outcome)
     socket = FakeSocket()
     socket.extension = extension
     callbacks = run_path(
@@ -482,13 +457,13 @@ def test_duplicate_dispatch_chunks_a_retained_failure_with_null_result() -> None
 
 
 @pytest.mark.parametrize("wire", [None, {}, "[]", "{", '{"name":"ops.get"}'])
-def test_dispatch_rejects_malformed_wire_without_reserving(wire):
+def test_dispatch_rejects_malformed_wire_without_recording(wire):
     extension = FakeAgentExtension()
 
-    def reserve(_):
-        raise AssertionError("malformed command reached reserve")
+    def dispatch(_):
+        raise AssertionError("malformed command reached dispatch")
 
-    extension.reserve = reserve
+    extension.dispatch = dispatch
     socket = FakeSocket()
     socket.extension = extension
     callbacks = run_path(
@@ -504,11 +479,11 @@ def test_dispatch_json_preserves_nested_scalar_types():
     extension = FakeAgentExtension()
     captured = []
 
-    def reserve(request):
+    def dispatch(request):
         captured.append(request["command"])
-        return "request_accepted", {"request_id": "r"}
+        return None, None
 
-    extension.reserve = reserve
+    extension.dispatch = dispatch
     socket = FakeSocket()
     socket.extension = extension
     callbacks = run_path(
