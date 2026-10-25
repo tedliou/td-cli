@@ -1,15 +1,21 @@
-"""Execute DAT probe: frame and wall-clock timestamps of the Protocol v3 Agent handshake.
+"""Execute DAT probe: frame and wall-clock timestamps of the Protocol v4 Agent dispatch.
 
 Loads the Agent artifact named by ``TDCLI_MENU_LIMIT_ARTIFACT`` like ``locked_menu_limit_probe``,
-redirects it to the isolated acceptance Daemon, and wraps the Agent extension's handshake
-methods so each call records ``absTime.frame`` and a precise system wall clock. ``onFrameStart``
+redirects it to the isolated acceptance Daemon, and wraps the Agent extension's dispatch,
+execution and outcome methods so each call records ``absTime.frame`` and a precise system wall clock. ``onFrameStart``
 records every frame start on the same clock, so the harness can place each SocketIO DAT
-callback and each ``run()`` execution inside a frame. The probe never changes the Agent's
+callback and the execution it runs inside a frame. The probe never changes the Agent's
 behaviour and quits without saving when the harness writes ``done`` or after a fixed deadline.
 
 With ``TDCLI_FRAME_TIMING_BUILD`` set to ``source|output|revision`` the probe only builds the
 Agent artifact from that source with ``agent/build_td.py`` and quits. With
 ``TDCLI_FRAME_TIMING_PAUSE=1`` it pauses the root timeline before connecting.
+
+Two marker Operators let the harness reload the Agent (reinitialize its extension, which closes
+and reopens the SocketIO DAT) around one Request: ``reload_requeue`` drops the first delivery
+before the Agent records it, as a dispatch still unread when the Agent reloads;
+``reload_outcome`` holds back the first emit of its recorded outcome, as an outcome not yet sent.
+Reinitializing replaces the extension class, so these and the timing wrappers end there.
 """
 
 # ruff: noqa: F821 - TouchDesigner injects its Python API names at runtime.
@@ -27,9 +33,11 @@ WORK = Path(os.environ["TDCLI_MENU_LIMIT_WORK"])
 ARTIFACT = Path(os.environ["TDCLI_MENU_LIMIT_ARTIFACT"])
 URL = os.environ["TDCLI_MENU_LIMIT_URL"]
 DEADLINE_SECONDS = 300
-WRAPPED = ("reserve", "authorize", "execute_authorized", "outcome_chunks")
+WRAPPED = ("dispatch", "execute_authorized", "outcome_chunks")
 FRAMES = deque(maxlen=20000)
 EVENTS = []
+RELOAD_TARGETS = ("reload_requeue", "reload_outcome")
+RELOADING = {}
 
 
 def wall_ns():
@@ -79,6 +87,39 @@ def _wrap(extension, name):
     setattr(cls, name, wrapped)
 
 
+def _reload_around_markers(agent):
+    cls = type(agent.ext.Agent)
+    dispatch = cls.dispatch
+    outcome_chunks = cls.outcome_chunks
+
+    def reload_later(reason, request_id):
+        EVENTS.append({"event": reason, "request_id": request_id, "frame": int(absTime.frame)})
+        EVENTS[-1]["start_ns"] = EVENTS[-1]["end_ns"] = wall_ns()
+        run("args[0].par.reinitextensions.pulse()", agent, delayFrames=1, delayRef=op.TDResources)
+
+    def reloading_dispatch(self, request):
+        command = request.get("command")
+        path = str(command.get("input", {}).get("operator_path", "")) if command else ""
+        name = path.rsplit("/", 1)[-1]
+        if name in RELOAD_TARGETS and name not in RELOADING.values():
+            RELOADING[request["request_id"]] = name
+            if name == "reload_requeue":
+                reload_later("reload_before_record", request["request_id"])
+                return None, None
+        return dispatch(self, request)
+
+    def reloading_outcome_chunks(self, outcome):
+        request_id = outcome["request_id"]
+        if RELOADING.get(request_id) == "reload_outcome":
+            RELOADING[request_id] = "reload_outcome_held"
+            reload_later("reload_after_outcome", request_id)
+            return []
+        return outcome_chunks(self, outcome)
+
+    cls.dispatch = reloading_dispatch
+    cls.outcome_chunks = reloading_outcome_chunks
+
+
 def _facts(agent):
     return {
         "pid": os.getpid(),
@@ -116,8 +157,11 @@ def _load():
         before = _facts(agent)
         if before["socket_active"] or before["connection_state"] != "waiting_for_daemon":
             raise RuntimeError(f"Agent left the waiting state before redirection: {before}")
+        for name in RELOAD_TARGETS:
+            op("/project1").create(baseCOMP, name)
         for name in WRAPPED:
             _wrap(agent.ext.Agent, name)
+        _reload_around_markers(agent)
         agent.op("socketio1").par.url = URL
         _write("ready.json", {"before_redirect": before, "clock_ns": wall_ns()})
         _poll(agent, time.monotonic())

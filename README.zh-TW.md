@@ -135,11 +135,14 @@ uv run td-daemon serve
 `run\daemon.json`。只有在 Daemon 停止時刪除 `state\auth.token` 才是手動 token recovery；之後
 所有 Agent Component 都必須重新連線。
 
-Protocol v3 是唯一 runtime protocol，不提供 v1 alias 或 fallback。Request 依序經過
-`queued`、`dispatched`、`accepted`、`running` 後才進入終態。Daemon 必須先持久化再派送，
-每個 Instance 依 FIFO 僅允許一個已授權 Request，且每次重連都以新的 Connection ID 隔離。
-授權後斷線會成為 `unknown`；td-cli 絕不自動重試，但同一 execution 保留的結果之後可將它細化為
-`succeeded` 或 `failed`。
+Protocol v4 是唯一 runtime protocol，不提供 v3 alias 或 fallback。Request 從 `queued`
+進入 `dispatched` 後才進入終態；`dispatched` 表示 Agent 已收到，可能正在執行。Daemon
+必須先持久化再派送，每個 Instance 依 FIFO 僅允許一個 dispatched Request，且每次重連都以新的
+Connection ID 隔離。斷線後，dispatched 的 Request 等 Instance 重新註冊：有保留的 outcome
+就完成；有未完成的執行紀錄就維持執行中；沒有紀錄就放回佇列最前面，因為 Agent 在執行
+dispatch 的同一個 callback 內登記它。Instance 30 秒內沒回來或 Daemon 重啟時，Request 會成為
+`unknown`；td-cli 絕不自動重試，但同一 execution 保留的結果之後可將它細化為 `succeeded` 或
+`failed`。
 
 `--json` 指令失敗時會輸出一個錯誤 envelope，內含 `code`、`message`、`details` 與
 `retryable`；若已有 Request，另附其 Request ID 與狀態。錯誤碼來自單一封閉詞彙表
@@ -187,12 +190,12 @@ Artifact inspection 需要 locked TouchDesigner build 產生的相鄰
 TouchDesigner `2025.32050` 與必要 DAT／Operator topology。實際 `.tox` 建置及 Online Instance
 驗證必須在鎖定版 TouchDesigner 環境完成。
 
-Agent 在送出 `request_accepted` 前會先保留有界 outcome 容量，只執行符合 immutable execution
-authorization 的工作，並保留所有 post-accept `succeeded`、`failed`、`unknown` outcome，直到
-Daemon 完成記錄。上限為 64 筆、每筆 canonical outcome 256 KiB、合計 16 MiB。Command、
+Agent 在 `request_dispatch` callback 內檢查有界 outcome 容量、登記 dispatch 並執行
+Command，只處理帶著自己目前 Connection ID 的 dispatch。所有已登記的 `succeeded`、`failed`、
+`unknown` outcome 會保留到 Daemon 完成記錄。上限為 64 筆、每筆 canonical outcome 256 KiB、合計 16 MiB。Command、
 超過鎖定版 SocketIO DAT 單一事件實測範圍的 outcome，會拆成依序且經 identity 驗證的 24 KiB
 區塊，重組完成後才提交公開結果。heartbeat 與 drain timer 使用 TouchDesigner
-獨立的 `TDResources` 時間參考；已授權的 Command 直接在 SocketIO DAT callback 內執行，
+獨立的 `TDResources` 時間參考；dispatch 的 Command 直接在 SocketIO DAT callback 內執行，
 也就是主執行緒的 frame 開頭，所有 TouchDesigner object 存取仍只在主執行緒。Extension
 初始化使用官方 SocketIO Reset 參數，連線後清除暫存 auth DAT。Power Off 模式不受支援。
 
@@ -504,7 +507,7 @@ td --json --instance <selector> project save $projectPath --expected-sha256 $dig
 不另存新檔名，也不保存外部 TOX。保存後無法確認結果時回報
 `project_save_outcome_unknown`；先查 retained Request 與磁碟，不自動重做。
 
-Protocol v3 在 SocketIO 邊界以 JSON 文字保留 Command 的布林、整數及 null 型別。
+Protocol v4 在 SocketIO 邊界以 JSON 文字保留 Command 的布林、整數及 null 型別。
 CLI、Daemon 與專案內嵌 Agent 必須一起升級；v2/v3 雙向拒絕註冊。
 可編輯的 `StrMenu`（例如 Select CHOP 的 `channames`）接受任意字串，
 一般 `Menu` 仍只接受列出的選項名稱。
@@ -536,4 +539,4 @@ Daemon 先驗證整份計畫，通過後才提交 Request。單一 CLI 程序依
 
 0.11.0 離線升級除既有來源（含 0.7.0、0.7.1、0.8.0、0.9.0）外，新增精確 canonical 0.10.0 Agent 白名單，保留 Connectionstate 定義。Agent 讀取介面新增：`batch execute` 逐項結果、Instance 的 `project`、`ops inspect` 的 COMP 介面摘要、Execute 系列與 byte offset 的 `dat text get`、`chop values get`、`parameters list` 的值與篩選選項、可分頁的 `project snapshot`，以及 `ops destroy`／`copy`／`move` 的 `--inventory summary`。`td` 改以 onedir 發佈，啟動約 0.4 秒。新選項需要 0.11.0 Agent；內嵌較舊 Agent 時，CLI 與 Daemon 會以 `command_unsupported` 拒絕。下一個 patch 版縮短暖機後的命令延遲：Daemon 健康時，線上 `td` 命令不再匯入 Daemon 伺服器套件，並重用同一條 HTTP 連線，`td --json instances list` 從約 1.5 秒降到約 0.5 秒。`td-daemon` 與 `td-agent` 也改以 onedir 發佈，`td-daemon-runtime\`、`td-agent-runtime\` 與 `td-runtime\` 並存於同一個版本目錄。下一個 minor 版再縮短：已授權的 Command 在授權的同一個 TouchDesigner frame 內執行；`td` 等待 Request 改用長輪詢，不再每 50 ms 查一次；`td` 啟動不讀套件 metadata、不匯入 httpx。TouchDesigner 來回時間從約 62 ms 降到約 33 ms，`td --json instances list` 降到約 0.3 秒。
 
-下一版把 `td` 換成 Rust 寫的單一原生 `td.exe`。版本目錄不再有 `td-runtime\`，解除安裝會移除殘留的這個資料夾。Daemon 已在執行時，`td --version` 與 `td --json instances list` 從約 0.3 秒降到約 10 ms；需要同時啟動 Daemon 的冷啟動時間和以前差不多。Command 與計畫欄位改由 Daemon 驗證，`invalid_arguments` 的細節不變。`td` 照原樣傳送參數：不再展開 `~`、`$VAR`、`%VAR%` 與萬用字元，`NaN` 這類非標準 JSON 會被拒絕。
+下一版把 `td` 換成 Rust 寫的單一原生 `td.exe`。版本目錄不再有 `td-runtime\`，解除安裝會移除殘留的這個資料夾。Daemon 已在執行時，`td --version` 與 `td --json instances list` 從約 0.3 秒降到約 10 ms；需要同時啟動 Daemon 的冷啟動時間和以前差不多。Command 與計畫欄位改由 Daemon 驗證，`invalid_arguments` 的細節不變。`td` 照原樣傳送參數：不再展開 `~`、`$VAR`、`%VAR%` 與萬用字元，`NaN` 這類非標準 JSON 會被拒絕。再下一版是 1.0.0，改用 Protocol v4，屬於破壞性變更：Agent 在收到 Command 的 callback 內登記並執行，60 fps 下一次 TouchDesigner 往返從約 33 ms 降到約一個 frame（17 ms）。Request 快照不再出現 `accepted` 與 `running`，Daemon 只接受 v4 Agent。

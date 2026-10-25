@@ -1,12 +1,12 @@
-"""Locked frame-timing probe of the Protocol v3 handshake through the real Daemon transport.
+"""Locked frame-timing probe of the Protocol v4 dispatch through the real Daemon transport.
 
 Runs ``locked_daemon_harness`` with a disposable project whose Execute DAT runs
 ``locked_frame_timing_probe.py`` (frame start enabled). The Daemon side stamps each outbound
-``request_dispatch``/``request_execute`` and each received acceptance and outcome on the same
-precise system clock as the probe, so every Request splits into measured segments:
+``request_dispatch`` and each received outcome on the same precise system clock as the probe,
+so every Request splits into measured segments:
 
-client submit -> dispatch emit -> reserve callback -> accepted received -> execute emit ->
-authorize callback -> run() execution -> outcome emit -> outcome received -> client terminal.
+client submit -> dispatch emit -> dispatch callback -> execution in that callback ->
+outcome emit -> outcome received -> client terminal.
 
 ``--source agent`` first builds the Agent artifact from that source inside a separate disposable
 TouchDesigner run; ``--pause`` runs the measurement with the root timeline paused.
@@ -46,17 +46,19 @@ def _instrument() -> None:
     emit = socketio.AsyncServer.emit
 
     async def stamped_emit(self, event, data=None, *args, **kwargs):
-        if event in {"request_dispatch", "request_execute"} and isinstance(data, dict):
+        if event == "request_dispatch" and isinstance(data, dict):
             DAEMON_EVENTS.append(
-                {"event": event, "request_id": data.get("request_id"), "ns": wall_ns()}
+                {
+                    "event": event,
+                    "request_id": data.get("request_id"),
+                    "execution_id": data.get("execution_id"),
+                    "ns": wall_ns(),
+                }
             )
         return await emit(self, event, data, *args, **kwargs)
 
     socketio.AsyncServer.emit = stamped_emit  # type: ignore[method-assign]
-    for name in ("accepted", "outcome"):
-        original = getattr(RequestLifecycle, name)
-
-        setattr(RequestLifecycle, name, _stamped(original, name))
+    RequestLifecycle.outcome = _stamped(RequestLifecycle.outcome, "outcome")  # type: ignore[method-assign]
 
 
 def _stamped(original_method, event_name):
@@ -82,7 +84,23 @@ def _steps(harness: Harness, work: Path) -> dict[str, Any]:
                 "terminal_ns": wall_ns(),
             }
         )
-    return {"client": client_rows, "daemon_events": DAEMON_EVENTS}
+    # The probe reloads the Agent around these two Requests; both must still succeed.
+    reloads = {}
+    for name in ("reload_requeue", "reload_outcome"):
+        snapshot = harness.submit(
+            f"ops.get {name}", "ops.get", {"operator_path": f"/project1/{name}"}
+        )
+        request_id = harness.requests[-1]["request_id"]
+        reloads[name] = {
+            **harness.requests[-1],
+            "result_path": (snapshot.get("result") or {}).get("path"),
+            "dispatched_execution_ids": [
+                event["execution_id"]
+                for event in DAEMON_EVENTS
+                if event["event"] == "request_dispatch" and event["request_id"] == request_id
+            ],
+        }
+    return {"client": client_rows, "reloads": reloads, "daemon_events": DAEMON_EVENTS}
 
 
 def _ms(start: int | None, end: int | None) -> float | None:
@@ -90,7 +108,7 @@ def _ms(start: int | None, end: int | None) -> float | None:
 
 
 def analyse(evidence: dict[str, Any]) -> dict[str, Any]:
-    """Split each measured Request into handshake segments and frame positions."""
+    """Split each measured Request into dispatch segments and frame positions."""
     td = evidence.get("td-final", {})
     frames = td.get("frames", [])
     starts = sorted(ns for _, ns in frames)
@@ -120,8 +138,7 @@ def analyse(evidence: dict[str, Any]) -> dict[str, Any]:
         if client["warmup"]:
             continue
         rid = client["request_id"]
-        reserve = td_events.get(("reserve", rid))
-        authorize = td_events.get(("authorize", rid))
+        dispatch = td_events.get(("dispatch", rid))
         execute = td_events.get(("execute_authorized", rid))
         outcome = td_events.get(("outcome_chunks", rid))
         rows.append(
@@ -131,20 +148,14 @@ def analyse(evidence: dict[str, Any]) -> dict[str, Any]:
                 "submit_to_dispatch_emit": _ms(
                     client["submit_ns"], daemon.get(("request_dispatch", rid))
                 ),
-                "dispatch_emit_to_reserve": _ms(
-                    daemon.get(("request_dispatch", rid)), reserve and reserve["start_ns"]
+                "dispatch_emit_to_callback": _ms(
+                    daemon.get(("request_dispatch", rid)), dispatch and dispatch["start_ns"]
                 ),
-                "reserve_to_accepted_received": _ms(
-                    reserve and reserve["end_ns"], daemon.get(("accepted", rid))
+                "record_ms": _ms(
+                    dispatch and dispatch["start_ns"], dispatch and dispatch["end_ns"]
                 ),
-                "accepted_to_execute_emit": _ms(
-                    daemon.get(("accepted", rid)), daemon.get(("request_execute", rid))
-                ),
-                "execute_emit_to_authorize": _ms(
-                    daemon.get(("request_execute", rid)), authorize and authorize["start_ns"]
-                ),
-                "authorize_to_run": _ms(
-                    authorize and authorize["end_ns"], execute and execute["start_ns"]
+                "record_to_execute": _ms(
+                    dispatch and dispatch["end_ns"], execute and execute["start_ns"]
                 ),
                 "execute_ms": _ms(execute and execute["start_ns"], execute and execute["end_ns"]),
                 "outcome_emit_to_received": _ms(
@@ -153,11 +164,9 @@ def analyse(evidence: dict[str, Any]) -> dict[str, Any]:
                 "outcome_received_to_client": _ms(
                     daemon.get(("outcome", rid)), client["terminal_ns"]
                 ),
-                "reserve_frame_offset_ms": frame_offset(reserve),
-                "authorize_frame_offset_ms": frame_offset(authorize),
-                "run_frame_offset_ms": frame_offset(execute),
-                "frames_reserve_to_authorize": frames_between(reserve, authorize),
-                "frames_authorize_to_run": frames_between(authorize, execute),
+                "dispatch_frame_offset_ms": frame_offset(dispatch),
+                "execute_frame_offset_ms": frame_offset(execute),
+                "frames_dispatch_to_execute": frames_between(dispatch, execute),
             }
         )
     keys = [key for key in (rows[0] if rows else {}) if key != "request_id"]
