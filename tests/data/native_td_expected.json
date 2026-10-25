@@ -45,7 +45,7 @@
  },
  "test_a_refused_daemon_reads_as_unavailable#0": {
   "exit_code": 0,
-  "stdout": "{\"protocol_version\":4,\"data\":{\"release_version\":\"0.11.0\",\"protocol_versions\":[4],\"daemon_release_version\":null}}\r\n",
+  "stdout": "{\"protocol_version\":4,\"data\":{\"release_version\":\"1.0.0\",\"protocol_versions\":[4],\"daemon_release_version\":null}}\r\n",
   "stderr": "",
   "requests": [],
   "connections": 0
@@ -7142,7 +7142,7 @@
  },
  "test_version[argv0-routes0]#0": {
   "exit_code": 0,
-  "stdout": "{\"protocol_version\":4,\"data\":{\"release_version\":\"0.11.0\",\"protocol_versions\":[4],\"daemon_release_version\":\"0.11.0\"}}\r\n",
+  "stdout": "{\"protocol_version\":4,\"data\":{\"release_version\":\"1.0.0\",\"protocol_versions\":[4],\"daemon_release_version\":\"1.0.0\"}}\r\n",
   "stderr": "",
   "requests": [
    [
@@ -7155,7 +7155,7 @@
  },
  "test_version[argv1-routes1]#0": {
   "exit_code": 0,
-  "stdout": "{\"protocol_version\":4,\"data\":{\"release_version\":\"0.11.0\",\"protocol_versions\":[4],\"daemon_release_version\":\"0.11.0\"}}\r\n",
+  "stdout": "{\"protocol_version\":4,\"data\":{\"release_version\":\"1.0.0\",\"protocol_versions\":[4],\"daemon_release_version\":\"1.0.0\"}}\r\n",
   "stderr": "",
   "requests": [
    [
@@ -7168,7 +7168,7 @@
  },
  "test_version[argv2-routes2]#0": {
   "exit_code": 0,
-  "stdout": "{\r\n  \"release_version\": \"0.11.0\",\r\n  \"protocol_versions\": [\r\n    4\r\n  ],\r\n  \"daemon_release_version\": \"0.11.0\"\r\n}\r\n",
+  "stdout": "{\r\n  \"release_version\": \"1.0.0\",\r\n  \"protocol_versions\": [\r\n    4\r\n  ],\r\n  \"daemon_release_version\": \"1.0.0\"\r\n}\r\n",
   "stderr": "",
   "requests": [
    [
@@ -7194,7 +7194,7 @@
  },
  "test_version[argv4-routes4]#0": {
   "exit_code": 0,
-  "stdout": "{\"protocol_version\":4,\"data\":{\"release_version\":\"0.11.0\",\"protocol_versions\":[4],\"daemon_release_version\":null}}\r\n",
+  "stdout": "{\"protocol_version\":4,\"data\":{\"release_version\":\"1.0.0\",\"protocol_versions\":[4],\"daemon_release_version\":null}}\r\n",
   "stderr": "",
   "requests": [
    [
@@ -7214,7 +7214,7 @@
  },
  "test_version[argv6-routes6]#0": {
   "exit_code": 0,
-  "stdout": "td 0.11.0 (protocol 4)\r\n",
+  "stdout": "td 1.0.0 (protocol 4)\r\n",
   "stderr": "",
   "requests": [],
   "connections": 0
@@ -7242,7 +7242,7 @@
  },
  "test_version_without_a_token#0": {
   "exit_code": 0,
-  "stdout": "{\"protocol_version\":4,\"data\":{\"release_version\":\"0.11.0\",\"protocol_versions\":[4],\"daemon_release_version\":null}}\r\n",
+  "stdout": "{\"protocol_version\":4,\"data\":{\"release_version\":\"1.0.0\",\"protocol_versions\":[4],\"daemon_release_version\":null}}\r\n",
   "stderr": "",
   "requests": [],
   "connections": 0

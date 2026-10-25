@@ -94,4 +94,4 @@ Daemon 收到 outcome 後多出的約 8 ms 花在 td 與 Daemon 之間：Frame B
 
 `--frame-batch` 把 256 個建立加 256 個設定從 10.8 秒降到 2.5 秒，讀回的圖與逐一執行相同。每段執行時間都在 8 ms 加一個 Command 之內，frame 間隔沒有變長，達成 spec 故事 1、2。
 
-原始輸出在 `docs/evidence/v110/frame-batch-running.json`。發佈的版本字串還是 0.11.0，改成 1.1.0 屬於發版。
+原始輸出在 `docs/evidence/v110/frame-batch-running.json`。這些變更隨 1.0.0 發佈。

@@ -1,0 +1,91 @@
+{
+  "artifact_sha256": "0e34f06a18afbf95d10ba8e1c36f469300b57aef4b1b1186efcb36956ab24392",
+  "build_evidence": {
+    "artifact_sha256": "0e34f06a18afbf95d10ba8e1c36f469300b57aef4b1b1186efcb36956ab24392",
+    "operators": [
+      "agent_extension",
+      "agent_manifest",
+      "auth_table",
+      "events_table",
+      "heartbeat_execute",
+      "operator_catalog",
+      "socket_callbacks",
+      "socketio1"
+    ],
+    "source_revision": "3627ba33601d5cb32ed85dbf5faf90a1106a67a81a5883f6bae87e8b421a99e3",
+    "touchdesigner_version": "2025.32050"
+  },
+  "facts": {
+    "agent_path": "/project1/td_agent",
+    "agent_version": "1.0.0",
+    "connection_state": "waiting_for_daemon",
+    "socket_active": false,
+    "menu_capability": true,
+    "snapshot_options_capability": true,
+    "plan_execute_capability": true,
+    "protocol_version": null
+  },
+  "command": {
+    "name": "parameters.menu.set",
+    "input": {
+      "operator_path": "/project1/menu_check",
+      "parameter": "Scene",
+      "menu_names": [
+        "D01",
+        "D02",
+        "D03"
+      ],
+      "menu_labels": [
+        "01 A",
+        "02 B",
+        "03 C"
+      ],
+      "preserve": "index"
+    }
+  },
+  "result": {
+    "operator_path": "/project1/menu_check",
+    "parameter": "Scene",
+    "preserve": "index",
+    "menu_names": [
+      "D01",
+      "D02",
+      "D03"
+    ],
+    "menu_labels": [
+      "01 A",
+      "02 B",
+      "03 C"
+    ],
+    "before": {
+      "value": "D05",
+      "index": 2,
+      "default": "D10"
+    },
+    "after": {
+      "value": "D03",
+      "index": 2,
+      "default": "D01"
+    }
+  },
+  "readback": {
+    "names": [
+      "D01",
+      "D02",
+      "D03"
+    ],
+    "labels": [
+      "01 A",
+      "02 B",
+      "03 C"
+    ],
+    "value": "D03",
+    "default": "D01",
+    "index": 2
+  },
+  "validated": true,
+  "pid": 25428,
+  "build": "2025.32050",
+  "project": "E:/td-cli/.codex/release100/validate.toe",
+  "localappdata": "E:\\td-cli\\.codex\\release100\\localappdata"
+}
