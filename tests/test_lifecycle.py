@@ -73,7 +73,7 @@ async def effect(lifecycle: RequestLifecycle, kind: str) -> LifecycleEffect:
 
 
 @pytest.mark.asyncio
-async def test_fifo_handshake_authorizes_only_one_request_per_instance() -> None:
+async def test_fifo_dispatch_carries_the_execution_and_holds_one_request_per_instance() -> None:
     store = MemoryStore()
     ids = iter(["execution-1", "execution-2"])
     lifecycle = RequestLifecycle(store, execution_id=lambda: next(ids))
@@ -88,12 +88,11 @@ async def test_fifo_handshake_authorizes_only_one_request_per_instance() -> None
 
         dispatched = await effect(lifecycle, "request_dispatch")
         assert dispatched.request_id == first["request_id"]
-        await lifecycle.accepted(INSTANCE_ID, CONNECTION_ID, str(first["request_id"]))
-        assert (await store.get(str(first["request_id"])))["status"] == "accepted"
-        await lifecycle.authorize(INSTANCE_ID, CONNECTION_ID, str(first["request_id"]))
-        execute = await effect(lifecycle, "request_execute")
-        assert execute.execution_id == "execution-1"
-        assert (await store.get(str(first["request_id"])))["status"] == "running"
+        assert dispatched.execution_id == "execution-1"
+        assert dispatched.payload["execution_id"] == "execution-1"
+        persisted = await store.get(str(first["request_id"]))
+        assert persisted is not None and persisted["status"] == "dispatched"
+        assert persisted["execution_id"] == "execution-1"
         assert lifecycle.effects_empty()
 
         await lifecycle.outcome(
@@ -112,14 +111,8 @@ async def test_fifo_handshake_authorizes_only_one_request_per_instance() -> None
         await lifecycle.close()
 
 
-@pytest.mark.parametrize(
-    ("phase", "expected"),
-    [("dispatched", "queued"), ("accepted", "queued"), ("running", "unknown")],
-)
 @pytest.mark.asyncio
-async def test_disconnect_has_deterministic_pre_and_post_authorization_outcomes(
-    phase: str, expected: str
-) -> None:
+async def test_disconnect_after_dispatch_leaves_the_request_unknown() -> None:
     store = MemoryStore()
     lifecycle = RequestLifecycle(store, execution_id=lambda: "execution-1")
     await lifecycle.start()
@@ -130,19 +123,11 @@ async def test_disconnect_has_deterministic_pre_and_post_authorization_outcomes(
         await lifecycle.synchronized(INSTANCE_ID, CONNECTION_ID)
         await lifecycle.submit(item)
         await effect(lifecycle, "request_dispatch")
-        if phase in {"accepted", "running"}:
-            await lifecycle.accepted(INSTANCE_ID, CONNECTION_ID, str(item["request_id"]))
-        if phase == "running":
-            await lifecycle.authorize(INSTANCE_ID, CONNECTION_ID, str(item["request_id"]))
-            await effect(lifecycle, "request_execute")
 
         await lifecycle.disconnect(INSTANCE_ID, CONNECTION_ID)
         persisted = await store.get(str(item["request_id"]))
-        assert persisted is not None and persisted["status"] == expected
-        if expected == "queued":
-            assert persisted["execution_id"] is None
-        else:
-            assert persisted["execution_id"] == "execution-1"
+        assert persisted is not None and persisted["status"] == "unknown"
+        assert persisted["execution_id"] == "execution-1"
     finally:
         await lifecycle.close()
 
@@ -166,7 +151,9 @@ async def test_old_generation_messages_and_deadlines_are_no_ops() -> None:
         await lifecycle.submit(item)
         await effect(lifecycle, "request_dispatch")
 
-        await lifecycle.accepted(INSTANCE_ID, CONNECTION_ID, str(item["request_id"]))
+        await lifecycle.rejected(
+            INSTANCE_ID, CONNECTION_ID, str(item["request_id"]), "instance_draining"
+        )
         await lifecycle.disconnect(INSTANCE_ID, CONNECTION_ID)
         clock[0] = 7
         await lifecycle.expire_deadlines()
@@ -192,9 +179,6 @@ async def test_unknown_refines_only_from_matching_execution_outcome() -> None:
         await lifecycle.synchronized(INSTANCE_ID, CONNECTION_ID)
         await lifecycle.submit(item)
         await effect(lifecycle, "request_dispatch")
-        await lifecycle.accepted(INSTANCE_ID, CONNECTION_ID, str(item["request_id"]))
-        await lifecycle.authorize(INSTANCE_ID, CONNECTION_ID, str(item["request_id"]))
-        await effect(lifecycle, "request_execute")
         await lifecycle.disconnect(INSTANCE_ID, CONNECTION_ID)
         await lifecycle.register(INSTANCE_ID, new_connection, {"ops.get"})
         await effect(lifecycle, "registered")
@@ -246,13 +230,10 @@ async def test_execution_lease_suppresses_heartbeat_expiry_until_class_deadline(
         await lifecycle.synchronized(INSTANCE_ID, CONNECTION_ID)
         await lifecycle.submit(item)
         await effect(lifecycle, "request_dispatch")
-        await lifecycle.accepted(INSTANCE_ID, CONNECTION_ID, str(item["request_id"]))
-        await lifecycle.authorize(INSTANCE_ID, CONNECTION_ID, str(item["request_id"]))
-        await effect(lifecycle, "request_execute")
 
         clock[0] = 5
         await lifecycle.expire_deadlines()
-        assert (await store.get(str(item["request_id"])))["status"] == "running"
+        assert (await store.get(str(item["request_id"])))["status"] == "dispatched"
         clock[0] = 11
         await lifecycle.expire_deadlines()
         await effect(lifecycle, "connection_expired")
@@ -379,28 +360,31 @@ async def test_registration_deadline_is_generation_tagged() -> None:
 @pytest.mark.asyncio
 async def test_controlled_shutdown_maps_each_nonterminal_authorization_boundary() -> None:
     store = MemoryStore()
-    statuses = ("queued", "dispatched", "accepted", "running")
-    for number, status in enumerate(statuses, start=1):
+    # accepted and running are v3 statuses a store written by an older Daemon can still hold.
+    expected = {
+        "queued": "daemon_shutdown",
+        "accepted": "daemon_shutdown",
+        "dispatched": "unknown",
+        "running": "unknown",
+    }
+    before = {}
+    for number, status in enumerate(expected, start=1):
         item = request(number)
-        item["status"] = status
-        if status == "running":
-            item["execution_id"] = "execution-1"
+        item.update(status=status, execution_id=None if status == "queued" else "execution-1")
         store.requests[str(item["request_id"])] = item
+        before[str(item["request_id"])] = status
     lifecycle = RequestLifecycle(store)
     await lifecycle.start()
     try:
         await lifecycle.drain()
-        observed = {item["status"] for item in store.requests.values()}
-        assert observed == {"daemon_shutdown", "unknown"}
-        running = next(item for item in store.requests.values() if item["execution_id"] is not None)
-        assert running["status"] == "unknown"
-        assert running["error"]["code"] == "request_outcome_unknown"
-        assert running["error"]["retryable"] is False
-        assert all(
-            item["error"]["retryable"] is True
-            for item in store.requests.values()
-            if item["status"] == "daemon_shutdown"
-        )
+        for request_id, status in before.items():
+            item = store.requests[request_id]
+            assert item["status"] == expected[status], status
+            if item["status"] == "unknown":
+                assert item["error"]["code"] == "request_outcome_unknown"
+                assert item["error"]["retryable"] is False
+            else:
+                assert item["error"]["retryable"] is True
     finally:
         await lifecycle.close()
 

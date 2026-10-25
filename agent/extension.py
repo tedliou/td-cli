@@ -3151,12 +3151,20 @@ class AgentExt:
         self.last_heartbeat_at = time.monotonic()
         self._state["heartbeat_emissions"] += 1
 
-    def reserve(self, request):
+    def dispatch(self, request):
+        """Record a dispatched Request so the same callback can execute it (Protocol v4).
+
+        Returns ``("execute", envelope)`` for a new record, ``("request_outcome", outcome)``
+        to replay a retained outcome, ``("request_rejected", payload)`` before any execution,
+        or ``(None, None)`` for a repeated delivery of a Request already being executed.
+        """
         request_id = str(request.get("request_id", ""))
         envelope = self._request_envelope(request_id)
+        execution_id = str(request.get("execution_id") or "")
         if (
             request.get("instance_id") != self.instance_id
             or request.get("connection_id") != self.connection_id
+            or not execution_id
         ):
             return "request_rejected", {**envelope, "code": "request_identity_invalid"}
         command = request.get("command")
@@ -3167,47 +3175,30 @@ class AgentExt:
                 existing["canonical_command"] != canonical
                 or existing["instance_id"] != self.instance_id
                 or existing["connection_id"] != self.connection_id
+                or existing["execution_id"] != execution_id
             ):
                 return "request_rejected", {**envelope, "code": "request_id_conflict"}
             if existing["phase"] == "outcome":
                 return "request_outcome", dict(existing["outcome"])
-            return "request_accepted", envelope
+            return None, None
         if self.draining:
             return "request_rejected", {**envelope, "code": "instance_draining"}
         if len(self.execution_records) >= self.MAX_EXECUTION_RECORDS:
             return "request_rejected", {**envelope, "code": "execution_capacity_full"}
+        if any(other["execution_id"] == execution_id for other in self.execution_records.values()):
+            return "request_rejected", {**envelope, "code": "request_identity_invalid"}
         self.execution_records[request_id] = {
             "request_id": request_id,
             "instance_id": self.instance_id,
             "connection_id": self.connection_id,
             "canonical_command": canonical,
             "command": command,
-            "phase": "reserved",
-            "execution_id": None,
+            "phase": "authorized",
+            "execution_id": execution_id,
             "outcome": None,
             "outcome_bytes": 0,
         }
-        return "request_accepted", envelope
-
-    def authorize(self, message):
-        request_id = str(message.get("request_id", ""))
-        record = self.execution_records.get(request_id)
-        execution_id = str(message.get("execution_id", ""))
-        if (
-            record is None
-            or record["phase"] != "reserved"
-            or message.get("instance_id") != self.instance_id
-            or message.get("connection_id") != self.connection_id
-            or not execution_id
-            or any(
-                other_id != request_id and other["execution_id"] == execution_id
-                for other_id, other in self.execution_records.items()
-            )
-        ):
-            return False
-        record["phase"] = "authorized"
-        record["execution_id"] = execution_id
-        return True
+        return "execute", envelope
 
     def execute_authorized(self, request_id, execution_id):
         record = self.execution_records.get(request_id)

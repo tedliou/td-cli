@@ -1,4 +1,4 @@
-"""Canonical SocketIO DAT callbacks for the Protocol v3 execution handshake."""
+"""Canonical SocketIO DAT callbacks for Protocol v4: one dispatch, one outcome per Request."""
 
 import json
 
@@ -30,8 +30,8 @@ def onReceiveEvent(dat, rowIndex, message, event):
             "execution_sync",
             data={**agent.heartbeat_payload(), "records": records},
         )
-        # Authorization and execution share one callback, so a record is left authorized only
-        # by a callback that failed mid-way; the Daemon authorizes one Request per Instance.
+        # Recording and execution share one callback, so a record is left authorized only by a
+        # callback that failed mid-way; the Daemon dispatches one Request per Instance.
         for request_id, execution_id in agent.authorized_records():
             executeAuthorized(dat, request_id, execution_id)
     elif event == "registration_error":
@@ -66,14 +66,13 @@ def onReceiveEvent(dat, rowIndex, message, event):
             )
             return
         message = {**message, "command": command}
-        result_event, payload = agent.reserve(message)
-        if result_event == "request_outcome":
+        result_event, payload = agent.dispatch(message)
+        if result_event == "execute":
+            executeAuthorized(dat, payload["request_id"], message["execution_id"])
+        elif result_event == "request_outcome":
             emitOutcome(dat, payload)
-        else:
+        elif result_event is not None:
             dat.emit(result_event, data=payload)
-    elif event == "request_execute":
-        if agent.authorize(message):
-            executeAuthorized(dat, message["request_id"], message["execution_id"])
     elif event == "outcome_recorded":
         agent.acknowledge_outcome(message["request_id"], message.get("execution_id"))
         if agent.draining and agent.retention_snapshot()["record_count"] == 0:

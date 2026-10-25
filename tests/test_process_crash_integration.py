@@ -69,8 +69,7 @@ async def kill_process(process: asyncio.subprocess.Process) -> None:
     ("phase", "request_id", "expected"),
     [
         ("queued", "018f47ec-7f3b-7a34-8f31-2ad70b6f6e20", "daemon_shutdown"),
-        ("dispatched", "018f47ec-7f3b-7a34-8f31-2ad70b6f6e21", "daemon_shutdown"),
-        ("running", "018f47ec-7f3b-7a34-8f31-2ad70b6f6e22", "unknown"),
+        ("dispatched", "018f47ec-7f3b-7a34-8f31-2ad70b6f6e21", "unknown"),
     ],
 )
 @pytest.mark.asyncio
@@ -83,17 +82,15 @@ async def test_public_transport_recovers_each_abrupt_process_boundary(
     agent = socketio.AsyncClient(reconnection=False)
     registered: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
     dispatched: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
-    execute: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
     agent.on("registered", lambda data: registered.set_result(data))
     agent.on("request_dispatch", lambda data: dispatched.set_result(data))
-    agent.on("request_execute", lambda data: execute.set_result(data))
     try:
         await agent.connect(f"http://127.0.0.1:{port}", auth={"token": TOKEN})
         await agent.emit(
             "register",
             {
                 "instance_id": INSTANCE_ID,
-                "protocol_versions": [3],
+                "protocol_versions": [4],
                 "agent_version": "test-agent",
                 "td_build": "2025.32050",
                 "capabilities": ["ops.get"],
@@ -115,12 +112,7 @@ async def test_public_transport_recovers_each_abrupt_process_boundary(
             assert response.status == 201
             assert (await response.json())["status"] == "queued"
         if phase != "queued":
-            dispatch = await asyncio.wait_for(dispatched, 2)
-            if phase == "running":
-                await agent.emit(
-                    "request_accepted", {**connection, "request_id": dispatch["request_id"]}
-                )
-                await asyncio.wait_for(execute, 2)
+            await asyncio.wait_for(dispatched, 2)
         await kill_process(process)
         await agent.disconnect()
 
@@ -133,7 +125,7 @@ async def test_public_transport_recovers_each_abrupt_process_boundary(
             assert response.status == 200
             recovered = await response.json()
         assert recovered["status"] == expected
-        if phase == "running":
+        if phase == "dispatched":
             assert recovered["execution_id"] is not None
             assert recovered["error"]["code"] == "request_outcome_unknown"
     finally:

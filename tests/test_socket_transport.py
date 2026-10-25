@@ -53,7 +53,7 @@ def unused_port() -> int:
 def registration_payload() -> dict[str, object]:
     return {
         "instance_id": INSTANCE_ID,
-        "protocol_versions": [3],
+        "protocol_versions": [4],
         "agent_version": "0.4.0",
         "td_build": "2025.32050",
         "capabilities": ["ops.get"],
@@ -105,7 +105,7 @@ async def get_json(port: int, path: str) -> tuple[int, object]:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "incompatible_fields", [{"td_build": "2025.99999"}, {"protocol_versions": [2]}]
+    "incompatible_fields", [{"td_build": "2025.99999"}, {"protocol_versions": [3]}]
 )
 async def test_authentication_and_registration_fail_closed(
     tmp_path: Path, incompatible_fields
@@ -167,7 +167,7 @@ async def test_registration_stays_synchronizing_until_agent_replay(tmp_path: Pat
         ),
     ],
 )
-async def test_full_v3_handshake_is_ordered_durable_and_redacted(
+async def test_v4_dispatch_and_outcome_are_ordered_durable_and_redacted(
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
     outcome_status: str,
@@ -178,13 +178,11 @@ async def test_full_v3_handshake_is_ordered_durable_and_redacted(
     server, thread, port = await start_server(create_transport_app(tmp_path, token=TOKEN))
     client = socketio.AsyncClient(reconnection=False)
     dispatched: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
-    execute: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
     recorded: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
     order = []
     client.on(
         "request_dispatch", lambda data: (order.append("dispatch"), dispatched.set_result(data))
     )
-    client.on("request_execute", lambda data: (order.append("execute"), execute.set_result(data)))
     client.on(
         "outcome_recorded", lambda data: (order.append("recorded"), recorded.set_result(data))
     )
@@ -205,8 +203,7 @@ async def test_full_v3_handshake_is_ordered_durable_and_redacted(
         assert request["status"] == "dispatched"
         assert isinstance(request["command"], str)
         assert json.loads(request["command"])["input"]["operator_path"] == "/secret-path"
-        await client.emit("request_accepted", {**connection, "request_id": REQUEST_ID})
-        authorization = await asyncio.wait_for(execute, 2)
+        authorization = request
         assert authorization["execution_id"]
         outcome = {
             **connection,
@@ -229,7 +226,7 @@ async def test_full_v3_handshake_is_ordered_durable_and_redacted(
         )
         acknowledgment = await asyncio.wait_for(recorded, 2)
         assert acknowledgment["execution_id"] == authorization["execution_id"]
-        assert order == ["dispatch", "execute", "recorded"]
+        assert order == ["dispatch", "recorded"]
         _, snapshot = await get_json(port, f"/v3/requests/{REQUEST_ID}")
         assert snapshot["status"] == outcome_status
         assert snapshot["result"] == outcome_result
@@ -249,14 +246,12 @@ async def test_reconnect_reconciles_matching_retained_outcome(tmp_path: Path) ->
     server, thread, port = await start_server(create_transport_app(tmp_path, token=TOKEN))
     first = socketio.AsyncClient(reconnection=False)
     dispatched: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
-    execute: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
     first.on("request_dispatch", lambda data: dispatched.set_result(data))
-    first.on("request_execute", lambda data: execute.set_result(data))
     second = socketio.AsyncClient(reconnection=False)
     recorded: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
     second.on("outcome_recorded", lambda data: recorded.set_result(data))
     try:
-        first_connection = await register(first, port)
+        await register(first, port)
         async with ClientSession() as session:
             response = await session.post(
                 f"http://127.0.0.1:{port}/v3/requests",
@@ -268,9 +263,7 @@ async def test_reconnect_reconciles_matching_retained_outcome(tmp_path: Path) ->
                 },
             )
             assert response.status == 201
-        await asyncio.wait_for(dispatched, 2)
-        await first.emit("request_accepted", {**first_connection, "request_id": REQUEST_ID})
-        authorization = await asyncio.wait_for(execute, 2)
+        authorization = await asyncio.wait_for(dispatched, 2)
         await first.disconnect()
         for _ in range(50):
             _, unknown = await get_json(port, f"/v3/requests/{REQUEST_ID}")
@@ -314,13 +307,11 @@ async def test_reconnect_reassembles_bounded_outcome_chunks_before_synchronizing
     first = socketio.AsyncClient(reconnection=False)
     second = socketio.AsyncClient(reconnection=False)
     dispatched: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
-    execute: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
     recorded: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
     first.on("request_dispatch", lambda data: dispatched.set_result(data))
-    first.on("request_execute", lambda data: execute.set_result(data))
     second.on("outcome_recorded", lambda data: recorded.set_result(data))
     try:
-        first_connection = await register(first, port)
+        await register(first, port)
         async with ClientSession() as session:
             response = await session.post(
                 f"http://127.0.0.1:{port}/v3/requests",
@@ -332,9 +323,7 @@ async def test_reconnect_reassembles_bounded_outcome_chunks_before_synchronizing
                 },
             )
             assert response.status == 201
-        await asyncio.wait_for(dispatched, 2)
-        await first.emit("request_accepted", {**first_connection, "request_id": REQUEST_ID})
-        authorization = await asyncio.wait_for(execute, 2)
+        authorization = await asyncio.wait_for(dispatched, 2)
         await first.disconnect()
 
         second_connection = await register(second, port, synchronize=False)

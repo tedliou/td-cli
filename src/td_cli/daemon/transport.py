@@ -25,6 +25,7 @@ from td_cli.daemon.lifecycle import (
     RequestLifecycle,
 )
 from td_cli.daemon.storage import RequestStore
+from td_cli.protocol import PROTOCOL_VERSION
 from td_cli.release import LOCKED_TOUCHDESIGNER_VERSION
 
 LOGGER = logging.getLogger("td_cli.daemon.lifecycle")
@@ -79,7 +80,7 @@ def create_transport_app(
     outbound_capacity: int = 64,
     execution_leases: dict[str, float] | None = None,
 ) -> socketio.ASGIApp:
-    """Create thin authenticated Protocol v3 adapters around RequestLifecycle."""
+    """Create thin authenticated Protocol v4 adapters around RequestLifecycle."""
     sio = socketio.AsyncServer(
         async_mode="asgi", cors_allowed_origins=[], max_http_buffer_size=256 * 1024
     )
@@ -165,7 +166,7 @@ def create_transport_app(
                     "selector": _selector(instance_id, ids),
                     "status": item.status if item.status == "draining" else state["status"],
                     "agent_version": item.agent_version,
-                    "protocol_version": 3,
+                    "protocol_version": PROTOCOL_VERSION,
                     "capabilities": sorted(item.capabilities),
                     "last_heartbeat_at": item.last_heartbeat_at,
                     "offline_expires_at": item.offline_expires_at,
@@ -373,15 +374,6 @@ def create_transport_app(
         )
 
     @sio.event
-    async def request_accepted(sid: str, data: object) -> None:
-        adapter = _current(by_sid, sid, data)
-        if adapter is None or not isinstance(data, dict):
-            return
-        request_id = str(data.get("request_id", ""))
-        await require_lifecycle().accepted(adapter.instance_id, adapter.connection_id, request_id)
-        await require_lifecycle().authorize(adapter.instance_id, adapter.connection_id, request_id)
-
-    @sio.event
     async def request_rejected(sid: str, data: object) -> None:
         adapter = _current(by_sid, sid, data)
         if adapter is None or not isinstance(data, dict):
@@ -392,13 +384,6 @@ def create_transport_app(
             str(data.get("request_id", "")),
             str(data.get("code", "request_rejected")),
         )
-
-    @sio.event
-    async def request_outcome(sid: str, data: object) -> None:
-        adapter = _current(by_sid, sid, data)
-        if adapter is None or not isinstance(data, dict):
-            return
-        await record_outcome(adapter, data)
 
     @sio.event
     async def request_outcome_chunk(sid: str, data: object) -> None:
@@ -528,7 +513,7 @@ def _effect_outbound(effect: LifecycleEffect, drain_timeout: float) -> _Outbound
         "connection_id": effect.connection_id,
     }
     if effect.kind == "registered":
-        return _Outbound("registered", {**envelope, "protocol_version": 3})
+        return _Outbound("registered", {**envelope, "protocol_version": PROTOCOL_VERSION})
     if effect.kind == "request_dispatch":
         return _Outbound(
             "request_dispatch",
@@ -538,15 +523,6 @@ def _effect_outbound(effect: LifecycleEffect, drain_timeout: float) -> _Outbound
                 "command": json.dumps(
                     effect.payload["command"], separators=(",", ":"), sort_keys=True
                 ),
-            },
-        )
-    if effect.kind == "request_execute":
-        return _Outbound(
-            "request_execute",
-            {
-                **envelope,
-                "request_id": effect.request_id,
-                "execution_id": effect.execution_id,
             },
         )
     if effect.kind in {"outcome_recorded", "record_release"}:
@@ -576,7 +552,7 @@ def _registration(data: object) -> tuple[str, str, list[str]] | None:
     if (
         not isinstance(versions, list)
         or any(type(version) is not int for version in versions)
-        or versions != [3]
+        or versions != [PROTOCOL_VERSION]
         or data.get("td_build") != LOCKED_TOUCHDESIGNER_VERSION
     ):
         return None

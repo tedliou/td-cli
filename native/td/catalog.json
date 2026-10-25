@@ -1,6 +1,6 @@
 {
  "release_version": "0.11.0",
- "protocol_version": 3,
+ "protocol_version": 4,
  "cli": {
   "help": "Control supported TouchDesigner Instances through the local Daemon.",
   "params": [
@@ -7045,8 +7045,6 @@
  "request_statuses": [
   "queued",
   "dispatched",
-  "accepted",
-  "running",
   "succeeded",
   "failed",
   "unknown",

@@ -1,4 +1,4 @@
-"""Strict public Protocol v3 models shared by the Daemon and Agent Component."""
+"""Strict public Protocol v4 models shared by the Daemon and Agent Component."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from td_cli.command_catalog import (
 
 __all__ = ["OperatorInput"]
 
-PROTOCOL_VERSION = 3
+PROTOCOL_VERSION = 4
 PROTOCOL_VERSIONS = (PROTOCOL_VERSION,)
 
 
@@ -61,8 +61,6 @@ class Command(StrictModel):
 class RequestStatus(StrEnum):
     QUEUED = "queued"
     DISPATCHED = "dispatched"
-    ACCEPTED = "accepted"
-    RUNNING = "running"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     UNKNOWN = "unknown"

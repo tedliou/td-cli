@@ -221,7 +221,6 @@ def test_canonical_build_removes_unused_generated_socket_callbacks(tmp_path: Pat
         ["registered"],
         ["registration_error"],
         ["request_dispatch"],
-        ["request_execute"],
         ["outcome_recorded"],
         ["record_release"],
         ["daemon_draining"],

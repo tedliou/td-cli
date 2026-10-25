@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError, field_validator, model_validator
 
 from td_cli import __version__
+from td_cli.daemon.lifecycle import INTERRUPTED_REQUESTS
 from td_cli.daemon.storage import RequestIdentityConflict, RequestStore
 from td_cli.error_catalog import ERROR_CATALOG
 from td_cli.instance_selection import SelectionError, select_instance
@@ -272,11 +273,7 @@ async def _hourly_cleanup(store: RequestStore) -> None:
 
 
 async def _recover_requests(store: RequestStore) -> None:
-    policies = (
-        ({"queued", "dispatched", "accepted"}, "daemon_shutdown", "daemon_shutdown"),
-        ({"running"}, "unknown", "request_outcome_unknown"),
-    )
-    for statuses, target, code in policies:
+    for statuses, target, code in INTERRUPTED_REQUESTS:
         for snapshot in await store.find_by_statuses(statuses):
             await store.compare_and_set(
                 str(snapshot["request_id"]),

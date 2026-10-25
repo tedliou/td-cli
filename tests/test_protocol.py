@@ -133,6 +133,18 @@ def test_request_snapshot_serializes_protocol_v2_public_shape() -> None:
     assert "started_at" not in payload
 
 
+def test_protocol_v4_public_statuses_have_no_execution_start() -> None:
+    assert {status.value for status in RequestStatus} == {
+        "queued",
+        "dispatched",
+        "succeeded",
+        "failed",
+        "unknown",
+        "instance_offline",
+        "daemon_shutdown",
+    }
+
+
 @pytest.mark.parametrize(
     ("payload", "canonical"),
     [

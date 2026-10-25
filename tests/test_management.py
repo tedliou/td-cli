@@ -31,7 +31,7 @@ def test_authenticated_health_reports_runtime_logging_failure(tmp_path: Path) ->
         assert response.status_code == 200
         assert response.json()["ready"] is False
         assert response.json()["logging_healthy"] is False
-        assert response.json()["protocol_versions"] == [3]
+        assert response.json()["protocol_versions"] == [4]
 
 
 def test_request_identity_includes_touchdesigner_instance(tmp_path: Path) -> None:
