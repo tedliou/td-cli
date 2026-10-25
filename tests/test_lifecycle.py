@@ -111,23 +111,169 @@ async def test_fifo_dispatch_carries_the_execution_and_holds_one_request_per_ins
         await lifecycle.close()
 
 
+RECONNECTION_ID = "047126bb-747e-4f92-878d-931142c14531"
+
+
+async def dispatch_then_disconnect(
+    lifecycle: RequestLifecycle, *items: dict[str, Any]
+) -> LifecycleEffect:
+    """Dispatch the first item, queue the rest, then lose the connection."""
+    await lifecycle.register(INSTANCE_ID, CONNECTION_ID, {"ops.get"})
+    await effect(lifecycle, "registered")
+    await lifecycle.synchronized(INSTANCE_ID, CONNECTION_ID)
+    for item in items:
+        await lifecycle.submit(item)
+    dispatched = await effect(lifecycle, "request_dispatch")
+    await lifecycle.disconnect(INSTANCE_ID, CONNECTION_ID)
+    return dispatched
+
+
+async def reregister(lifecycle: RequestLifecycle) -> None:
+    await lifecycle.register(INSTANCE_ID, RECONNECTION_ID, {"ops.get"})
+    await effect(lifecycle, "registered")
+
+
+async def succeed(lifecycle: RequestLifecycle, item: dict[str, Any], execution_id: str) -> None:
+    await lifecycle.outcome(
+        INSTANCE_ID,
+        RECONNECTION_ID,
+        str(item["request_id"]),
+        execution_id,
+        status="succeeded",
+        result={"path": "/project1"},
+        error=None,
+    )
+
+
 @pytest.mark.asyncio
-async def test_disconnect_after_dispatch_leaves_the_request_unknown() -> None:
+async def test_unrecorded_dispatch_returns_to_the_head_of_the_lane_after_sync() -> None:
+    store = MemoryStore()
+    ids = iter(["execution-1", "execution-2"])
+    lifecycle = RequestLifecycle(store, execution_id=lambda: next(ids))
+    await lifecycle.start()
+    first, second = request(1), request(2)
+    try:
+        await dispatch_then_disconnect(lifecycle, first, second)
+        held = await store.get(str(first["request_id"]))
+        assert held is not None and held["status"] == "dispatched"
+
+        await reregister(lifecycle)
+        assert (await store.get(str(first["request_id"])))["status"] == "dispatched"
+        await lifecycle.synchronized(INSTANCE_ID, RECONNECTION_ID, [])
+
+        redispatched = await effect(lifecycle, "request_dispatch")
+        assert redispatched.request_id == first["request_id"]
+        assert redispatched.connection_id == RECONNECTION_ID
+        assert redispatched.execution_id == "execution-2"
+        assert lifecycle.effects_empty()
+    finally:
+        await lifecycle.close()
+
+
+@pytest.mark.asyncio
+async def test_unfinished_record_restores_the_dispatch_and_its_lease() -> None:
+    store = MemoryStore()
+    clock = [0.0]
+    lifecycle = RequestLifecycle(
+        store,
+        monotonic=lambda: clock[0],
+        execution_id=lambda: "execution-1",
+        heartbeat_timeout=2,
+        execution_leases={"fast_read": 10},
+    )
+    await lifecycle.start()
+    first, second = request(1), request(2)
+    try:
+        await dispatch_then_disconnect(lifecycle, first, second)
+        await reregister(lifecycle)
+        record = {
+            "phase": "executing",
+            "request_id": first["request_id"],
+            "execution_id": "execution-1",
+        }
+        await lifecycle.synchronized(INSTANCE_ID, RECONNECTION_ID, [record])
+        assert lifecycle.effects_empty()
+        view = await lifecycle.snapshot()
+        assert view["instances"][INSTANCE_ID]["in_flight_request_id"] == first["request_id"]
+        clock[0] = 5  # past the heartbeat timeout, inside the restored lease
+        await lifecycle.expire_deadlines()
+        assert lifecycle.effects_empty()
+
+        await succeed(lifecycle, first, "execution-1")
+        await effect(lifecycle, "outcome_recorded")
+        assert (await store.get(str(first["request_id"])))["status"] == "succeeded"
+        assert (await effect(lifecycle, "request_dispatch")).request_id == second["request_id"]
+    finally:
+        await lifecycle.close()
+
+
+@pytest.mark.asyncio
+async def test_retained_outcome_settles_the_held_dispatch_without_requeueing() -> None:
     store = MemoryStore()
     lifecycle = RequestLifecycle(store, execution_id=lambda: "execution-1")
     await lifecycle.start()
     item = request(1)
     try:
-        await lifecycle.register(INSTANCE_ID, CONNECTION_ID, {"ops.get"})
-        await effect(lifecycle, "registered")
-        await lifecycle.synchronized(INSTANCE_ID, CONNECTION_ID)
-        await lifecycle.submit(item)
-        await effect(lifecycle, "request_dispatch")
+        await dispatch_then_disconnect(lifecycle, item)
+        await reregister(lifecycle)
+        # The Agent sends retained outcomes before execution_sync and leaves them out of it.
+        await succeed(lifecycle, item, "execution-1")
+        await effect(lifecycle, "outcome_recorded")
+        await lifecycle.synchronized(INSTANCE_ID, RECONNECTION_ID, [])
+        assert lifecycle.effects_empty()
+        assert (await store.get(str(item["request_id"])))["status"] == "succeeded"
+    finally:
+        await lifecycle.close()
 
-        await lifecycle.disconnect(INSTANCE_ID, CONNECTION_ID)
+
+@pytest.mark.asyncio
+async def test_held_dispatch_with_an_unmatched_record_becomes_unknown() -> None:
+    store = MemoryStore()
+    lifecycle = RequestLifecycle(store, execution_id=lambda: "execution-1")
+    await lifecycle.start()
+    item = request(1)
+    try:
+        await dispatch_then_disconnect(lifecycle, item)
+        await reregister(lifecycle)
+        record = {
+            "phase": "authorized",
+            "request_id": item["request_id"],
+            "execution_id": "other-execution",
+        }
+        await lifecycle.synchronized(INSTANCE_ID, RECONNECTION_ID, [record])
+        assert lifecycle.effects_empty()
         persisted = await store.get(str(item["request_id"]))
         assert persisted is not None and persisted["status"] == "unknown"
-        assert persisted["execution_id"] == "execution-1"
+        assert persisted["error"]["code"] == "request_outcome_unknown"
+    finally:
+        await lifecycle.close()
+
+
+@pytest.mark.asyncio
+async def test_held_dispatch_becomes_unknown_when_offline_retention_expires() -> None:
+    store = MemoryStore()
+    clock = [0.0]
+    lifecycle = RequestLifecycle(
+        store,
+        monotonic=lambda: clock[0],
+        execution_id=lambda: "execution-1",
+        offline_retention=10,
+    )
+    await lifecycle.start()
+    first, second = request(1), request(2)
+    try:
+        await dispatch_then_disconnect(lifecycle, first, second)
+        clock[0] = 9
+        await lifecycle.expire_deadlines()
+        assert (await store.get(str(first["request_id"])))["status"] == "dispatched"
+        clock[0] = 11
+        await lifecycle.expire_deadlines()
+        await effect(lifecycle, "instance_expired")
+        held = await store.get(str(first["request_id"]))
+        assert held is not None and held["status"] == "unknown"
+        assert held["error"]["code"] == "request_outcome_unknown"
+        assert held["error"]["retryable"] is False
+        assert (await store.get(str(second["request_id"])))["status"] == "instance_offline"
     finally:
         await lifecycle.close()
 
@@ -167,19 +313,17 @@ async def test_old_generation_messages_and_deadlines_are_no_ops() -> None:
 
 
 @pytest.mark.asyncio
-async def test_unknown_refines_only_from_matching_execution_outcome() -> None:
+async def test_restart_unknown_refines_only_from_matching_execution_outcome() -> None:
     store = MemoryStore()
-    new_connection = "047126bb-747e-4f92-878d-931142c14531"
-    lifecycle = RequestLifecycle(store, execution_id=lambda: "execution-1")
-    await lifecycle.start()
+    new_connection = RECONNECTION_ID
     item = request(1)
+    item.update(status="dispatched", execution_id="execution-1")
+    store.requests[str(item["request_id"])] = item
+    lifecycle = RequestLifecycle(store)
+    await lifecycle.start()
     try:
-        await lifecycle.register(INSTANCE_ID, CONNECTION_ID, {"ops.get"})
-        await effect(lifecycle, "registered")
-        await lifecycle.synchronized(INSTANCE_ID, CONNECTION_ID)
-        await lifecycle.submit(item)
-        await effect(lifecycle, "request_dispatch")
-        await lifecycle.disconnect(INSTANCE_ID, CONNECTION_ID)
+        # A restarted Daemon cannot know whether the dispatched Request executed.
+        assert (await store.get(str(item["request_id"])))["status"] == "unknown"
         await lifecycle.register(INSTANCE_ID, new_connection, {"ops.get"})
         await effect(lifecycle, "registered")
         await lifecycle.synchronized(INSTANCE_ID, new_connection)
@@ -237,7 +381,7 @@ async def test_execution_lease_suppresses_heartbeat_expiry_until_class_deadline(
         clock[0] = 11
         await lifecycle.expire_deadlines()
         await effect(lifecycle, "connection_expired")
-        assert (await store.get(str(item["request_id"])))["status"] == "unknown"
+        assert (await store.get(str(item["request_id"])))["status"] == "dispatched"
     finally:
         await lifecycle.close()
 

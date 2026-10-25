@@ -1,4 +1,5 @@
 import asyncio
+import json
 import socket
 import sys
 from pathlib import Path
@@ -65,6 +66,40 @@ async def kill_process(process: asyncio.subprocess.Process) -> None:
     await asyncio.wait_for(process.wait(), 5)
 
 
+async def register_agent(
+    port: int,
+) -> tuple[socketio.AsyncClient, dict[str, object], dict[str, asyncio.Future[dict[str, object]]]]:
+    agent = socketio.AsyncClient(reconnection=False)
+    loop = asyncio.get_running_loop()
+    events = {name: loop.create_future() for name in ("registered", "request_dispatch")}
+    events["outcome_recorded"] = loop.create_future()
+    for name, future in events.items():
+        agent.on(name, lambda data, future=future: future.set_result(data))
+    await agent.connect(f"http://127.0.0.1:{port}", auth={"token": TOKEN})
+    await agent.emit(
+        "register",
+        {
+            "instance_id": INSTANCE_ID,
+            "protocol_versions": [4],
+            "agent_version": "test-agent",
+            "td_build": "2025.32050",
+            "capabilities": ["ops.get"],
+        },
+    )
+    connection = await asyncio.wait_for(events["registered"], 2)
+    return agent, connection, events
+
+
+async def get_request(port: int, request_id: str) -> dict[str, object]:
+    async with ClientSession() as session:
+        response = await session.get(
+            f"http://127.0.0.1:{port}/v3/requests/{request_id}",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+        )
+        assert response.status == 200
+        return await response.json()
+
+
 @pytest.mark.parametrize(
     ("phase", "request_id", "expected"),
     [
@@ -79,24 +114,10 @@ async def test_public_transport_recovers_each_abrupt_process_boundary(
     root = tmp_path / phase
     port = unused_port()
     process = await start_daemon_process(root, port)
-    agent = socketio.AsyncClient(reconnection=False)
-    registered: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
-    dispatched: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
-    agent.on("registered", lambda data: registered.set_result(data))
-    agent.on("request_dispatch", lambda data: dispatched.set_result(data))
+    agents: list[socketio.AsyncClient] = []
     try:
-        await agent.connect(f"http://127.0.0.1:{port}", auth={"token": TOKEN})
-        await agent.emit(
-            "register",
-            {
-                "instance_id": INSTANCE_ID,
-                "protocol_versions": [4],
-                "agent_version": "test-agent",
-                "td_build": "2025.32050",
-                "capabilities": ["ops.get"],
-            },
-        )
-        connection = await asyncio.wait_for(registered, 2)
+        agent, connection, events = await register_agent(port)
+        agents.append(agent)
         if phase != "queued":
             await agent.emit("execution_sync", {**connection, "records": []})
         async with ClientSession() as session:
@@ -111,25 +132,49 @@ async def test_public_transport_recovers_each_abrupt_process_boundary(
             )
             assert response.status == 201
             assert (await response.json())["status"] == "queued"
+        execution_id = None
         if phase != "queued":
-            await asyncio.wait_for(dispatched, 2)
+            execution_id = (await asyncio.wait_for(events["request_dispatch"], 2))["execution_id"]
         await kill_process(process)
         await agent.disconnect()
 
         process = await start_daemon_process(root, port)
-        async with ClientSession() as session:
-            response = await session.get(
-                f"http://127.0.0.1:{port}/v3/requests/{request_id}",
-                headers={"Authorization": f"Bearer {TOKEN}"},
-            )
-            assert response.status == 200
-            recovered = await response.json()
+        recovered = await get_request(port, request_id)
         assert recovered["status"] == expected
-        if phase == "dispatched":
-            assert recovered["execution_id"] is not None
-            assert recovered["error"]["code"] == "request_outcome_unknown"
+        if phase == "queued":
+            return
+        assert recovered["execution_id"] == execution_id
+        assert recovered["error"]["code"] == "request_outcome_unknown"
+
+        # The Agent kept its outcome record, so the restarted Daemon refines the unknown.
+        agent, connection, events = await register_agent(port)
+        agents.append(agent)
+        outcome = {
+            **connection,
+            "request_id": request_id,
+            "execution_id": execution_id,
+            "status": "succeeded",
+            "result": {"path": "/project1"},
+            "error": None,
+        }
+        await agent.emit(
+            "request_outcome_chunk",
+            {
+                **connection,
+                "request_id": request_id,
+                "execution_id": execution_id,
+                "chunk_index": 0,
+                "chunk_count": 1,
+                "payload": json.dumps(outcome),
+            },
+        )
+        await asyncio.wait_for(events["outcome_recorded"], 2)
+        refined = await get_request(port, request_id)
+        assert refined["status"] == "succeeded"
+        assert refined["result"] == {"path": "/project1"}
     finally:
-        if agent.connected:
-            await agent.disconnect()
+        for agent in agents:
+            if agent.connected:
+                await agent.disconnect()
         if process.returncode is None:
             await kill_process(process)

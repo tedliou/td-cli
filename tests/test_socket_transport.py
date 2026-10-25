@@ -265,11 +265,13 @@ async def test_reconnect_reconciles_matching_retained_outcome(tmp_path: Path) ->
         dispatch = await asyncio.wait_for(dispatched, 2)
         await first.disconnect()
         for _ in range(50):
-            _, unknown = await get_json(port, f"/v3/requests/{REQUEST_ID}")
-            if unknown["status"] == "unknown":
+            _, instances = await get_json(port, "/v3/instances")
+            if [item["status"] for item in instances] == ["offline"]:
                 break
             await asyncio.sleep(0.01)
-        assert unknown["status"] == "unknown"
+        assert [item["status"] for item in instances] == ["offline"]
+        _, held = await get_json(port, f"/v3/requests/{REQUEST_ID}")
+        assert held["status"] == "dispatched"
 
         second_connection = await register(second, port, synchronize=False)
         await second.emit(
